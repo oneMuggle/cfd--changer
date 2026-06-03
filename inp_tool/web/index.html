@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>inp_tool Web GUI — mcfd.inp 编辑器</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  pre { font-family: "Consolas", "Courier New", monospace; }
+  .val-int { color: #2563eb; }
+  .val-float { color: #059669; }
+  .val-str { color: #d97706; }
+  .nav-active { background: #1e40af; color: white; }
+  .diff-add { background: #dcfce7; color: #14532d; }
+  .diff-remove { background: #fee2e2; color: #7f1d1d; }
+  .diff-modify { background: #fef3c7; color: #713f12; }
+  details > summary { cursor: pointer; }
+  details > summary:hover { background: #f3f4f6; }
+</style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col">
+
+<!-- 顶栏 -->
+<header class="bg-slate-800 text-white px-4 py-2 flex items-center gap-3 shadow">
+  <h1 class="text-lg font-bold">inp_tool <span class="text-xs font-normal text-slate-300">v0.3</span></h1>
+  <span class="text-xs text-slate-400">mcfd.inp 编辑器</span>
+  <div class="flex-1"></div>
+  <button onclick="openDiffDialog()" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm">Diff</button>
+  <button onclick="saveFile()" id="btn-save" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm hidden">保存</button>
+</header>
+
+<!-- 主体:三栏 -->
+<main class="flex-1 flex overflow-hidden">
+
+  <!-- 左侧:文件 + 块列表 -->
+  <aside class="w-72 bg-white border-r overflow-y-auto">
+    <div class="p-3 border-b">
+      <label class="text-xs text-gray-500">inp 文件路径</label>
+      <div class="flex gap-1 mt-1">
+        <input id="inp-path" type="text" class="flex-1 text-xs border rounded px-2 py-1"
+               placeholder="D:\path\to\mcfd.inp"
+               value="D:\softwareData\edge\download\inp\mcfd.inp">
+        <button onclick="loadFile()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded">加载</button>
+      </div>
+      <div id="file-info" class="text-xs text-gray-500 mt-1"></div>
+    </div>
+    <div id="block-list" class="text-sm">
+      <div class="p-4 text-center text-gray-400 text-xs">请先加载文件</div>
+    </div>
+  </aside>
+
+  <!-- 中间:当前块内容 -->
+  <section class="flex-1 overflow-y-auto bg-gray-50">
+    <div id="block-content" class="p-4">
+      <div class="text-center text-gray-400 mt-12">← 加载文件后,选择左侧块查看</div>
+    </div>
+  </section>
+
+  <!-- 右侧:diff 面板(可隐藏) -->
+  <aside id="diff-panel" class="w-0 bg-white border-l overflow-y-auto transition-all duration-200">
+    <div class="p-3 border-b sticky top-0 bg-white z-10">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold">Diff</h2>
+        <button onclick="closeDiff()" class="text-gray-400 hover:text-gray-700">×</button>
+      </div>
+      <div id="diff-summary" class="text-xs text-gray-500 mt-1"></div>
+    </div>
+    <div id="diff-content" class="p-2 text-xs font-mono whitespace-pre"></div>
+  </aside>
+</main>
+
+<!-- 状态栏 -->
+<footer class="bg-slate-100 border-t px-3 py-1 text-xs text-gray-600 flex items-center gap-3">
+  <span id="status">就绪</span>
+  <div class="flex-1"></div>
+  <span id="counts"></span>
+</footer>
+
+<!-- Diff 对话框 -->
+<div id="diff-dialog" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+  <div class="bg-white rounded-lg shadow-2xl w-[600px] p-6">
+    <h2 class="text-lg font-bold mb-4">比较两个 .inp 文件</h2>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-gray-500">文件 A</label>
+        <input id="diff-path-a" type="text" class="w-full border rounded px-2 py-1 text-sm"
+               value="D:\softwareData\edge\download\inp\mcfd.inp">
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">文件 B</label>
+        <input id="diff-path-b" type="text" class="w-full border rounded px-2 py-1 text-sm">
+      </div>
+    </div>
+    <div class="flex gap-2 justify-end mt-4">
+      <button onclick="closeDiffDialog()" class="px-4 py-2 rounded text-sm hover:bg-gray-100">取消</button>
+      <button onclick="runDiff()" class="px-4 py-2 rounded text-sm bg-purple-600 text-white hover:bg-purple-700">比较</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================== 状态 ==================
+let state = {
+  fileId: null,
+  path: null,
+  blocks: [],         // [{name, idx, ...}]
+  currentBlock: null, // 当前选中的 block idx
+};
+
+// ================== 工具 ==================
+function setStatus(msg, type='info') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type === 'error' ? 'text-red-600' : type === 'ok' ? 'text-green-600' : 'text-gray-600';
+}
+
+async function api(method, path, body) {
+  const opt = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opt.body = JSON.stringify(body);
+  const r = await fetch(path, opt);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error(err.detail || `${r.status} ${r.statusText}`);
+  }
+  return r.json();
+}
+
+// 类型着色
+function formatTyped(v) {
+  if (typeof v === 'number') {
+    if (Number.isInteger(v)) return `<span class="val-int">${v}</span>`;
+    return `<span class="val-float">${v}</span>`;
+  }
+  if (typeof v === 'string') return `<span class="val-str">"${v}"</span>`;
+  return `<span>${v}</span>`;
+}
+
+// ================== 加载文件 ==================
+async function loadFile() {
+  const path = document.getElementById('inp-path').value.trim();
+  if (!path) return setStatus('请输入文件路径', 'error');
+  setStatus('加载中...');
+  try {
+    const r = await api('POST', '/api/files/load', { path });
+    state.fileId = r.file_id;
+    state.path = r.path;
+    state.blocks = r.blocks;
+    document.getElementById('file-info').innerHTML =
+      `<span class="text-green-600">已加载</span> · ${r.block_count} 块 · ${r.top_stmt_count} 顶层语句`;
+    document.getElementById('btn-save').classList.remove('hidden');
+    renderBlockList();
+    setStatus(`已加载 ${r.path}`, 'ok');
+    // 默认显示第 3 个块(tsteps,通常有内容)
+    if (r.blocks.length >= 3) selectBlock(2);
+  } catch (e) {
+    setStatus('加载失败: ' + e.message, 'error');
+  }
+}
+
+// ================== 块列表 ==================
+function renderBlockList() {
+  const el = document.getElementById('block-list');
+  if (state.blocks.length === 0) {
+    el.innerHTML = '<div class="p-4 text-center text-gray-400 text-xs">无块</div>';
+    return;
+  }
+  let html = '<div class="p-2 text-xs text-gray-500">块(共 ' + state.blocks.length + ' 个)</div>';
+  // 同名分组显示
+  let lastName = null;
+  for (const b of state.blocks) {
+    const showName = b.name !== lastName;
+    lastName = b.name;
+    const cls = b.idx === state.currentBlock ? 'nav-active' : 'hover:bg-gray-100';
+    const dupMark = showName ? '' : '<span class="text-xs text-gray-400"> ↳</span>';
+    const html_name = showName ? b.name : '';
+    html += `<div class="${cls} px-3 py-1.5 cursor-pointer flex items-center justify-between"
+                 onclick="selectBlock(${b.idx})">
+              <span class="text-sm">${html_name}${dupMark}</span>
+              <span class="text-xs text-gray-400">${b.stmt_count}</span>
+            </div>`;
+  }
+  el.innerHTML = html;
+}
+
+async function selectBlock(idx) {
+  state.currentBlock = idx;
+  renderBlockList();
+  const el = document.getElementById('block-content');
+  el.innerHTML = '<div class="text-center text-gray-400 mt-12">加载中...</div>';
+  try {
+    const r = await api('GET', `/api/files/${state.fileId}/block/${idx}`);
+    renderBlock(r);
+  } catch (e) {
+    el.innerHTML = `<div class="text-red-600">加载失败: ${e.message}</div>`;
+  }
+}
+
+// ================== 块内容渲染 ==================
+function renderBlock(b) {
+  const el = document.getElementById('block-content');
+  let html = `
+    <div class="bg-white rounded shadow-sm p-4 mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-bold">${b.name} <span class="text-sm font-normal text-gray-500">[${b.idx}]</span></h2>
+        <span class="text-xs text-gray-400">L${b.begin_line}-L${b.end_line} · ${b.statements.length} 条</span>
+      </div>
+      <table class="w-full text-sm">
+        <thead class="text-xs text-gray-500 border-b">
+          <tr>
+            <th class="text-left py-1 w-12">#</th>
+            <th class="text-left py-1 w-32">关键字</th>
+            <th class="text-left py-1">值</th>
+            <th class="text-left py-1 w-12">L</th>
+            <th class="text-left py-1 w-8"></th>
+          </tr>
+        </thead>
+        <tbody>`;
+  b.statements.forEach((s, i) => {
+    const isComposite = s.children && s.children.length > 0;
+    const valuesHtml = s.values.map((v, vi) => `
+      <span class="inline-flex items-center mr-3 mb-1 group">
+        <span class="text-xs text-gray-400 mr-1">[${vi}]</span>
+        <span class="${v.type === 'int' ? 'val-int' : v.type === 'float' ? 'val-float' : v.type === 'str' ? 'val-str' : ''}">${v.raw}</span>
+        <button onclick="editValue('${b.idx}', '${b.name}', '${s.keyword}', ${vi})"
+                class="ml-1 opacity-0 group-hover:opacity-100 text-xs text-blue-600 hover:underline">改</button>
+      </span>`).join('');
+    html += `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="py-1 text-xs text-gray-400">${i}</td>
+        <td class="py-1 font-mono text-xs">${s.keyword}</td>
+        <td class="py-1">${valuesHtml}</td>
+        <td class="py-1 text-xs text-gray-400">${s.line}</td>
+        <td class="py-1 text-xs">${s.comment_after || ''}</td>
+      </tr>`;
+    if (isComposite) {
+      s.children.forEach((c, ci) => {
+        const cvalues = c.values.map((v, vi) =>
+          `<span class="text-${v.type === 'int' ? 'blue' : v.type === 'float' ? 'green' : 'amber'}-600 mr-2">${v.raw}</span>`
+        ).join('');
+        html += `
+        <tr class="bg-gray-50 border-b">
+          <td class="py-1 text-xs text-gray-400">${i}.${ci}</td>
+          <td class="py-1 font-mono text-xs text-gray-600">↳ ${c.keyword}</td>
+          <td class="py-1 text-xs">${cvalues}</td>
+          <td class="py-1 text-xs text-gray-400">${c.line}</td>
+          <td class="py-1 text-xs text-gray-400">(child)</td>
+        </tr>`;
+      });
+    }
+  });
+  html += `</tbody></table></div>`;
+  el.innerHTML = html;
+}
+
+// ================== 改值 ==================
+async function editValue(blockIdx, blockName, keyword, valueIndex) {
+  const newVal = prompt(`改 ${blockName} 的 ${keyword}[${valueIndex}] = ?`);
+  if (newVal === null) return;
+  try {
+    const r = await api('POST', `/api/files/${state.fileId}/set`, {
+      block_name: blockName,
+      block_idx: 0,
+      keyword: keyword,
+      value_index: valueIndex,
+      value: newVal,
+    });
+    setStatus(`已改 ${r.location}.${r.keyword} = ${r.new_value}`, 'ok');
+    selectBlock(state.currentBlock);
+  } catch (e) {
+    setStatus('改值失败: ' + e.message, 'error');
+  }
+}
+
+// ================== 保存 ==================
+async function saveFile() {
+  if (!state.fileId) return;
+  try {
+    const r = await api('POST', `/api/files/${state.fileId}/save`, {});
+    setStatus(`已保存: ${r.path}`, 'ok');
+  } catch (e) {
+    setStatus('保存失败: ' + e.message, 'error');
+  }
+}
+
+// ================== Diff ==================
+function openDiffDialog() {
+  document.getElementById('diff-dialog').classList.remove('hidden');
+}
+function closeDiffDialog() {
+  document.getElementById('diff-dialog').classList.add('hidden');
+}
+async function runDiff() {
+  const a = document.getElementById('diff-path-a').value.trim();
+  const b = document.getElementById('diff-path-b').value.trim();
+  if (!a || !b) return setStatus('请填写两个文件路径', 'error');
+  closeDiffDialog();
+  setStatus('Diff 计算中...');
+  try {
+    const r = await api('POST', '/api/diff', { path_a: a, path_b: b });
+    showDiff(a, b, r);
+    setStatus(`Diff 完成: ${r.change_count} 处变化`, 'ok');
+  } catch (e) {
+    setStatus('Diff 失败: ' + e.message, 'error');
+  }
+}
+function showDiff(a, b, r) {
+  const panel = document.getElementById('diff-panel');
+  panel.style.width = '500px';
+  document.getElementById('diff-summary').innerHTML =
+    `<div>${a}</div><div class="font-bold">→</div><div>${b}</div>`;
+  const content = document.getElementById('diff-content');
+  if (r.change_count === 0) {
+    content.innerHTML = '<div class="text-gray-400 p-4">无差异</div>';
+    return;
+  }
+  let html = '';
+  r.changes.forEach(e => {
+    let cls = '';
+    if (e.kind === 'add') cls = 'diff-add';
+    else if (e.kind === 'remove') cls = 'diff-remove';
+    else if (e.kind === 'modify') cls = 'diff-modify';
+    const sym = e.kind === 'add' ? '+' : e.kind === 'remove' ? '-' : '~';
+    html += `<div class="p-2 mb-1 ${cls} rounded">
+      <div class="font-bold">${sym} ${e.location} · ${e.keyword} <span class="text-xs font-normal">L${e.line_old || e.line_new}</span></div>
+      <div class="text-xs">${e.old !== null ? 'OLD: ' + JSON.stringify(e.old) : ''}</div>
+      <div class="text-xs">${e.new !== null ? 'NEW: ' + JSON.stringify(e.new) : ''}</div>
+    </div>`;
+  });
+  content.innerHTML = html;
+}
+function closeDiff() {
+  document.getElementById('diff-panel').style.width = '0';
+}
+
+// ================== 启动 ==================
+window.addEventListener('DOMContentLoaded', () => {
+  setStatus('就绪 — 在左侧输入 .inp 路径并点击"加载"');
+});
+</script>
+</body>
+</html>

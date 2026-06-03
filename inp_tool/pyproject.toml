@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inp-tool"
+dynamic = ["version"]
+description = "mcfd.inp 解析、修改、diff 工具 (含 FastAPI 后端)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "cfd++changer project"},
+]
+keywords = ["cfd", "mcfd", "inp", "parser", "diff"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Hydromechanics",
+]
+dependencies = []
+
+[project.optional-dependencies]
+api = ["fastapi>=0.100", "uvicorn[standard]>=0.23", "pydantic>=2.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "httpx>=0.24",   # for FastAPI TestClient
+]
+
+[project.scripts]
+inp-tool = "inp_tool.cli:main"
+inp-tool-api = "inp_tool.api:main"
+
+[project.urls]
+"Source" = "https://example.invalid/cfd++changer"
+
+[tool.setuptools]
+packages = ["inp_tool"]
+
+[tool.setuptools.dynamic]
+version = {attr = "inp_tool.__version__"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers"
+markers = [
+    "external: 需要外部 INP_DIR (E:\\softwareData\\edge\\download\\inp) 的真实样本回归测试",
+]
