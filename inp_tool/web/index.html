@@ -30,8 +30,8 @@
   <button onclick="saveFile()" id="btn-save" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm hidden">保存</button>
 </header>
 
-<!-- 主体:三栏 -->
-<main class="flex-1 flex overflow-hidden">
+<!-- 主体:三栏 (编辑器视图) -->
+<main id="view-editor" class="flex-1 flex overflow-hidden">
 
   <!-- 左侧:文件 + 块列表 -->
   <aside class="w-72 bg-white border-r overflow-y-auto">
@@ -68,6 +68,75 @@
     </div>
     <div id="diff-content" class="p-2 text-xs font-mono whitespace-pre"></div>
   </aside>
+</main>
+
+<!-- 主体:批量生成视图(默认隐藏) -->
+<main id="view-sweep" class="flex-1 overflow-y-auto bg-gray-50 hidden">
+  <div class="max-w-3xl mx-auto p-6 space-y-4">
+    <h2 class="text-xl font-bold">基于 mcfd.inp 样例批量生成算例</h2>
+    <p class="text-sm text-gray-600">
+      笛卡尔积展开 (alpha × beta × mach × ...) → N 个 .inp 文件 + manifest.json。
+      v0.4 sweep 详细文档见
+      <a href="https://github.com/oneMuggle/cfd--changer" target="_blank" class="text-blue-600 underline">README</a>。
+    </p>
+
+    <div class="bg-white rounded-lg shadow p-4 space-y-3">
+      <div>
+        <label class="text-xs text-gray-500">模板 .inp 路径(必填)</label>
+        <input id="sw-template" type="text" class="w-full border rounded px-2 py-1 text-sm"
+               placeholder="D:\\path\\to\\mcfd.inp">
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">输出目录</label>
+        <input id="sw-out" type="text" class="w-full border rounded px-2 py-1 text-sm" value="./sweep_cases">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-gray-500">alpha 攻角 (deg, 逗号分隔)</label>
+          <input id="sw-alpha" type="text" class="w-full border rounded px-2 py-1 text-sm" value="0,4,8">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500">beta 侧滑角 (deg, 逗号分隔)</label>
+          <input id="sw-beta" type="text" class="w-full border rounded px-2 py-1 text-sm" value="0">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500">mach 马赫数 (逗号分隔)</label>
+          <input id="sw-mach" type="text" class="w-full border rounded px-2 py-1 text-sm" value="0.6,0.8">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500">T_inf 来流温度 K</label>
+          <input id="sw-T" type="text" class="w-full border rounded px-2 py-1 text-sm" value="288.15">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500">p_inf 来流压强 Pa</label>
+          <input id="sw-p" type="text" class="w-full border rounded px-2 py-1 text-sm" value="101325">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500">naming 模板(空=auto)</label>
+          <input id="sw-naming" type="text" class="w-full border rounded px-2 py-1 text-sm"
+                 value="case_aoa{alpha:02.0f}_b{beta:02.0f}_ma{mach:.2f}.inp">
+        </div>
+      </div>
+      <div class="flex gap-3 items-center pt-2">
+        <button onclick="runSweep()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">生成</button>
+        <label class="text-sm flex items-center gap-1">
+          <input id="sw-dryrun" type="checkbox"> dry-run(只算不写)
+        </label>
+        <span id="sw-status" class="text-xs text-gray-500 ml-auto"></span>
+      </div>
+    </div>
+
+    <div id="sw-result" class="hidden bg-white rounded-lg shadow p-4">
+      <h3 class="text-sm font-bold mb-2">生成结果</h3>
+      <div id="sw-summary" class="text-xs text-gray-600 mb-3"></div>
+      <table class="w-full text-xs">
+        <thead class="bg-gray-100">
+          <tr><th class="text-left p-1">case_id</th><th class="text-left p-1">params</th><th class="text-left p-1">applied</th></tr>
+        </thead>
+        <tbody id="sw-cases"></tbody>
+      </table>
+    </div>
+  </div>
 </main>
 
 <!-- 状态栏 -->
@@ -333,9 +402,100 @@ function closeDiff() {
   document.getElementById('diff-panel').style.width = '0';
 }
 
+// ================== 视图切换 (v0.4 批量生成) ==================
+function switchView(view) {
+  const editor = document.getElementById('view-editor');
+  const sweep  = document.getElementById('view-sweep');
+  const navE   = document.getElementById('nav-editor');
+  const navS   = document.getElementById('nav-sweep');
+  if (view === 'sweep') {
+    editor.classList.add('hidden');
+    sweep.classList.remove('hidden');
+    navE.classList.remove('bg-blue-600'); navE.classList.add('hover:bg-slate-700');
+    navS.classList.add('bg-blue-600');    navS.classList.remove('hover:bg-slate-700');
+  } else {
+    sweep.classList.add('hidden');
+    editor.classList.remove('hidden');
+    navS.classList.remove('bg-blue-600'); navS.classList.add('hover:bg-slate-700');
+    navE.classList.add('bg-blue-600');    navE.classList.remove('hover:bg-slate-700');
+  }
+}
+
+function _csv(s) {
+  return s.split(/[,\s]+/).map(x => x.trim()).filter(Boolean).map(Number);
+}
+
+async function runSweep() {
+  const status = document.getElementById('sw-status');
+  const result = document.getElementById('sw-result');
+  const tbody  = document.getElementById('sw-cases');
+  const summary= document.getElementById('sw-summary');
+
+  const template = document.getElementById('sw-template').value.trim();
+  if (!template) {
+    status.textContent = '模板路径必填'; status.className = 'text-xs text-red-500 ml-auto';
+    return;
+  }
+
+  const sweeps = {
+    alpha: _csv(document.getElementById('sw-alpha').value),
+    beta:  _csv(document.getElementById('sw-beta').value),
+    mach:  _csv(document.getElementById('sw-mach').value),
+    T_inf: _csv(document.getElementById('sw-T').value),
+    p_inf: _csv(document.getElementById('sw-p').value),
+  };
+  // 过滤空数组
+  Object.keys(sweeps).forEach(k => { if (!sweeps[k].length) delete sweeps[k]; });
+
+  const cfg = {
+    template,
+    output_dir: document.getElementById('sw-out').value.trim() || './sweep_cases',
+    sweeps,
+    dry_run: document.getElementById('sw-dryrun').checked,
+  };
+  const naming = document.getElementById('sw-naming').value.trim();
+  if (naming) cfg.naming = naming;
+
+  status.textContent = '正在生成…'; status.className = 'text-xs text-gray-500 ml-auto';
+
+  try {
+    const r = await fetch('/api/sweep', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(cfg),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({detail: r.statusText}));
+      throw new Error(err.detail || r.statusText);
+    }
+    const data = await r.json();
+    status.textContent = `✓ 完成 ${data.total} 个 case`;
+    status.className = 'text-xs text-green-600 ml-auto';
+
+    result.classList.remove('hidden');
+    summary.textContent = `模板: ${data.template} · 总数: ${data.total} · dry_run: ${data.dry_run}`;
+    tbody.innerHTML = '';
+    data.cases.forEach(c => {
+      const tr = document.createElement('tr');
+      tr.className = 'border-b';
+      const params = Object.entries(c.params).map(([k,v]) => `${k}=${v}`).join(' ');
+      const applied = Object.entries(c.applied).map(([k,v]) => `${k}=${v}`).join(' ');
+      tr.innerHTML = `
+        <td class="p-1 font-mono">${c.case_id}</td>
+        <td class="p-1 font-mono">${params}</td>
+        <td class="p-1 font-mono text-gray-500">${applied}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.className = 'text-xs text-red-500 ml-auto';
+  }
+}
+
 // ================== 启动 ==================
 window.addEventListener('DOMContentLoaded', () => {
-  setStatus('就绪 — 在左侧输入 .inp 路径并点击"加载"');
+  setStatus('就绪 — 在左侧输入 .inp 路径并点击"加载",或切到"批量生成"标签');
 });
 </script>
 </body>

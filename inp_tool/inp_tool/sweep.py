@@ -226,11 +226,15 @@ class SweepReport:
 _DEFAULT_NAMING = "case_{alpha}"  # 占位,实际会被注入所有 sweep 字段
 
 
-def _default_naming(sweep_keys: List[str]) -> str:
-    """生成包含所有 sweep 字段的默认 naming"""
+def _default_naming(sweep_spec: "SweepSpec") -> str:
+    """生成包含所有**多值** sweep 字段的默认 naming。
+    单值轴(如 T_inf 常量)不进文件名,否则可读性差。
+    """
     parts = []
-    for k in sweep_keys:
-        parts.append("{" + k + "}")
+    for k, v in sweep_spec.values.items():
+        norm = _normalize_axis(v)
+        if len(norm) > 1:  # 只放多值轴
+            parts.append("{" + k + "}")
     return "case_" + "_".join(parts) if parts else "case"
 
 
@@ -276,7 +280,7 @@ class CaseSweep:
 
         sweep_keys = list(d["sweeps"].keys())
         sweep = SweepSpec(values=d["sweeps"])
-        naming = d.get("naming") or _default_naming(sweep_keys)
+        naming = d.get("naming") or _default_naming(sweep)
         if d.get("naming"):
             _check_naming_against_sweep(naming, sweep)
 
@@ -312,6 +316,25 @@ class CaseSweep:
     def from_json(cls, path: str) -> "CaseSweep":
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        return cls.from_dict(data)
+
+    @classmethod
+    def from_yaml(cls, path: str) -> "CaseSweep":
+        """
+        加载 YAML 配置文件。需要 `pyyaml`(`pip install inp-tool[yaml]`)。
+        缺包时抛 ImportError 并给出安装提示。
+        """
+        try:
+            import yaml
+        except ImportError as e:
+            raise ImportError(
+                "YAML support requires `pyyaml`. "
+                "Install via:  pip install inp-tool[yaml]"
+            ) from e
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if data is None:
+            data = {}  # 空 YAML 当作空 dict,后续 from_dict 报缺字段
         return cls.from_dict(data)
 
 

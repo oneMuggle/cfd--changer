@@ -54,15 +54,16 @@ class TestCaseSweepFromDict:
         assert s.freestream is None  # 显式关闭
         assert s.manifest_path == "out/manifest.json"
 
-    def test_naming_uses_all_sweep_keys_by_default(self):
+    def test_naming_uses_only_multi_value_keys_by_default(self):
         s = CaseSweep.from_dict({
             "template": "t.inp",
             "output_dir": "out",
-            "sweeps": {"alpha": [0, 4], "beta": [0]},
+            "sweeps": {"alpha": [0, 4], "beta": [0], "T_inf": [288.15]},
         })
-        # 默认 naming 必须包含所有 sweep 字段占位符
+        # 默认 naming 只包含**多值** sweep 字段(单值轴不进文件名)
         assert "{alpha}" in s.naming
-        assert "{beta}" in s.naming
+        assert "{beta}" not in s.naming
+        assert "{T_inf}" not in s.naming
 
     def test_naming_missing_multi_value_sweep_key_raises(self):
         # 用户的 naming 缺了某个**多值** sweep 字段占位符

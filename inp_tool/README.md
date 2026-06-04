@@ -150,6 +150,70 @@ pytest -m "not external"
 
 基于一个 mcfd.inp 样例,扫描 (alpha, beta, mach, ...) 一次生成 N 个变体 + 一份 manifest 索引。
 
+### 多种用户友好入口 (v0.4.1)
+
+| 入口 | 命令 | 适用 |
+|---|---|---|
+| Python API | `from inp_tool import CaseSweep, generate` | 集成到自己脚本 |
+| CLI (JSON) | `inp-tool sweep examples/sweep_demo.json` | 标准用法 |
+| CLI (YAML) | `inp-tool sweep examples/sweep_demo.yaml` | 手写更友好,需 `[yaml]` extras |
+| CLI (交互) | `inp-tool sweep -i` | 忘记参数名时一步步问 |
+| CLI (快捷) | `inp-tool sweep tpl.inp --alpha 0,4,8 --mach 0.6,0.8` | 临时一次性 |
+| Web GUI | 浏览器 `http://127.0.0.1:8765/`,切"批量生成"标签 | 不爱写命令行的同事 |
+| Shell 补全 | `inp-tool completion bash >> ~/.bashrc` | Tab 补全子命令 |
+
+#### YAML 配置示例
+
+```yaml
+# examples/sweep_demo.yaml
+template: examples/mcfd_v2_modified.inp
+output_dir: examples/sweep_cases
+sweeps:
+  alpha: [0.0, 4.0, 8.0]
+  beta:  [0.0]
+  mach:  [0.60, 0.80]
+  T_inf: [288.15]
+  p_inf: [101325.0]
+naming: "case_aoa{alpha:02.0f}_b{beta:02.0f}_ma{mach:.2f}.inp"
+manifest:
+  path: examples/sweep_cases/manifest.json
+freestream:
+  enabled: true
+  gamma: 1.4
+  R: 287.05
+```
+
+#### 交互式 CLI
+
+```bash
+$ inp-tool sweep -i
+=== sweep 交互式配置(回车=接受默认值)===
+
+模板 .inp 路径 [回车跳过]: examples/mcfd_v2_modified.inp
+输出目录 [./sweep_cases]: /tmp/my_cases
+攻角 alpha 扫描 (deg,逗号分隔) [0,4,8]:
+侧滑角 beta 扫描 (deg,逗号分隔) [0]: -2,0,2
+马赫 mach 扫描 (逗号分隔) [0.6,0.8]: 0.5,0.7,0.9
+来流温度 T_inf K (单值或逗号列表) [288.15]:
+来流压强 p_inf Pa (单值或逗号列表) [101325.0]:
+命名模板 (空=auto):
+manifest 路径 (空=不写):
+dry-run?(只打印不写盘) [y/N]: n
+确认按上面配置生成? [Y/n]: y
+[sweep] generated 27 cases -> /tmp/my_cases
+```
+
+#### Shell 补全
+
+```bash
+# bash
+inp-tool completion bash >> ~/.bashrc && source ~/.bashrc
+# zsh
+inp-tool completion zsh > "${fpath[1]}/_inp-tool"
+# fish
+inp-tool completion fish > ~/.config/fish/completions/inp-tool.fish
+```
+
 ### Python API
 
 ```python

@@ -32,6 +32,7 @@ api = [
     # 3.8 兼容: Pydantic v2 在 Python 3.8 上评估 PEP 585/604 注解
     "eval_type_backport>=0.2.0 ; python_version < '3.9'",
 ]
+yaml = ["pyyaml>=6.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
