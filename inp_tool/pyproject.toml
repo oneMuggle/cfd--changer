@@ -38,6 +38,10 @@ dev = [
     "pytest-cov>=4.0",
     "httpx>=0.24",   # for FastAPI TestClient
 ]
+build = [
+    # 5.x 最后一个版本:支持 Python 3.8 + Windows 7
+    "pyinstaller==5.13.2",
+]
 
 [project.scripts]
 inp-tool = "inp_tool.cli:main"

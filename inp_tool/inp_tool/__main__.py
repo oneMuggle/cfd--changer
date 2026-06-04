@@ -1,16 +1,10 @@
 """
-inp_tool 的 python -m 入口
+inp_tool 包入口:python -m inp_tool
 
-用法:
-    python -m inp_tool info file.inp
-    python -m inp_tool get file.inp key -b block
-    python -m inp_tool --version
-
-委派给 inp_tool.cli.main。
+在 PyInstaller 打包后,相对导入失效,所以用绝对导入。
 """
 import sys
-
-from .cli import main
+from inp_tool.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())
