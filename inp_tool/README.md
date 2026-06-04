@@ -1,11 +1,19 @@
-# inp_tool — mcfd.inp 解析 / 修改 / diff 工具 v0.3
+# inp_tool — mcfd.inp 解析 / 修改 / diff / **批量算例生成** / **standalone CLI** v0.4
 
 mcfd.inp 是 CFD++ 求解器的输入文件格式。本工具提供:
 - **解析**  → `InpFile` 数据结构(支持重复同名块、多行 values 复合语句)
 - **修改**  → 按 `block.keyword` 改值,自动推断类型
 - **round-trip**  → 写回时保留行尾注释
 - **diff**  → 两个文件的语义差异报告
+- **sweep (v0.4 新增)**  → 批量算例生成器:基于样例扫描 (alpha, beta, Ma, ...) 生成 N 个 .inp + manifest.json
 - **FastAPI 后端**  → REST API + 浏览器 GUI(`inp_tool.api`)
+- **standalone CLI (v0.4 新增)**  → PyInstaller 打包,无需 Python 环境
+
+## 下载 standalone 版本
+
+不想装 Python?到 [GitHub Releases](https://github.com/oneMuggle/cfd--changer/releases) 下载 standalone 可执行(~24 MB,Linux / Windows / macOS)。
+
+详见 [docs/user-manual/11-packaging.md](../user-manual/11-packaging.md) 与 [docs/technical/10-cli-packaging.md](../technical/10-cli-packaging.md)。
 
 ## Install
 
