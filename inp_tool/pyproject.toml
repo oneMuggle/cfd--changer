@@ -7,7 +7,7 @@ name = "inp-tool"
 dynamic = ["version"]
 description = "mcfd.inp 解析、修改、diff 工具 (含 FastAPI 后端)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "cfd++changer project"},
@@ -25,7 +25,13 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-api = ["fastapi>=0.100", "uvicorn[standard]>=0.23", "pydantic>=2.0"]
+api = [
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.23",
+    "pydantic>=2.0",
+    # 3.8 兼容: Pydantic v2 在 Python 3.8 上评估 PEP 585/604 注解
+    "eval_type_backport>=0.2.0 ; python_version < '3.9'",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

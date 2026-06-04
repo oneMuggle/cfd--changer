@@ -3,7 +3,9 @@ mcfd.inp CLI v0.2
 """
 from __future__ import annotations
 import argparse
+import os
 import sys
+from typing import Any, Dict
 from . import __version__
 from .parser import parse_file
 from .writer import write as write_inp
@@ -124,6 +126,96 @@ def cmd_info(args):
     return 0
 
 
+def _parse_csv_floats(s: str):
+    """把 '0,4,8' 或 '0 4 8' 解析为 float 列表"""
+    parts = [p for p in s.replace(",", " ").split() if p]
+    return [float(p) for p in parts]
+
+
+def cmd_sweep(args):
+    """
+    inp-tool sweep <template.inp> [sweep.json]
+    也支持:  --alpha 0,4,8  --beta -2,0,2  --mach 0.6,0.8  --t-inf 288.15  --p-inf 101325
+    仅有 1 个位置参数且是 .json 时,直接按 config 调用。
+    """
+    from .sweep import CaseSweep, generate
+
+    # 解析 first/config: 1 个参数按 config 处理;2 个参数按 template+config
+    if args.config is None and args.first.lower().endswith(".json"):
+        template = None
+        config = args.first
+    else:
+        template = args.first
+        config = args.config
+
+    if config is not None:
+        if not os.path.isfile(config):
+            print(f"sweep: config not found: {config}", file=sys.stderr)
+            return 2
+        try:
+            cs = CaseSweep.from_json(config)
+        except (KeyError, ValueError) as e:
+            print(f"sweep: invalid config: {e}", file=sys.stderr)
+            return 2
+        if args.out:
+            cs.output_dir = args.out
+        if args.manifest:
+            cs.manifest_path = args.manifest
+    else:
+        # template 模式
+        if not os.path.isfile(template):
+            print(f"sweep: template not found: {template}", file=sys.stderr)
+            return 2
+        sweeps: Dict[str, Any] = {}
+        if args.alpha is not None:
+            sweeps["alpha"] = _parse_csv_floats(args.alpha)
+        if args.beta is not None:
+            sweeps["beta"] = _parse_csv_floats(args.beta)
+        if args.mach is not None:
+            sweeps["mach"] = _parse_csv_floats(args.mach)
+        if args.t_inf is not None:
+            sweeps["T_inf"] = _parse_csv_floats(args.t_inf)
+        if args.p_inf is not None:
+            sweeps["p_inf"] = _parse_csv_floats(args.p_inf)
+
+        if not sweeps:
+            print(
+                "sweep: no sweep axes provided. Use a JSON config or "
+                "--alpha/--beta/--mach/--t-inf/--p-inf.",
+                file=sys.stderr,
+            )
+            return 2
+
+        out_dir = args.out or "."
+        cfg: Dict[str, Any] = {
+            "template": template,
+            "output_dir": out_dir,
+            "sweeps": sweeps,
+        }
+        if args.manifest:
+            cfg["manifest"] = {"path": args.manifest}
+
+        try:
+            cs = CaseSweep.from_dict(cfg)
+        except (KeyError, ValueError) as e:
+            print(f"sweep: invalid config: {e}", file=sys.stderr)
+            return 2
+
+    if args.dry_run:
+        print("[sweep] DRY RUN: no files will be written")
+
+    report = generate(cs, dry_run=args.dry_run)
+
+    print(f"[sweep] generated {report.total} cases -> {cs.output_dir}")
+    if report.total <= 20 or args.verbose:
+        for c in report.cases:
+            params_str = " ".join(f"{k}={v}" for k, v in c.params.items())
+            print(f"  - {c.case_id}  ({params_str})")
+    if cs.manifest_path and not args.dry_run:
+        print(f"[sweep] manifest -> {cs.manifest_path}")
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog='inp',
@@ -166,6 +258,24 @@ def main(argv=None):
     si = sub.add_parser('info', help='文件概览')
     si.add_argument('file')
     si.set_defaults(func=cmd_info)
+
+    # === sweep 子命令 ===
+    sw = sub.add_parser(
+        'sweep',
+        help='基于样例批量生成 mcfd.inp 算例(扫描攻角/侧滑角/来流等)',
+    )
+    sw.add_argument('first', help='模板 .inp 路径 / 或唯一参数:JSON config')
+    sw.add_argument('config', nargs='?', help='可选: JSON 配置文件')
+    sw.add_argument('--alpha', help='攻角扫描(逗号分隔,deg)')
+    sw.add_argument('--beta', help='侧滑角扫描(逗号分隔,deg)')
+    sw.add_argument('--mach', help='马赫数扫描(逗号分隔)')
+    sw.add_argument('--t-inf', dest='t_inf', help='来流温度 K(单值或逗号列表)')
+    sw.add_argument('--p-inf', dest='p_inf', help='来流压强 Pa(单值或逗号列表)')
+    sw.add_argument('--out', help='输出目录(覆盖 config)')
+    sw.add_argument('--manifest', help='manifest.json 路径(覆盖 config)')
+    sw.add_argument('--dry-run', action='store_true', help='只打印不写盘')
+    sw.add_argument('-v', '--verbose', action='store_true', help='列出所有 case')
+    sw.set_defaults(func=cmd_sweep)
 
     args = p.parse_args(argv)
     return args.func(args)

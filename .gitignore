@@ -27,3 +27,6 @@ htmlcov/
 *.swp
 
 /temp/
+
+# inp_tool sweep demo 输出(可由 examples/sweep_demo.py 重新生成)
+inp_tool/examples/sweep_cases/

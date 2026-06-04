@@ -146,6 +146,89 @@ pytest -m "not external"
 
 55 个测试全过(parser / writer / diff / cli / api 五大模块,加上 4 个外标记的真实样本回归测试,目录不存在时自动 skip)。整体行覆盖率 **≥80%**(plan 目标)。
 
+## v0.4 新增:批量算例生成 (sweep)
+
+基于一个 mcfd.inp 样例,扫描 (alpha, beta, mach, ...) 一次生成 N 个变体 + 一份 manifest 索引。
+
+### Python API
+
+```python
+from inp_tool import CaseSweep, FreestreamPreset, generate
+
+cs = CaseSweep.from_dict({
+    "template": "examples/mcfd_v2_modified.inp",
+    "output_dir": "examples/sweep_cases",
+    "sweeps": {
+        "alpha": [0, 4, 8],          # deg
+        "beta":  [0],
+        "mach":  [0.6, 0.8],
+        "T_inf": [288.15],            # K(单值,辅助)
+        "p_inf": [101325.0],          # Pa(单值,辅助)
+    },
+    "naming": "case_aoa{alpha:02.0f}_b{beta:02.0f}_ma{mach:.2f}.inp",
+    "manifest": {"path": "examples/sweep_cases/manifest.json"},
+    "freestream": {"enabled": True, "gamma": 1.4, "R": 287.05},
+})
+
+report = generate(cs)        # -> SweepReport (6 cases by cartesian 3*1*2)
+print(f"generated {report.total} cases")
+for c in report.cases:
+    print(f"  - {c.case_id}  alpha={c.params['alpha']}  mach={c.params['mach']}")
+```
+
+### CLI
+
+```bash
+# 用 JSON 配置文件
+inp-tool sweep examples/mcfd_v2_modified.inp examples/sweep_demo.json --out examples/sweep_cases
+
+# 或用 --alpha / --beta / --mach 快捷参数
+inp-tool sweep examples/mcfd_v2_modified.inp \
+    --alpha 0,4,8 --beta 0 --mach 0.6,0.8 \
+    --t-inf 288.15 --p-inf 101325 \
+    --out examples/sweep_cases \
+    --manifest examples/sweep_cases/manifest.json
+
+# Dry run(只打印不写盘)
+inp-tool sweep examples/sweep_demo.json --dry-run
+```
+
+### FastAPI
+
+```bash
+curl -X POST http://127.0.0.1:8765/api/sweep \
+     -H "Content-Type: application/json" \
+     -d @examples/sweep_demo.json
+# -> {"total": 6, "cases": [...], "template": "...", ...}
+```
+
+### FreestreamPreset 公式
+
+`aero_u / aero_v / aero_w` 自动按几何分解:
+
+```
+a = sqrt(gamma · R · T_inf)
+U = Ma · a · cos(α) · cos(β)
+V = Ma · a · sin(β)
+W = Ma · a · sin(α) · cos(β)
+refvel = sqrt(U² + V² + W²)        # 模长 = Ma·a
+```
+
+同时更新 `guiopts.aero_alpha/beta/ma/u/v/w/temp/pres` 与 `physics.refvel/reftem/refpre`。
+
+> 假设 α 在 Y-Z 平面(影响 W)、β 在 X-Z 平面(影响 V)。如果你的 CFD++ 版本定义不同,可以在 `freestream: {enabled: false}` 关闭 preset,只用 `overrides` 字段手动改 `aero_u/v/w`。
+
+### 命名规则
+
+`naming` 模板是 Python `str.format()` 风格,占位符 = sweep 字段名。单值轴(如 `T_inf`)不必出现在命名中;多值轴必须出现,否则报错。冲突时自动追加 `_1`, `_2`...
+
+### 完整测试
+
+```bash
+# Phase 1-5 全部 sweep 测试(sweep / generate / cli / api 四个模块)
+pytest tests/test_sweep.py tests/test_sweep_generate.py tests/test_sweep_cli.py tests/test_sweep_api.py -v
+```
+
 ## 已知限制 (v0.2 残留)
 
 - 多行 values 只能配 seq.# / seq# 模式(其他复合头需扩展)
@@ -156,5 +239,5 @@ pytest -m "not external"
 ## 路线图
 
 - v0.3: JSON/YAML 互转(便于跨工具协作)
-- v0.4: GUI 自动生成(基于 block schema)
+- v0.4: 批量算例生成器(sweep)✅ **已完成**
 - v0.5: 集成到现代 GUI(后续项目)
