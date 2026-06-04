@@ -1,0 +1,19 @@
+# Conda environment for inp_tool development & CI
+# 用于:
+#   conda env create -f environment.yml
+#   conda activate cfdchanger
+# 也供 GitHub Actions setup-miniconda@v3 的 environment-file 选项使用
+
+name: cfdchanger
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.8
+  - pip
+  - pytest>=7.0
+  - pytest-cov>=4.0
+  - httpx>=0.24   # FastAPI TestClient
+  - pyyaml>=6.0
+  - pyinstaller=5.13.2  # 锁定版本(支持 Py 3.8 + Win7)

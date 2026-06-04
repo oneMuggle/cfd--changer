@@ -1,0 +1,146 @@
+# GitHub Actions: Release (tag 触发)
+#
+# 流程:
+#   1) 跑测试(确认绿)
+#   2) 在 3 平台跑 PyInstaller 出二进制
+#   3) 改名带版本号
+#   4) 创建/更新 GitHub Release,上传 artifact
+#
+# 触发方式:git tag push v0.4.0 && git push --tags
+#
+# (PyInstaller 不支持交叉编译,必须在目标平台各编一次)
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"           # 任意 v 开头的 tag(v0.4.0 / v0.4.1 / ...)
+  workflow_dispatch:    # 也允许手动触发
+
+# 权限:让 GITHUB_TOKEN 能创建 release
+permissions:
+  contents: write
+
+jobs:
+  # ========== 测试(可选,先保证绿) ==========
+  test:
+    name: pre-release test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    defaults:
+      run:
+        working-directory: inp_tool
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: latest
+          activate-environment: cfdchanger
+          environment-file: environment.yml
+          python-version: "3.8"
+          use-mamba: true
+      - name: Install + test
+        shell: bash -l {0}
+        run: |
+          conda run -n cfdchanger pip install -e ".[dev,api]"
+          conda run -n cfdchanger python -m pytest tests/ -v --tb=short
+
+  # ========== 跨平台打包 ==========
+  build:
+    name: build (${{ matrix.os }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: inp-tool-linux-x86_64
+            binary_name: inp-tool
+          - os: windows-latest
+            artifact_name: inp-tool-windows-x86_64.exe
+            binary_name: inp-tool.exe
+          - os: macos-latest
+            artifact_name: inp-tool-macos-universal2
+            binary_name: inp-tool
+
+    defaults:
+      run:
+        working-directory: inp_tool
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: latest
+          activate-environment: cfdchanger
+          environment-file: environment.yml
+          python-version: "3.8"
+          use-mamba: true
+
+      - name: Build standalone (PyInstaller)
+        shell: bash -l {0}
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+              # Windows:Git Bash 不能直接跑 .bat,用 python 调
+              python -c "import PyInstaller.__main__ as m; m.run(['inp_tool.spec','--clean','--noconfirm'])"
+          else
+              bash scripts/build.sh
+          fi
+
+      - name: Smoke test (${{ matrix.binary_name }})
+        shell: bash -l {0}
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+              ./dist/inp-tool.exe --version
+          else
+              ./dist/inp-tool --version
+              ./dist/inp-tool --help | head -3
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: inp_tool/dist/${{ matrix.binary_name }}
+          if-no-files-found: error
+          retention-days: 90
+
+  # ========== 创建 GitHub Release ==========
+  release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Display collected artifacts
+        run: |
+          echo "=== artifacts/ ==="
+          ls -la artifacts/
+          echo ""
+          echo "=== sizes ==="
+          du -h artifacts/*/* 2>/dev/null || du -h artifacts/
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: inp-tool ${{ github.ref_name }}
+          draft: true              # 草稿,人工 review 后再 publish
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

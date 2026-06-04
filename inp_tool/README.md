@@ -1,5 +1,8 @@
 # inp_tool — mcfd.inp 解析 / 修改 / diff / **批量算例生成** / **standalone CLI** v0.4
 
+[![CI](https://github.com/oneMuggle/cfd--changer/workflows/ci/badge.svg)](https://github.com/oneMuggle/cfd--changer/actions/workflows/ci.yml)
+[![Release](https://github.com/oneMuggle/cfd--changer/workflows/release/badge.svg)](https://github.com/oneMuggle/cfd--changer/actions/workflows/release.yml)
+
 mcfd.inp 是 CFD++ 求解器的输入文件格式。本工具提供:
 - **解析**  → `InpFile` 数据结构(支持重复同名块、多行 values 复合语句)
 - **修改**  → 按 `block.keyword` 改值,自动推断类型
@@ -14,6 +17,19 @@ mcfd.inp 是 CFD++ 求解器的输入文件格式。本工具提供:
 不想装 Python?到 [GitHub Releases](https://github.com/oneMuggle/cfd--changer/releases) 下载 standalone 可执行(~24 MB,Linux / Windows / macOS)。
 
 详见 [docs/user-manual/11-packaging.md](../user-manual/11-packaging.md) 与 [docs/technical/10-cli-packaging.md](../technical/10-cli-packaging.md)。
+
+## 测试 & CI
+
+```bash
+# 跑测试 + 覆盖率
+conda activate cfdchanger
+cd inp_tool
+python -m pytest tests/ -v --cov=inp_tool --cov-fail-under=80
+```
+
+CI 自动跑(`.github/workflows/ci.yml`):每次 PR / push 到 main 都会在 **3 平台** 跑测试。
+
+发新版:`git tag v0.4.0 && git push --tags` → release.yml 自动在 3 平台打包并发 GitHub Release。
 
 ## Install
 

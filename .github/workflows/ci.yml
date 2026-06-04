@@ -1,0 +1,71 @@
+# GitHub Actions: CI (PR 触发)
+#
+# 跑测试套件 + 覆盖率检查。
+# 跨平台矩阵:ubuntu / windows / macOS。
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+# 取消同一分支上正在跑的旧 run
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false           # 一个平台失败不阻塞其它平台
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.8"]   # Win7 兼容下限
+
+    defaults:
+      run:
+        # 关键:所有 conda run 命令必须在此目录(有 pyproject.toml)
+        working-directory: inp_tool
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: latest
+          auto-activate-base: false
+          activate-environment: cfdchanger
+          environment-file: environment.yml
+          python-version: ${{ matrix.python-version }}
+          use-mamba: true
+
+      - name: Install inp-tool (editable + dev + api deps)
+        shell: bash -l {0}
+        run: |
+          conda run -n cfdchanger pip install -e ".[dev,api]"
+
+      - name: Run tests + coverage
+        shell: bash -l {0}
+        run: |
+          conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
+            --cov=inp_tool --cov-report=term --cov-fail-under=80
+
+      - name: Generate coverage HTML (ubuntu only)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8'
+        shell: bash -l {0}
+        run: |
+          conda run -n cfdchanger python -m coverage html -d htmlcov
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8'
+        with:
+          name: coverage-html
+          path: inp_tool/htmlcov/
+          retention-days: 14
+          if-no-files-found: ignore
