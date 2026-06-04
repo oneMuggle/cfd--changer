@@ -44,9 +44,15 @@ def _is_block_marker(s: str) -> tuple[str, str] | None:
     return None
 
 
-def _make_stmt(kw: str, raw_vals: list[str], line_no: int, raw: str, comment: str) -> Stmt:
+def _make_stmt(kw: str, raw_vals: list[str], line_no: int, raw: str, comment: str,
+               leading_ws: str = '', trailing_ws: str = '') -> Stmt:
     vals = [Value(raw=v) for v in raw_vals]
-    return Stmt(keyword=kw, values=vals, line=line_no, raw=raw, comment_after=comment)
+    return Stmt(
+        keyword=kw, values=vals, line=line_no, raw=raw, comment_after=comment,
+        raw_with_ws=raw,
+        leading_ws=leading_ws,
+        trailing_ws=trailing_ws,
+    )
 
 
 # === 复合语句识别 ===
@@ -84,6 +90,18 @@ def parse(text: str, path: str = '') -> InpFile:
     for i, raw_line in enumerate(lines, 1):
         stripped, comment = _split_comment(raw_line)
         s = stripped.strip()
+        # 提取 leading_ws / trailing_ws(preserve_format 用)
+        leading_ws = raw_line[: len(raw_line) - len(raw_line.lstrip())]
+        # trailing_ws 是 stripped 后面到 comment 之前的空白
+        tail_start = len(stripped)
+        tail_end = len(raw_line) - (len(comment) if comment else 0)
+        trailing_ws = raw_line[tail_start:tail_end] if tail_end > tail_start else ''
+        # 提取 leading_ws / trailing_ws(preserve_format 用)
+        leading_ws = raw_line[: len(raw_line) - len(raw_line.lstrip())]
+        # trailing_ws 是 stripped 后面到 comment 之前的空白
+        tail_start = len(stripped)
+        tail_end = len(raw_line) - (len(comment) if comment else 0)
+        trailing_ws = raw_line[tail_start:tail_end] if tail_end > tail_start else ''
 
         # 块标记
         m = _is_block_marker(s)
@@ -146,7 +164,8 @@ def parse(text: str, path: str = '') -> InpFile:
         kw, vals, _ = _tokenize_line(s)
         if not kw:
             continue
-        stmt = _make_stmt(kw, vals, i, raw_line, comment)
+        stmt = _make_stmt(kw, vals, i, raw_line, comment,
+                          leading_ws=leading_ws, trailing_ws=trailing_ws)
 
         # 复合语句累积逻辑
         if _is_seq_header(kw):

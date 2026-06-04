@@ -52,6 +52,10 @@ class Stmt:
     line: int = 0
     raw: str = ''
     comment_after: str = ''
+    # preserve_format 字段(v0.4+):
+    raw_with_ws: str = ''     # 完整一行(含前导空白 + 行尾空白 + 注释)
+    leading_ws: str = ''      # 行首空白(缩进/对齐)
+    trailing_ws: str = ''     # 行尾空白(罕见但保留)
 
     @property
     def values_raw(self) -> list[str]:

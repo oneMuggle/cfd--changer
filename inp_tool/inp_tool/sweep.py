@@ -440,7 +440,8 @@ def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
 
         # 写盘
         if not dry_run:
-            write_inp(inp, path)
+            from .writer import write_preserve
+            write_preserve(inp, path)
 
         # 记录
         case = CaseResult(

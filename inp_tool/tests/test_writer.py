@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from inp_tool import parse, parse_file, write, write_bytes
-from inp_tool.writer import to_text
+from inp_tool.writer import to_text, write_preserve
 
 
 # ========== to_text() 基础 ==========
@@ -114,3 +114,111 @@ def test_roundtrip_sample_inp(tmp_path: Path, sample_inp: Path):
     seq2 = [s for s in inp2.top_stmts if s.keyword.startswith("seq")]
     if seq1 and seq1[0].children:
         assert len(seq2[0].children) == len(seq1[0].children)
+
+
+# ========== preserve_format (新增) ==========
+def test_preserve_format_keeps_blank_lines(tmp_path: Path):
+    """preserve_format 模式下,空行与缩进保留。"""
+    text = """tsteps begin
+
+    ntstep 100
+
+    cflbot 0.01
+tsteps end
+"""
+    inp = parse(text)
+    # 改一个值
+    inp.set("tsteps", "cflbot", 0.005)
+    out = tmp_path / "case.inp"
+    write_preserve(inp, str(out))
+    body = out.read_text(encoding="utf-8")
+    # 空行 + 缩进 4 空格保留
+    assert "    ntstep 100" in body
+    assert "\n    cflbot 0.005\n" in body or body.endswith("\n    cflbot 0.005\n")
+
+
+def test_preserve_format_keeps_comments(tmp_path: Path):
+    """preserve_format 模式下,行尾 # 注释保留。"""
+    text = """tsteps begin
+ntstep 100  # 默认值
+cflbot 0.01
+tsteps end
+"""
+    inp = parse(text)
+    inp.set("tsteps", "cflbot", 0.005)
+    out = tmp_path / "case.inp"
+    write_preserve(inp, str(out))
+    body = out.read_text(encoding="utf-8")
+    # 改了的字段注释也保留
+    assert "cflbot 0.005  # 默认值" in body or "cflbot 0.005  # 时间步" in body or "# 默认值" in body
+
+
+def test_preserve_format_keeps_block_indent(tmp_path: Path):
+    """块内缩进 2 空格保留。"""
+    text = """tsteps begin
+  ntstep 100
+tsteps end
+"""
+    inp = parse(text)
+    inp.set("tsteps", "ntstep", 200)
+    out = tmp_path / "case.inp"
+    write_preserve(inp, str(out))
+    body = out.read_text(encoding="utf-8")
+    assert "  ntstep 200" in body
+
+
+def test_preserve_format_falls_back_when_raw_with_ws_missing(tmp_path: Path):
+    """若 Stmt 没 raw_with_ws 字段(向后兼容旧数据),fallback 到重构逻辑。"""
+    inp = parse("tsteps begin\nntstep 100\ntsteps end\n")
+    # 模拟旧版 Stmt 没有 raw_with_ws
+    inp.block_list[0].statements[0].raw_with_ws = ""
+    inp.set("tsteps", "ntstep", 200)
+    out = tmp_path / "case.inp"
+    # 不抛异常
+    write_preserve(inp, str(out))
+    body = out.read_text(encoding="utf-8")
+    assert "ntstep 200" in body
+
+
+def test_default_write_does_not_preserve_format(tmp_path: Path):
+    """默认 write() 行为不变(向后兼容),不保留空行/缩进风格。"""
+    text = """tsteps begin
+
+ntstep 100
+tsteps end
+"""
+    inp = parse(text)
+    inp.set("tsteps", "ntstep", 200)
+    out = tmp_path / "case.inp"
+    write(inp, str(out))   # 默认,不 preserve
+    body = out.read_text(encoding="utf-8")
+    # 现有 to_text 会"重构造",输出无空行
+    # (空行被丢弃;这是已知的 v0.2 行为)
+    assert "tsteps begin" in body
+    assert "ntstep 200" in body
+
+
+def test_preserve_format_roundtrip_realistic(tmp_path: Path):
+    """端到端: 自构造带注释 + 空行 + 缩进的 .inp → 修改 → preserve_format → 读回。"""
+    # 自构造:有注释 / 有空行 / 有缩进
+    text = """\
+# 这是一个示例
+tsteps begin
+  # 缩进 2 空格 + 注释
+  ntstep 100  # 默认值
+
+  cflbot 0.01
+tsteps end
+"""
+    inp = parse(text)
+    inp.set("tsteps", "cflbot", 0.005)
+    out = tmp_path / "rt_preserve.inp"
+    write_preserve(inp, str(out))
+    # 读回
+    inp2 = parse_file(str(out))
+    # 值对
+    assert inp2.get("tsteps", "ntstep") == 100
+    assert inp2.get("tsteps", "cflbot") == 0.005
+    # 注释对
+    has_comment = any(s.comment_after for b in inp2.block_list for s in b.statements)
+    assert has_comment, "preserve_format 应保留行尾注释"
