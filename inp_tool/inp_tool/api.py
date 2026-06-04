@@ -94,6 +94,33 @@ class DiffResponse(BaseModel):
     unified: str
 
 
+# === Sweep schemas ===
+class SweepRequest(BaseModel):
+    template: str
+    output_dir: str
+    sweeps: dict = Field(default_factory=dict)
+    naming: Optional[str] = None
+    overrides: dict = Field(default_factory=dict)
+    freestream: Optional[dict] = None
+    manifest: Optional[dict] = None
+    dry_run: bool = False
+
+
+class CaseSchema(BaseModel):
+    case_id: str
+    path: str
+    params: dict = Field(default_factory=dict)
+    applied: dict = Field(default_factory=dict)
+
+
+class SweepResponse(BaseModel):
+    total: int
+    cases: list[CaseSchema]
+    template: str
+    dry_run: bool = False
+    manifest_path: Optional[str] = None
+
+
 # === 工具函数 ===
 def _get_file(file_id: str) -> tuple[str, InpFile]:
     if file_id not in _file_cache:
@@ -318,6 +345,60 @@ def diff_files(req: DiffRequest):
         change_count=len(changes),
         changes=changes,
         unified=r.unified(req.path_a, req.path_b),
+    )
+
+
+@app.post("/api/sweep", response_model=SweepResponse)
+def sweep_cases(req: SweepRequest):
+    """
+    批量算例生成。
+    请求体 = CaseSweep 配置(同 JSON 文件)。
+    返回 SweepReport JSON。
+    """
+    from .sweep import CaseSweep, generate
+
+    if not os.path.isfile(req.template):
+        raise HTTPException(404, f"template not found: {req.template}")
+
+    cfg: dict = {
+        "template": req.template,
+        "output_dir": req.output_dir,
+        "sweeps": req.sweeps,
+    }
+    if req.naming:
+        cfg["naming"] = req.naming
+    if req.overrides:
+        cfg["overrides"] = req.overrides
+    if req.freestream is not None:
+        cfg["freestream"] = req.freestream
+    if req.manifest is not None:
+        cfg["manifest"] = req.manifest
+
+    try:
+        cs = CaseSweep.from_dict(cfg)
+    except (KeyError, ValueError) as e:
+        raise HTTPException(400, f"invalid sweep config: {e}")
+
+    try:
+        report = generate(cs, dry_run=req.dry_run)
+    except Exception as e:
+        raise HTTPException(500, f"generate failed: {e}")
+
+    cases = [
+        CaseSchema(
+            case_id=c.case_id,
+            path=c.path,
+            params=c.params,
+            applied=c.applied,
+        )
+        for c in report.cases
+    ]
+    return SweepResponse(
+        total=report.total,
+        cases=cases,
+        template=report.template,
+        dry_run=req.dry_run,
+        manifest_path=cs.manifest_path,
     )
 
 
