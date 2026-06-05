@@ -260,3 +260,100 @@ for c in m['cases']:
 审计/复现就这么简单。
 
 下一步:[10-常见问题](10-faq.md) — 遇到问题先翻这里。
+
+---
+
+## 例 7:Web GUI 批量生成(给非命令行同事)
+
+**目标:** 完全用浏览器, 不碰终端, 生成与例 1 完全一样的 12 个 .inp。
+
+**步骤 1:** 启动 FastAPI 服务:
+
+```bash
+conda run -n cfdchanger inp-tool-api
+# 浏览器打开 http://127.0.0.1:8765/
+```
+
+**步骤 2:** 浏览器 5 步操作:
+
+| 步 | 操作 | 期望 |
+|---|---|---|
+| 1 | 上传 `inp_tool/examples/mcfd_v2_modified.inp` | 文件列表显示已加载 |
+| 2 | 切到"批量生成"标签 | 看到 alpha / mach / T_inf / p_inf 输入框 |
+| 3 | alpha 填 `0,2,4,6,8,10`,mach 填 `0.6,0.8` | 12 个 case 预览显示 |
+| 4 | 点"生成"按钮 | 进度条到 100% |
+| 5 | 点"下载 sweep_cases.zip" | 浏览器下载 12 个 .inp + manifest.json |
+
+**步骤 3:** 解压验证:
+
+```bash
+unzip sweep_cases.zip -d sweep_web
+ls sweep_web/   # 期望 12 个 case_aoa*_ma*.inp + manifest.json
+```
+
+**结果:** 与 CLI 例 1 产生的 .inp 二进制完全一致(用 `diff` 或 `cmp` 验证),只是入口换成了 Web GUI。
+
+**适用场景:** 老板/同事/学生不熟命令行;做演示;快速可视化调试。
+
+---
+
+## 例 8:复杂 overrides — 改 tsteps 而非 aero_*
+
+**目标:** 在扫 alpha × mach 的同时,**额外**改 tsteps.ntstep 和 options.ntplto(把每个 case 的时间步数和 plot 频率都改掉)。
+
+**步骤 1:** 写 `sweep_complex.yaml`:
+
+```yaml
+template: inp_tool/examples/mcfd_v2_modified.inp
+output_dir: ./out_complex
+sweeps:
+  alpha: [0, 4, 8]          # 3 个
+  mach:  [0.6]              # 1 个
+overrides:
+  tsteps:
+    ntstep: 100000         # 原 50000 → 100000 (跑更久)
+    cflbot: 0.0005         # 原 0.001 → 0.0005 (CFL 下限更小,收敛更稳)
+  options:
+    ntplto: 5000           # 原 0 → 5000 (每 5000 步写一次 plot)
+manifest:
+  path: ./out_complex/manifest.json
+```
+
+**步骤 2:** 跑:
+
+```bash
+conda run -n cfdchanger inp-tool sweep sweep_complex.yaml
+```
+
+**步骤 3:** 验证 — 抽 2 个 case 看改对了:
+
+```bash
+# 看 guiopts.aero_alpha 不同 (3 个值)
+grep "aero_alpha" out_complex/*.inp
+
+# 看 tsteps.ntstep 都是 100000 (3 个 case 都改了)
+grep "ntstep" out_complex/*.inp
+
+# 看 options.ntplto 都是 5000
+grep "ntplto" out_complex/*.inp
+```
+
+**期望输出:**
+
+```text
+out_complex/case_aoa00_ma0.60.inp:aero_alpha    0
+out_complex/case_aoa04_ma0.60.inp:aero_alpha    4
+out_complex/case_aoa08_ma0.60.inp:aero_alpha    8
+
+out_complex/case_aoa00_ma0.60.inp:ntstep 100000
+out_complex/case_aoa04_ma0.60.inp:ntstep 100000
+out_complex/case_aoa08_ma0.60.inp:ntstep 100000
+
+out_complex/case_aoa00_ma0.60.inp:ntplto 5000
+out_complex/case_aoa04_ma0.60.inp:ntplto 5000
+out_complex/case_aoa08_ma0.60.inp:ntplto 5000
+```
+
+**结果:** 3 个 .inp, 每个的 `guiopts.aero_alpha` 不同 (sweep 改的), 但 `tsteps.ntstep` 和 `options.ntplto` 都相同且等于 100000 / 5000 (overrides 改的)。
+
+**适用场景:** 不止扫来流, 还要把"时间推进策略 / 输出频率 / 数值参数" 也批量统一改掉的实验。详见 [07-字段覆盖](07-overrides.md) 和 [04-扫描参数 §6](04-sweeping.md)。
