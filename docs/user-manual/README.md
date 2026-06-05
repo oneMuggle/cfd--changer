@@ -31,6 +31,11 @@
 | [08-multiple-uis](08-multiple-uis.md) | 多入口使用 | CLI / Python / Web GUI / 交互式 / Shell 补全 怎么选 | 15 分钟 |
 | [09-examples](09-examples.md) | 完整示例 | 6 个端到端真实场景 | 20 分钟 |
 | [10-faq](10-faq.md) | 常见问题 | 安装/运行/几何分解/路径/性能/Web GUI/调试 | 边用边查 |
+| [11-packaging](11-packaging.md) | 打包与分发 | PyInstaller onedir / standalone CLI / cross-platform | 10 分钟 |
+| [12-mcfd-inp-field-reference](12-mcfd-inp-field-reference.md) | mcfd.inp 完整字段参考 | 10 块 × 全部字段, sweep 字段映射 | 30 分钟 |
+| [13-cli-api-reference](13-cli-api-reference.md) | CLI / FastAPI / Python 速查 | 7 子命令 + 12 端点 + 24 符号 | 10 分钟 |
+| [14-software-tutorial](14-software-tutorial.md) | 端到端教程 | 5 个真实工作流 (alpha-Mach / Web GUI / CI / 单文件 / SLURM) | 30 分钟 |
+| [15-glossary](15-glossary.md) | 术语表 | A-Z 80+ 词条 | 边用边查 |
 
 ## 3. 选读指南
 
@@ -61,6 +66,11 @@
 → [10-FAQ](10-faq.md) 90% 的问题都有
 → 实在不行提 issue: <https://github.com/oneMuggle/cfd--changer/issues>
 
+### 3.6 我想查某个 .inp 字段是什么意思
+
+→ [12-mcfd-inp-field-reference](12-mcfd-inp-field-reference.md) 完整字段表(10 块 × 全部字段)
+→ §4 节专列 sweep 关注的字段(对应 sweep 轴)
+
 ## 4. 与其他文档的关系
 
 | 文档 | 视角 | 适合 |
@@ -84,5 +94,7 @@
 - **安装:** [02-安装](02-installation.md)
 - **5 分钟上手:** [03-快速开始](03-quickstart.md)
 - **看示例:** [09-完整示例](09-examples.md)
+- **查 .inp 字段:** [12-mcfd-inp-field-reference](12-mcfd-inp-field-reference.md)
+- **用 CLI / API:** [13-cli-api-reference](13-cli-api-reference.md)
 - **遇到问题:** [10-FAQ](10-faq.md)
 - **想理解内部:** [../technical/](../technical/)
