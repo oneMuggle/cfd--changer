@@ -28,10 +28,19 @@
 | [07-sweep-friendly-uis](07-sweep-friendly-uis.md) | v0.4.1 友好入口 | YAML / 交互式 CLI / Web GUI / Shell 补全 | 当前主线 |
 | [08-sweep-testing](08-sweep-testing.md) | sweep 测试与质量门 | 测试结构 / 覆盖率 / 关键测试设计 / 端到端验证清单 | 当前主线 |
 | [09-sweep-risks-roadmap](09-sweep-risks-roadmap.md) | sweep 风险登记 & roadmap | 8 项风险 + v0.5/v0.6/v0.7 后续工作 + 贡献指南 | 当前主线 |
+| [10-cli-packaging](10-cli-packaging.md) | CLI 打包与发布 | PyInstaller onedir / standalone / cross-platform | 当前主线 |
+| [11-ci-cd](11-ci-cd.md) | CI/CD 配置 | GitHub Actions matrix + environment.yml | 当前主线 |
+| [**12-architecture-overview**](12-architecture-overview.md) | **inp_tool 架构总览** | 包结构 / 模块依赖 / 数据流 / 入口点 / 外部依赖 | **基础** |
+| [13-core-modules](13-core-modules.md) | 核心模块设计 | parser / writer / model / diff 4 模块详细 | 当前主线 |
 
 ---
 
 ## 3. 选读指南
+
+### 3.0 我想理解整体架构(无论改什么模块都建议先看)
+
+→ [12-architecture-overview](12-architecture-overview.md) (10 分钟, 必读)
+→ [13-core-modules](13-core-modules.md) 按需看具体模块
 
 ### 3.1 我是新用户,想用 sweep
 
@@ -85,13 +94,15 @@ inp_tool/                          ←  核心包
 └── __init__.py                    ←  公共导出
 ```
 
-对应文档: sweep 模块 → 03-09;parser/writer/diff 模块 → 待补(暂在 `inp_tool/README.md` 简述)。
+对应文档: sweep 模块 → 03-09(本手册主线);架构总览 → [12-architecture-overview](12-architecture-overview.md);核心模块(parser/writer/diff/model) → [13-core-modules](13-core-modules.md);打包/CI → [10-cli-packaging](10-cli-packaging.md) / [11-ci-cd](11-ci-cd.md)。
 
 ---
 
 ## 6. 快速跳转
 
-- **代码入口:** [`inp_tool/inp_tool/sweep.py`](../../inp_tool/inp_tool/sweep.py)
+- **代码入口:** [`inp_tool/inp_tool/sweep.py`](../../inp_tool/inp_tool/sweep.py) / [`parser.py`](../../inp_tool/inp_tool/parser.py) / [`writer.py`](../../inp_tool/inp_tool/writer.py) / [`diff.py`](../../inp_tool/inp_tool/diff.py) / [`model.py`](../../inp_tool/inp_tool/model.py)
+- **架构总览:** [12-architecture-overview](12-architecture-overview.md)
+- **核心模块:** [13-core-modules](13-core-modules.md)
 - **示例配置:** [`inp_tool/examples/sweep_demo.{json,yaml,py}`](../../inp_tool/examples/)
 - **测试:** [`inp_tool/tests/test_sweep*.py`](../../inp_tool/tests/)
 - **项目约束:** [`CLAUDE.md`](../../CLAUDE.md)
