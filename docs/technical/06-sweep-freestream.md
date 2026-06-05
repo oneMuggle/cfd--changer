@@ -1,5 +1,6 @@
 # 06 — FreestreamPreset 几何分解
 
+> **审计:** 2026-06-04 · 章节与 v0.4.0 同步 · 全部示例通过 · 全部链接有效
 **对应源码:** `inp_tool/sweep.py::FreestreamPreset`  ·  **版本:** v0.4
 
 ---

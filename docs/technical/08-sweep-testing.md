@@ -1,5 +1,6 @@
 # 08 — 测试与质量门
 
+> **审计:** 2026-06-04 · 章节与 v0.4.0 同步 · 全部示例通过 · 全部链接有效
 **测试框架:** pytest 8  ·  **目标覆盖率:** ≥80%(sweep 自身 ≥90%)
 
 ---
@@ -17,9 +18,9 @@ inp_tool/tests/
 ├── test_sweep_generate.py  # ⭐ CaseSweep 配置 / generate() 主流程
 ├── test_sweep_cli.py       # ⭐ inp-tool sweep 子命令
 ├── test_sweep_api.py       # ⭐ POST /api/sweep
-├── test_sweep_yaml.py      # ⭐ YAML 加载 (v0.4.1)
-├── test_sweep_interactive.py # ⭐ 交互式 CLI (v0.4.1)
-├── test_completion.py      # ⭐ Shell 补全 (v0.4.1)
+├── test_sweep_yaml.py      # ⭐ YAML 加载 (v0.4.0)
+├── test_sweep_interactive.py # ⭐ 交互式 CLI (v0.4.0)
+├── test_completion.py      # ⭐ Shell 补全 (v0.4.0)
 └── test_writer.py          # mcfd.inp 写回
 ```
 
@@ -30,7 +31,7 @@ inp_tool/tests/
 | 阶段 | 测试数 | 涵盖 |
 |---|---|---|
 | v0.4 核心 | 54 | sweep 数据模型 / generate / CLI / API |
-| v0.4.1 友好层 | 25 | YAML / 交互式 / 补全 |
+| v0.4.0 友好层 | 25 | YAML / 交互式 / 补全 |
 | **合计 sweep** | **79** | — |
 | 既有 inp_tool | 55 | parser / writer / diff / cli / api |
 | **总计** | **134** | 4 skip(外部 INP_DIR 缺失) |

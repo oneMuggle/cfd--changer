@@ -1,5 +1,6 @@
 # 11 — CI/CD (GitHub Actions)
 
+> **审计:** 2026-06-04 · 章节与 v0.4.0 同步 · 全部示例通过 · 全部链接有效
 **位置:** `.github/workflows/`  ·  **工具:** GitHub Actions + conda + PyInstaller
 
 ---
