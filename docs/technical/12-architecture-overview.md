@@ -269,7 +269,7 @@ pip install .[build] && pyinstaller inp_tool_onedir.spec
 | [05-sweep-usage](05-sweep-usage.md) | 三入口详细用法 |
 | [10-cli-packaging](10-cli-packaging.md) | CLI 设计与 PyInstaller 打包 |
 | [11-ci-cd](11-ci-cd.md) | CI/CD matrix + environment.yml |
-| 后续章节(parser / writer / diff / model 详细) | 待补 |
+| [13-core-modules](13-core-modules.md) | parser / writer / model / diff 4 模块详细 |
 
 ---
 
