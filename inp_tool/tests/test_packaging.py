@@ -44,8 +44,13 @@ class TestPackagingFiles:
     def test_build_sh_exists_and_executable(self):
         sh = INP_TOOL_ROOT.parent / "scripts" / "build.sh"
         assert sh.is_file()
-        mode = sh.stat().st_mode
-        assert mode & 0o111, "build.sh 不可执行"
+        # v0.4.2: 不再检查 st_mode 的 execute bit — Windows NTFS 不支持 Unix mode,
+        # git checkout 时 build.sh 在 Windows runner 上 mode 是 0o100666(无 execute)。
+        # 改为检查 shebang 头(跨平台一致,反映"意图可执行")
+        head = sh.read_text(encoding="utf-8", errors="replace").splitlines()[:3]
+        assert any(line.startswith("#!") and "sh" in line for line in head), (
+            f"build.sh 缺少 shebang 头: {head!r}"
+        )
 
     def test_build_bat_exists(self):
         bat = INP_TOOL_ROOT.parent / "scripts" / "build.bat"
