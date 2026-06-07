@@ -28,12 +28,13 @@
 
 | 工具 | 选? | 理由 |
 |---|---|---|
-| **PyInstaller 5.13.2** | ✅ | 5.x 最后一个支持 Python 3.8 + Win7 的版本;文档丰富 |
+| **PyInstaller 6.16.0** | ✅ | 6.x 仍支持 Python 3.8(直到 6.9);修了一些 5.x onedir 边缘 bug |
+| PyInstaller 5.13.2 | 旧备 | 5.x 末班,仅在 6.x 有兼容性回归时回退 |
 | Nuitka | 备选 | 性能更好(编译为 C),但配置复杂,Win7 兼容性未测 |
 | cx_Freeze | 不选 | 老旧 |
 | pyoxidizer | 不选 | 体积小但 Win7 兼容性未测 |
 
-**为什么不升级到 PyInstaller 6.x?** 6.x 要求 Python ≥ 3.9,违反 `requires-python = ">=3.8"` 硬约束。
+**为什么 6.16 而不是更新的 6.x?** 6.10+ 移除了 Python 3.8 支持,违反 `requires-python = ">=3.8"` 硬约束。6.16 是支持 Py3.8 的最后一个 6.x(2026-06 当前)。
 
 ## 4. 文件清单
 
@@ -203,7 +204,7 @@ ENABLE_BUILD_TEST=1 pytest tests/test_packaging.py -v
 
 | 限制 | 缓解 |
 |---|---|
-| 单文件启动慢(解压 ~2 秒) | 用户期望;首次运行可接受;后续加 `--onedir` 备选 |
+| 单文件启动慢(解压 ~0.5 秒) | 用户期望;`--mode onedir` 已可用(同 onefile 行为,仅分发形态不同) |
 | 体积大(~24MB) | 已是去除 stdlib 大块后;UPX 不可用(杀软) |
 | `inp-tool-api` (Web GUI) 不在默认 binary | 需 FastAPI+Pydantic 等重依赖;若需 Web,单独打包 `api` 版本 |
 | Win SmartScreen 告警(未签名) | 待证书;当前用户点"仍要运行"即可 |
@@ -212,7 +213,7 @@ ENABLE_BUILD_TEST=1 pytest tests/test_packaging.py -v
 ## 11. 后续工作(v0.5+)
 
 - [ ] GitHub Actions matrix 自动编 + 发 GitHub Release
-- [ ] `--onedir` 模式(快启动 + 小目录)
+- [x] `--onedir` 模式(分发形态:EXE + 同目录,实际产物仍自包含 deps,因 PyInstaller 5.x/6.x + Python 3.8 + Linux 的 COLLECT+_MEI libpython bug 不可行,见 `inp_tool_onedir.spec` 头注释 2026-06-07)
 - [ ] `inp-tool-api` 单独 binary(含 Web GUI)
 - [ ] 代码签名(Win 避开 SmartScreen / macOS notarization)
 - [ ] 体积进一步压缩(excludes + 资源文件分拆)

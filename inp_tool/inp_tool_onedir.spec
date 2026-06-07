@@ -7,9 +7,18 @@
 #   ./dist/inp-tool-dist/inp-tool --version   # Linux/macOS
 #   dist\inp-tool-dist\inp-tool.exe --version  # Windows
 #
-# 与 inp_tool.spec(单文件)的区别:此版本产出 dist/inp-tool-dist/ 目录
-# 优点: 启动快(<0.5s,无需解压到临时目录)
-# 缺点: 整个目录需打包成 zip 才能分发
+# v0.4.2 变更 (2026-06-07):
+#   实际改用"onefile 风格 EXE,放在 onedir 目录里"。
+#   原设计想用 EXE+COLLECT 多文件目录式(快启动,免解压到 _MEI),
+#   但 PyInstaller 5.13.2 / 6.0.0 / 6.16.0 在 Python 3.8 + Linux 上
+#   都有 _MEI 找不到 libpython 的固有问题(COLLECT 模式下 EXE 启动
+#   仍从 _MEI 子目录加载 libpython,但 COLLECT 把 libpython 放 EXE
+#   同级目录,不在 _MEI),wrapper LD_LIBRARY_PATH 也修不了。
+#   退而求其次:让 onedir 的 EXE 自包含所有 deps(等价 onefile),
+#   这样 EXE 内部 _MEI 临时目录自带 libpython,可正常启动。
+#   启动速度比真 onedir 慢(~0.5s 解压),但仍可分发成 zip 目录。
+#
+# 与 inp_tool.spec(单文件)的区别:输出路径在 dist/inp-tool-dist/ 而非 dist/。
 #
 # 跨平台编译:Windows 二进制必须 Windows 上编,Linux 二进制必须 Linux 上编
 # (PyInstaller 不支持交叉编译)。
@@ -65,16 +74,18 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 # ----------------------------------------------------------------------
-# 2. EXE: 只含脚本本身(不含 binaries/datas)
+# 2. EXE: 自包含所有 deps(onefile 风格),输出到 dist/inp-tool-dist/
 # ----------------------------------------------------------------------
-# binaries/datas 留给 COLLECT 放到目录里
+# Windows:  .exe
+# Linux:    无后缀
+# macOS:    无后缀
 exe_name = 'inp-tool.exe' if sys.platform.startswith('win') else 'inp-tool'
 
 exe = EXE(
     pyz,
     a.scripts,
-    [],         # 不放 binaries,留给 COLLECT
-    [],         # 不放 datas,留给 COLLECT
+    a.binaries,    # 进 EXE(自包含,避免 _MEI 找不到 libpython)
+    a.datas,       # 进 EXE
     [],
     name=exe_name,
     debug=False,
@@ -82,9 +93,7 @@ exe = EXE(
     strip=False,
     upx=False,
     upx_exclude=[],
-    # onedir 模式:runtime_tmpdir='.' 让 EXE 在自己所在目录解压,
-    # 避免 _MEI 临时目录找不到 libpython (PyInstaller 5.x + Py3.8 已知问题)
-    runtime_tmpdir='.',
+    runtime_tmpdir=None,  # 默认 _MEI 临时目录(EXE 自带 libpython,可正常加载)
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -92,17 +101,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,
-)
-
-# ----------------------------------------------------------------------
-# 3. COLLECT: 收集 binaries + datas 到 dist/inp-tool-dist/ 目录
-# ----------------------------------------------------------------------
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name='inp-tool-dist',
 )

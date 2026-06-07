@@ -55,7 +55,7 @@ class TestPackagingFiles:
         toml_text = (INP_TOOL_ROOT / "pyproject.toml").read_text()
         assert "[project.optional-dependencies]" in toml_text
         assert "build = [" in toml_text
-        assert "pyinstaller==5.13.2" in toml_text
+        assert "pyinstaller==6.16.0" in toml_text
 
 
 # ==================================================================

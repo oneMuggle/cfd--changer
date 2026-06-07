@@ -67,10 +67,14 @@ case "$MODE" in
         TARGET="./dist/inp-tool"
         ;;
     onedir)
-        if [ ! -f dist/inp-tool-dist/inp-tool ]; then
-            echo "✗ dist/inp-tool-dist/inp-tool 不存在!" >&2
+        # v0.4.2: onedir spec 自包含 deps,产物在 dist/inp-tool,move 到 dist/inp-tool-dist/
+        if [ ! -f dist/inp-tool ]; then
+            echo "✗ dist/inp-tool 不存在!" >&2
             exit 1
         fi
+        rm -rf dist/inp-tool-dist
+        mkdir -p dist/inp-tool-dist
+        mv dist/inp-tool dist/inp-tool-dist/inp-tool
         chmod +x dist/inp-tool-dist/inp-tool
         echo "  ✓ dist/inp-tool-dist/ ($(du -sh dist/inp-tool-dist/ | cut -f1))"
         echo "  ✓ dist/inp-tool-dist/inp-tool ($(du -h dist/inp-tool-dist/inp-tool | cut -f1))"
