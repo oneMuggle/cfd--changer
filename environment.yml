@@ -16,4 +16,4 @@ dependencies:
   - pytest-cov>=4.0
   - httpx>=0.24   # FastAPI TestClient
   - pyyaml>=6.0
-  - pyinstaller=5.13.2  # 锁定版本(支持 Py 3.8 + Win7)
+  - pyinstaller=6.16.0  # 锁定版本(支持 Py 3.8,6.10+ 移除 Py3.8); v0.4.2 升级,修 onedir _MEI/libpython bug

@@ -1,6 +1,6 @@
 # 12 — inp_tool 架构总览
 
-**包名:** `inp-tool`  ·  **版本:** v0.4.0  ·  **状态:** 当前主线
+**包名:** `inp-tool`  ·  **版本:** v0.4.2  ·  **状态:** 当前主线
 
 ---
 
@@ -255,7 +255,7 @@ pip install .[build] && pyinstaller inp_tool_onedir.spec
 |---|---|---|
 | v0.2 | parser / writer / model / diff + CLI | 本章 §2-§4 |
 | v0.3 | Python 包工程化(pyproject / pytest / FastAPI) | [11-ci-cd.md](11-ci-cd.md) |
-| v0.4.0 | sweep 批量生成 + 三入口 | [03-09 sweep 全章节](03-sweep-overview.md) |
+| v0.4.2 | sweep 批量生成 + 三入口 | [03-09 sweep 全章节](03-sweep-overview.md) |
 | v0.4.x | onedir 打包 + preserve_format(后续小版本) | [10-cli-packaging.md §4](10-cli-packaging.md) |
 
 ---

@@ -2,7 +2,7 @@
 
 > 本章拆解 `inp_tool` 的四大核心模块:数据模型 (`model`)、解析器 (`parser`)、序列化器 (`writer`)、差异比较 (`diff`)。
 > 读者:想改 inp_tool 内部行为、写新 CLI/API、定位解析 bug 的开发者。
-> 版本:与 `inp_tool` v0.4.0 同步(`pyproject.toml` 标记 `version = "0.4.0"`)。
+> 版本:与 `inp_tool` v0.4.2 同步(`pyproject.toml` 标记 `version = "0.4.0"`)。
 
 ---
 

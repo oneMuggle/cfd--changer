@@ -1,6 +1,6 @@
 # cfd--changer 技术手册(总览)
 
-> **审计:** 2026-06-04 · 章节与 v0.4.0 同步 · 全部示例通过 · 全部链接有效
+> **审计:** 2026-06-04 · 章节与 v0.4.2 同步 · 全部示例通过 · 全部链接有效
 > 本目录是项目各功能模块的**架构/API/实现细节**文档,面向开发者(读代码、改代码、写扩展)。
 
 ---
@@ -26,7 +26,7 @@
 | [04-sweep-architecture](04-sweep-architecture.md) | sweep 架构 & 数据模型 | 流程图 / 5 个 dataclass / `generate()` 主流程 / overrides / 命名 / manifest / 性能 | 当前主线 |
 | [05-sweep-usage](05-sweep-usage.md) | sweep 三入口详细用法 | Python API / CLI / FastAPI 完整示例 + 配置 schema + 错误处理 | 当前主线 |
 | [06-sweep-freestream](06-sweep-freestream.md) | FreestreamPreset 几何分解 | 公式 / 默认参数 / 字段映射 / 方向假设 / 数值稳定性 | 当前主线 |
-| [07-sweep-friendly-uis](07-sweep-friendly-uis.md) | v0.4.0 友好入口 | YAML / 交互式 CLI / Web GUI / Shell 补全 | 当前主线 |
+| [07-sweep-friendly-uis](07-sweep-friendly-uis.md) | v0.4.2 友好入口 | YAML / 交互式 CLI / Web GUI / Shell 补全 | 当前主线 |
 | [08-sweep-testing](08-sweep-testing.md) | sweep 测试与质量门 | 测试结构 / 覆盖率 / 关键测试设计 / 端到端验证清单 | 当前主线 |
 | [09-sweep-risks-roadmap](09-sweep-risks-roadmap.md) | sweep 风险登记 & roadmap | 8 项风险 + v0.5/v0.6/v0.7 后续工作 + 贡献指南 | 当前主线 |
 | [10-cli-packaging](10-cli-packaging.md) | CLI 打包与发布 | PyInstaller onedir / standalone / cross-platform | 当前主线 |
