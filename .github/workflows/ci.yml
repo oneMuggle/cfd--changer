@@ -53,6 +53,11 @@ jobs:
 
       - name: Run tests + coverage
         shell: bash -l {0}
+        # v0.4.2: Windows cp1252 默认编码遇到中文/unicode 字符会抛 UnicodeEncodeError
+        # conda run 捕获 pytest stdout 后用 print 输出到 GitHub runner 终端,
+        # 触发 cp1252 encode 失败。设 PYTHONIOENCODING=utf-8 让 pytest/cov 输出 utf-8
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
             --cov=inp_tool --cov-report=term --cov-fail-under=80
