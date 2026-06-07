@@ -50,7 +50,7 @@ strategy:
 每平台跑:
 1. `actions/checkout@v4` — 拉代码
 2. `conda-incubator/setup-miniconda@v3` — 用 `environment.yml` 创建 cfdchanger env(Py 3.8)
-3. `pip install -e ".[dev,api]"` — 装 inp_tool + FastAPI 测试依赖
+3. `pip install -e ".[dev,api,yaml,build]"` — 装 inp_tool + 所有测试/CI/build 依赖(单一来源:pyproject.toml)
 4. `pytest tests/ --cov=inp_tool --cov-fail-under=80` — 跑测试,覆盖率 <80% 失败
 5. (仅 ubuntu) `coverage html` + `upload-artifact` — 存 HTML 报告
 
@@ -97,14 +97,16 @@ channels: [conda-forge, defaults]
 dependencies:
   - python=3.8
   - pip
-  - pytest>=7.0
-  - pytest-cov>=4.0
-  - httpx>=0.24
-  - pyyaml>=6.0
-  - pyinstaller=5.13.2   # 钉死,支持 Py 3.8 + Win7
+  # 其余依赖( pytest / httpx / pyyaml / pyinstaller 等)通过
+  # pip install -e ".[dev,api,yaml,build]" 装(见 pyproject.toml [project.optional-dependencies])
 ```
 
-**好处:** CI 和本地用同一份环境配置,完全可复现。
+**v0.4.2 装包策略统一(单一来源:pyproject.toml):**
+- conda 只装 Python 解释器本身(conda-forge 解决 openssl / sqlite / readline 等系统依赖)
+- 项目所有依赖全靠 `pyproject.toml [project.optional-dependencies]`(dev / api / yaml / build 4 个 extras)
+- conda-forge 的 `pyinstaller 6.16.0` 仅支持 Py 3.10+,不锁 conda(用 pip 装避免与 conda 渠道耦合)
+
+**好处:** CI 和本地用同一份环境配置,完全可复现;依赖列表只在一个地方维护(`pyproject.toml`)。
 
 ## 7. 踩坑记录
 
@@ -150,7 +152,7 @@ GitHub Windows runner 默认 PowerShell。但我们在 `shell: bash -l {0}` 下,
 ```bash
 conda env create -f environment.yml
 conda activate cfdchanger
-pip install -e ".[dev,api]"
+pip install -e ".[dev,api,yaml,build]"   # 装全套依赖(替代 conda 装的旧版)
 cd inp_tool
 python -m pytest tests/ -v --tb=short --cov=inp_tool --cov-fail-under=80
 ```
