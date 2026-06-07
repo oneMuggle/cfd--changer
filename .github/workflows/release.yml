@@ -139,6 +139,15 @@ jobs:
         with:
           path: artifacts/
 
+      - name: Rename binaries to platform-suffixed names
+        # v0.4.2: softprops/action-gh-release@v2 不支持 path#name 重命名语法,
+        # 用 cp 在 release 前给 linux/macos 二进制加平台后缀,避免 basename 'inp-tool' 冲突
+        # (Windows 的 inp-tool.exe 已经天然 unique)
+        shell: bash
+        run: |
+          cp artifacts/inp-tool-linux-x86_64/inp-tool artifacts/inp-tool-linux-x86_64/inp-tool-linux-x86_64
+          cp artifacts/inp-tool-macos-universal2/inp-tool artifacts/inp-tool-macos-universal2/inp-tool-macos-universal2
+
       - name: Display collected artifacts
         run: |
           echo "=== artifacts/ ==="
@@ -156,11 +165,10 @@ jobs:
           prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
           generate_release_notes: true
           fail_on_unmatched_files: true
-          # v0.4.2: 显式 #target_name 重命名,避免 macOS + Linux 同 'inp-tool' 文件名冲突
-          # (softprops v2 默认用 basename 当 asset 名,会跳过 macos)
+          # v0.4.2: 精确列举 3 个平台 binary(已 cp 重命名为 unique 名,避免 'inp-tool' 冲突)
           files: |
-            artifacts/inp-tool-linux-x86_64/inp-tool#inp-tool-linux-x86_64
-            artifacts/inp-tool-macos-universal2/inp-tool#inp-tool-macos-universal2
-            artifacts/inp-tool-windows-x86_64.exe/inp-tool.exe#inp-tool-windows-x86_64.exe
+            artifacts/inp-tool-linux-x86_64/inp-tool-linux-x86_64
+            artifacts/inp-tool-macos-universal2/inp-tool-macos-universal2
+            artifacts/inp-tool-windows-x86_64.exe/inp-tool.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
