@@ -2,7 +2,13 @@
 # 用于:
 #   conda env create -f environment.yml
 #   conda activate cfdchanger
+#   pip install -e ".[dev,api,yaml,build]"   # 项目依赖全套
 # 也供 GitHub Actions setup-miniconda@v3 的 environment-file 选项使用
+#
+# v0.4.2 装包策略统一:
+#   - conda 只装 Python 解释器本身(conda-forge 解决 openssl / sqlite / readline 等系统依赖)
+#   - 项目依赖全靠 pyproject.toml extras(单一来源:pyproject.toml)
+#   - conda-forge 6.16.0 pyinstaller 不支持 Py 3.8;用 pip 装(避免与 conda 渠道耦合)
 
 name: cfdchanger
 channels:
@@ -12,8 +18,5 @@ channels:
 dependencies:
   - python=3.8
   - pip
-  - pytest>=7.0
-  - pytest-cov>=4.0
-  - httpx>=0.24   # FastAPI TestClient
-  - pyyaml>=6.0
-  # pyinstaller 不在此列:conda-forge 6.16.0 只支持 Py 3.10+;改用 pip 装(workflow 里 pip install pyinstaller==6.16.0)
+  # 其余依赖( pytest / httpx / pyyaml / pyinstaller 等)通过
+  # pip install -e ".[dev,api,yaml,build]" 装(见 pyproject.toml [project.optional-dependencies])

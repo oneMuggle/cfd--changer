@@ -50,12 +50,12 @@ jobs:
         # v0.4.2: Windows cp1252 默认编码遇到中文/unicode 字符会抛 UnicodeEncodeError
         # conda run 捕获 pytest stdout 后用 print 输出到 GitHub runner 终端,
         # 触发 cp1252 encode 失败。设 PYTHONIOENCODING=utf-8 让 pytest 输出 utf-8
-        # v0.4.2: conda-forge 的 pyinstaller 6.16.0 只支持 Py 3.10+;改用 pip 装
+        # v0.4.2: 装全套 extras(包含 [build] 里的 pyinstaller 6.16.0),代替 environment.yml 里
+        # conda 装的重复项 + 单独的 pyinstaller 行(单一来源:pyproject.toml)
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          conda run -n cfdchanger pip install -e ".[dev,api]"
-          conda run -n cfdchanger pip install "pyinstaller==6.16.0"
+          conda run -n cfdchanger pip install -e ".[dev,api,yaml,build]"
           conda run -n cfdchanger python -m pytest tests/ -v --tb=short
 
   # ========== 跨平台打包 ==========
@@ -94,11 +94,11 @@ jobs:
 
       - name: Install pyinstaller (build dep)
         shell: bash -l {0}
-        # v0.4.2: conda-forge pyinstaller 6.16.0 仅支持 Py 3.10+;用 pip 装
+        # v0.4.2: 装 [build] extra(包含 pyinstaller==6.16.0);单一来源:pyproject.toml
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          conda run -n cfdchanger pip install "pyinstaller==6.16.0"
+          conda run -n cfdchanger pip install -e ".[build]"
 
       - name: Build standalone (PyInstaller)
         shell: bash -l {0}

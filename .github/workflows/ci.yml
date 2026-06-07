@@ -48,8 +48,9 @@ jobs:
 
       - name: Install inp-tool (editable + dev + api deps)
         shell: bash -l {0}
+        # v0.4.2: 装全套 extras,代替 environment.yml 里 conda 装的重复项(单一来源:pyproject.toml)
         run: |
-          conda run -n cfdchanger pip install -e ".[dev,api]"
+          conda run -n cfdchanger pip install -e ".[dev,api,yaml,build]"
 
       - name: Run tests + coverage
         shell: bash -l {0}
