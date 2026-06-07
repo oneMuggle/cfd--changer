@@ -156,7 +156,11 @@ jobs:
           prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # v0.4.2: 显式 #target_name 重命名,避免 macOS + Linux 同 'inp-tool' 文件名冲突
+          # (softprops v2 默认用 basename 当 asset 名,会跳过 macos)
           files: |
-            artifacts/**/*
+            artifacts/inp-tool-linux-x86_64/inp-tool#inp-tool-linux-x86_64
+            artifacts/inp-tool-macos-universal2/inp-tool#inp-tool-macos-universal2
+            artifacts/inp-tool-windows-x86_64.exe/inp-tool.exe#inp-tool-windows-x86_64.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
