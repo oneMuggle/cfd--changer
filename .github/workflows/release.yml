@@ -104,10 +104,11 @@ jobs:
         shell: bash -l {0}
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
-              # Windows:Git Bash 不能直接跑 .bat,用 python 调
+              # Windows:Git Bash 不能直接跑 .bat,用 python 调 (cwd 已是 inp_tool/)
               python -c "import PyInstaller.__main__ as m; m.run(['inp_tool.spec','--clean','--noconfirm'])"
           else
-              bash scripts/build.sh
+              # Linux/macOS: scripts/ 在仓库根,cwd 是 inp_tool/,需 ../
+              bash ../scripts/build.sh
           fi
 
       - name: Smoke test (${{ matrix.binary_name }})
