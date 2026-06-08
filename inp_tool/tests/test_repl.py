@@ -455,3 +455,178 @@ def test_module_importable_without_readline(monkeypatch):
             del sys.modules['readline']
         if 'inp_tool.repl' in sys.modules:
             del sys.modules['inp_tool.repl']
+
+
+# ============================================================
+# aero command tests
+# ============================================================
+
+# 一个最小可用的 .inp 模板,含 guiopts + physics
+AERO_TEMPLATE = """\
+# aero test fixture
+system begin
+title "aero test"
+system end
+guiopts begin
+  aero_alpha 0.0
+  aerobeta 0.0
+  aero_ma 0.8
+  aero_u 272.16
+  aero_v 0.0
+  aero_w 0.0
+  aero_temp 288.0
+  aero_pres 101325.0
+guiopts end
+physics begin
+  refvel 272.16
+  reftem 288.0
+  refpre 101325.0
+  cfl 0.001
+physics end
+"""
+
+
+def _aero_load(tmp_path, name='case.inp', body=None):
+    """写一个含 guiopts+physics 的 .inp,返回 path。"""
+    p = tmp_path / name
+    p.write_text(body if body is not None else AERO_TEMPLATE)
+    return p
+
+
+def test_aero_show_no_args(tmp_path):
+    p = _aero_load(tmp_path)
+    r = ShellREPL()
+    out = _run(r, f'load {p} as v1', 'aero')
+    # 摘要含关键 token
+    assert 'Ma=0.8' in out
+    assert 'α=0.0°' in out
+    assert 'refvel=' in out
+    # 不应报错
+    assert 'error' not in out.lower()
+
+
+def test_aero_set_alpha(tmp_path):
+    p = _aero_load(tmp_path)
+    r = ShellREPL()
+    _run(r, f'load {p} as v1', 'aero alpha=5')
+    lf = r.session.files['v1']
+    # aero_alpha 改到 5.0
+    gb = lf.inp.get_block('guiopts', 0)
+    v = gb.get_value('aero_alpha').typed
+    assert abs(float(v) - 5.0) < 1e-6
+    # U/W 应被重算(alpha=5° 时 W != 0)
+    u = float(gb.get_value('aero_u').typed)
+    w = float(gb.get_value('aero_w').typed)
+    assert abs(u) > 0
+    assert abs(w) > 0
+    # V 仍为 0(beta=0)
+    v_val = float(gb.get_value('aero_v').typed)
+    assert abs(v_val) < 1e-6
+
+
+def test_aero_set_multiple_keys(tmp_path):
+    p = _aero_load(tmp_path)
+    r = ShellREPL()
+    _run(r, f'load {p} as v1', 'aero Ma=0.85 alpha=10 beta=2')
+    lf = r.session.files['v1']
+    gb = lf.inp.get_block('guiopts', 0)
+    assert abs(float(gb.get_value('aero_ma').typed) - 0.85) < 1e-6
+    assert abs(float(gb.get_value('aero_alpha').typed) - 10.0) < 1e-6
+    assert abs(float(gb.get_value('aerobeta').typed) - 2.0) < 1e-6
+    # U/V/W 都应非零
+    u = float(gb.get_value('aero_u').typed)
+    v_val = float(gb.get_value('aero_v').typed)
+    w = float(gb.get_value('aero_w').typed)
+    assert abs(u) > 0 and abs(v_val) > 0 and abs(w) > 0
+
+
+def test_aero_set_T(tmp_path):
+    p = _aero_load(tmp_path)
+    r = ShellREPL()
+    _run(r, f'load {p} as v1', 'aero T=300')
+    lf = r.session.files['v1']
+    gb = lf.inp.get_block('guiopts', 0)
+    pb = lf.inp.get_block('physics', 0)
+    # T 改了
+    assert abs(float(gb.get_value('aero_temp').typed) - 300.0) < 1e-6
+    # reftem 也跟改
+    assert abs(float(pb.get_value('reftem').typed) - 300.0) < 1e-6
+    # refvel 被重算(T 变了声速变了,即使 Ma/alpha/beta 不变,refvel 也变)
+    refvel = float(pb.get_value('refvel').typed)
+    assert refvel > 0
+    # 与 |V| 一致
+    import math
+    u = float(gb.get_value('aero_u').typed)
+    v_val = float(gb.get_value('aero_v').typed)
+    w = float(gb.get_value('aero_w').typed)
+    assert abs(refvel - math.sqrt(u*u + v_val*v_val + w*w)) < 1e-3
+
+
+def test_aero_preserves_unchanged_fields(tmp_path):
+    """v0.5.1 fix 风格:只改 alpha 时,Ma 仍为模板值 0.8。"""
+    p = _aero_load(tmp_path)
+    r = ShellREPL()
+    _run(r, f'load {p} as v1', 'aero alpha=5')
+    lf = r.session.files['v1']
+    gb = lf.inp.get_block('guiopts', 0)
+    # Ma 应保留 0.8(模板值)
+    assert abs(float(gb.get_value('aero_ma').typed) - 0.8) < 1e-6
+    # T/p 也保留
+    assert abs(float(gb.get_value('aero_temp').typed) - 288.0) < 1e-6
+    assert abs(float(gb.get_value('aero_pres').typed) - 101325.0) < 1e-6
+
+
+def test_aero_marks_dirty_and_undoable(tmp_path):
+    p = _aero_load(tmp_path)
+    r = ShellREPL()
+    _run(r, f'load {p} as v1', 'aero alpha=10')
+    lf = r.session.files['v1']
+    # 标 dirty
+    assert lf.dirty is True
+    # undo 应能恢复
+    out = _run(r, 'undo')
+    assert 'undone' in out.lower() or 'restored' in out.lower() or '回滚' in out
+    # 验证 alpha 恢复
+    lf = r.session.files['v1']
+    gb = lf.inp.get_block('guiopts', 0)
+    assert abs(float(gb.get_value('aero_alpha').typed) - 0.0) < 1e-6
+
+
+def test_aero_unknown_key_errors(tmp_path):
+    p = _aero_load(tmp_path)
+    r = ShellREPL()
+    out = _run(r, f'load {p} as v1', 'aero foo=1')
+    assert 'unknown key' in out
+    assert 'foo' in out
+    # 状态未变
+    lf = r.session.files['v1']
+    gb = lf.inp.get_block('guiopts', 0)
+    assert abs(float(gb.get_value('aero_ma').typed) - 0.8) < 1e-6
+    assert lf.dirty is False
+
+
+def test_aero_no_current_file_errors():
+    r = ShellREPL()
+    out = _run(r, 'aero alpha=5')
+    assert 'no file is current' in out
+    assert 'load' in out
+
+
+def test_aero_malformed_key_value_errors(tmp_path):
+    p = _aero_load(tmp_path)
+    r = ShellREPL()
+    out = _run(r, f'load {p} as v1', 'aero alpha')
+    assert 'expected KEY=VALUE' in out
+    assert "'alpha'" in out
+    lf = r.session.files['v1']
+    assert lf.dirty is False
+
+
+def test_aero_non_numeric_value_errors(tmp_path):
+    p = _aero_load(tmp_path)
+    r = ShellREPL()
+    out = _run(r, f'load {p} as v1', 'aero alpha=abc')
+    assert 'must be a number' in out
+    assert "'abc'" in out
+    lf = r.session.files['v1']
+    assert lf.dirty is False
