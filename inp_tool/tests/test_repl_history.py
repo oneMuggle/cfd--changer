@@ -40,3 +40,11 @@ def test_maxlen_fifo(tmp_path, monkeypatch):
     h.save()
     out = (tmp_path / '.inp_history').read_text().splitlines()
     assert out == ['cmd2', 'cmd3', 'cmd4']
+
+
+def test_bind_readline_returns_false_on_windows(monkeypatch):
+    """Windows 上 bind_readline 必须直接返回 False(无 readline),覆盖率要算上这 2 行。"""
+    from inp_tool.repl_history import HistoryStore
+    monkeypatch.setattr('sys.platform', 'win32')
+    h = HistoryStore()
+    assert h.bind_readline() is False
