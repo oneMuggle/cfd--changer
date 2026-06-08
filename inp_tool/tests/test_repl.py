@@ -79,3 +79,53 @@ def test_use_unknown_errors():
     r = ShellREPL()
     out = _run(r, 'use nope')
     assert 'not loaded' in out or 'nope' in out
+
+
+def test_unload_clean_succeeds(tmp_path):
+    p = tmp_path / 'a.inp'; p.write_text('x')
+    r = ShellREPL()
+    _run(r, f'load {p} as a', 'unload a')
+    assert 'a' not in r.session.files
+
+
+def test_unload_dirty_errors_until_forced(tmp_path):
+    p = tmp_path / 'a.inp'; p.write_text('x')
+    r = ShellREPL()
+    _run(r, f'load {p} as a')
+    r.session.files['a'].dirty = True
+    out = _run(r, 'unload a')
+    assert 'unsaved' in out or 'dirty' in out
+    assert 'a' in r.session.files  # 没卸掉
+    out = _run(r, 'unload a -f')
+    assert 'a' not in r.session.files
+
+
+def test_status_shows_dirty_count(tmp_path):
+    p = tmp_path / 'a.inp'; p.write_text('x')
+    r = ShellREPL()
+    _run(r, f'load {p} as a')
+    r.session.files['a'].dirty = True
+    out = _run(r, 'status')
+    assert 'a' in out
+    assert 'dirty' in out or 'unsaved' in out
+
+
+def test_save_clears_dirty(tmp_path):
+    p = tmp_path / 'a.inp'; p.write_text('x\n')
+    r = ShellREPL()
+    _run(r, f'load {p} as a')
+    r.session.files['a'].dirty = True
+    out = _run(r, 'save')
+    assert r.session.files['a'].dirty is False
+
+
+def test_save_as_creates_new_file(tmp_path):
+    p = tmp_path / 'a.inp'; p.write_text('x\n')
+    new_p = tmp_path / 'b.inp'
+    r = ShellREPL()
+    _run(r, f'load {p} as a')
+    out = _run(r, f'save as {new_p}')
+    assert new_p.exists()
+    assert r.session.files['a'].dirty is False
+    # alias 的 path 指向新文件
+    assert r.session.files['a'].path == new_p

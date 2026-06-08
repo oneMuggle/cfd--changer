@@ -111,6 +111,73 @@ class ShellREPL(cmd.Cmd):
             return
         self._refresh_prompt()
 
+    def do_unload(self, arg):
+        """unload ALIAS [-f] — 移除 alias(默认拒绝 dirty)"""
+        parts = arg.strip().split()
+        if not parts:
+            self._err('unload requires an alias')
+            return
+        alias = parts[0]
+        force = '-f' in parts
+        try:
+            self.session.unload(alias, force=force)
+        except KeyError:
+            self._err(f"alias '{alias}' not loaded.")
+        except RuntimeError as e:
+            self._err(str(e))
+            return
+        if self.session.current is None:
+            self._refresh_prompt()
+
+    def do_status(self, arg):
+        """status — 列出每个 alias 的未保存改动"""
+        if not self.session.files:
+            print('(no files loaded)')
+            return
+        for a, lf in self.session.files.items():
+            mark = '*' if a == self.session.current else ' '
+            if lf.dirty:
+                print(f'{mark} {a:15s} {str(lf.path):40s}  [unsaved changes]')
+            else:
+                print(f'{mark} {a:15s} {str(lf.path):40s}  [clean]')
+
+    def do_save(self, arg):
+        """save [ALIAS] / save as PATH — 写回磁盘"""
+        from .writer import to_text, write
+        from pathlib import Path as P
+        arg = arg.strip()
+        if not arg:
+            # 默认写 current
+            target = self.session.current
+            if not target:
+                self._err('no file is current. use `use <alias>` or pass an alias.')
+                return
+            alias = target
+            path = self.session.files[alias].path
+        elif arg.startswith('as '):
+            # save as <path>
+            if not self.session.current:
+                self._err('save as requires a current file')
+                return
+            alias = self.session.current
+            path = P(arg[3:].strip())
+        else:
+            # save <alias>
+            alias = arg.split()[0]
+            if alias not in self.session.files:
+                self._err(f"alias '{alias}' not loaded.")
+                return
+            path = self.session.files[alias].path
+        try:
+            write(self.session.files[alias].inp, str(path))
+        except (OSError, PermissionError) as e:
+            self._err(f'permission denied: {path} ({e})')
+            return
+        self.session.files[alias].dirty = False
+        self.session.files[alias].last_saved_text = to_text(self.session.files[alias].inp)
+        self.session.files[alias].path = path
+        print(f'saved: {alias} -> {path}')
+
     def do_exit(self, arg):
         """exit the REPL"""
         return True
