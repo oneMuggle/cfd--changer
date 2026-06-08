@@ -327,3 +327,16 @@ def test_undo_multiple_steps(tmp_path):
     _run(r, 'undo 2')
     out = _run(r, 'get refvel -b physics')
     assert '1.0' in out
+
+
+def test_set_then_set_undo_chain(tmp_path):
+    """Regression: do_set 后 lf.inp 必须与磁盘同步,否则连续 set + undo 会回滚到错的值。"""
+    p = tmp_path / 's.inp'; p.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    r = ShellREPL()
+    _run(r, f'load {p} as v1')
+    _run(r, 'set physics refvel 50.0')   # disk: 50, lf.inp 应该同步
+    _run(r, 'set physics refvel 99.0')   # disk: 99
+    # undo 应该回滚到 50(第二次 set 之前),而不是 1.0
+    _run(r, 'undo')
+    out = _run(r, 'get refvel -b physics')
+    assert '50.0' in out, f"expected 50.0, got: {out}"

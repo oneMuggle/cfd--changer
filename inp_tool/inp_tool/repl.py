@@ -409,6 +409,9 @@ class ShellREPL(cmd.Cmd):
         )
         rc = cmd_set(ns)
         if rc == 0:
+            # 同步 lf.inp 与磁盘(cmd_set 内部 parse+write,不动我们的指针)
+            from .parser import parse_file
+            lf.inp = parse_file(str(lf.path))
             lf.dirty = True
             from .repl_state import UndoEntry
             self.session.undo.push(UndoEntry(
