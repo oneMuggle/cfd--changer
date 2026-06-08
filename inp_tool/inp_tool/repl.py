@@ -63,17 +63,53 @@ class ShellREPL(cmd.Cmd):
 
     def do_load(self, arg):
         """load PATH [as ALIAS] — 加载 .inp 到 session,自动设为 current"""
-        from pathlib import Path as P
-        # 简化:仅支持 load PATH,无 'as' 语法(Task 4 完善)
-        path_str = arg.strip()
-        if not path_str:
+        if not arg.strip():
+            self._err('load requires a file path')
+            return
+        # 拆分 'as ALIAS'(可选)
+        parts = arg.strip().split()
+        if 'as' in parts:
+            i = parts.index('as')
+            path_str = ' '.join(parts[:i])
+            alias = parts[i + 1] if i + 1 < len(parts) else None
+        else:
+            path_str = arg.strip()
+            alias = None
+        from pathlib import Path
+        path = Path(path_str)
+        if not path.exists():
+            self._err(f'file not found: {path}')
             return
         try:
-            self.session.load(P(path_str))
-            self._refresh_prompt()
-            print(f'loaded: {self.session.current}  ({path_str})')
+            actual = self.session.load(path, alias=alias)
         except Exception as e:
-            print(f'error: {e}', file=sys.stderr)
+            self._err(f'parse failed: {e}')
+            return
+        self._refresh_prompt()
+        print(f'loaded: {actual}  ({path})')
+
+    def do_files(self, arg):
+        """files — 列出已加载 alias / 路径 / 状态"""
+        if not self.session.files:
+            print('(no files loaded)')
+            return
+        for a, lf in self.session.files.items():
+            mark = '*' if a == self.session.current else ' '
+            tag = 'dirty' if lf.dirty else 'clean'
+            print(f'{mark} {a:15s} {str(lf.path):40s}  [{tag}]')
+
+    def do_use(self, arg):
+        """use ALIAS — 切换 current 指针"""
+        a = arg.strip()
+        if not a:
+            self._err('use requires an alias')
+            return
+        try:
+            self.session.use(a)
+        except KeyError:
+            self._err(f"alias '{a}' not loaded. type 'files' to see loaded.")
+            return
+        self._refresh_prompt()
 
     def do_exit(self, arg):
         """exit the REPL"""
