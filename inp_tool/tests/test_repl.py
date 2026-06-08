@@ -243,3 +243,42 @@ def test_alias_prefix_with_unknown_alias(tmp_path):
     # 不崩 + r.session.current 保持为 v1
     _run(r, f'load {p} as v1', 'nope:get refvel -b physics')
     assert r.session.current == 'v1'
+
+
+def test_let_stores_variable():
+    r = ShellREPL()
+    _run(r, 'let alpha=3.5')
+    assert r.session.variables.get('alpha') == '3.5'
+
+
+def test_dollar_var_interpolated(tmp_path):
+    p = tmp_path / 's.inp'; p.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    r = ShellREPL()
+    _run(
+        r,
+        f'load {p} as v1',
+        'let mach=75.0',
+        'set physics refvel $mach',
+    )
+    out2 = _run(r, 'get refvel -b physics')
+    assert '75.0' in out2
+    assert r.session.files['v1'].dirty is True
+
+
+def test_undefined_var_errors(tmp_path):
+    p = tmp_path / 's.inp'; p.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    r = ShellREPL()
+    out = _run(
+        r,
+        f'load {p} as v1',
+        'set physics refvel $undefined',
+    )
+    assert 'undefined' in out
+
+
+def test_double_dollar_literal():
+    r = ShellREPL()
+    r.session.variables['x'] = 'Y'
+    out = _run(r, 'let val=$$x')
+    # $$ 转义为字面 $,x 不展开
+    assert r.session.variables.get('val') == '$x'

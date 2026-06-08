@@ -31,19 +31,46 @@ class ShellREPL(cmd.Cmd):
         self._refresh_prompt()
 
     def onecmd(self, line):
-        """在分发到 cmd.Cmd 前,先剥离 '<alias>:' 前缀。"""
+        """在分发到 cmd.Cmd 前,先剥离 '<alias>:' 前缀,再做 $var 插值。"""
         line = line.strip()
-        if ':' in line and not line.startswith('!') and not line.startswith('?'):
-            # 仅当冒号前是一个单词(不是参数中的 url 等)才算前缀
+        if not line or line.startswith('#'):
+            return False
+        # let 命令不走插值(它就是定义变量的)
+        if line.startswith('let '):
+            return super().onecmd(line)
+        if line.startswith('!'):
+            # shell escape 不做插值前缀剥离
+            try:
+                line = self._interpolate(line[1:])
+            except ValueError as e:
+                self._err(str(e))
+                return False
+            return self._do_shell(line)
+        if line.startswith('?'):
+            # 别名 rerun 暂未实现
+            self._err('!N rerun is not yet implemented (Phase 8)')
+            return False
+        # 剥离 <alias>: 前缀
+        if ':' in line:
             head, _, rest = line.partition(':')
             if head and head.replace('_', '').isalnum() and head in self.session.files:
                 saved = self.session.current
                 self.session.current = head
                 try:
-                    return super().onecmd(rest.strip())
+                    try:
+                        rest = self._interpolate(rest)
+                    except ValueError as e:
+                        self._err(str(e))
+                        return False
+                    return super().onecmd(rest)
                 finally:
                     self.session.current = saved
-                return False
+        # 默认路径:整行插值
+        try:
+            line = self._interpolate(line)
+        except ValueError as e:
+            self._err(str(e))
+            return False
         return super().onecmd(line)
 
     # ----- 内部辅助 -------------------------------------------------------
@@ -59,6 +86,39 @@ class ShellREPL(cmd.Cmd):
 
     def _err(self, msg: str) -> None:
         print(f'error: {msg}', file=sys.stderr)
+
+    # ----- 会话变量 + shell escape ---------------------------------------
+
+    def _interpolate(self, line: str) -> str:
+        """替换 $name 为 session.variables[name];$$ 转义。"""
+        import re
+        # 先把 $$ 占位,防止被二次展开
+        PLACEHOLDER = '\x00DOLLAR\x00'
+        out = line.replace('$$', PLACEHOLDER)
+        def repl(m):
+            name = m.group(1)
+            if name not in self.session.variables:
+                raise KeyError(name)
+            return self.session.variables[name]
+        try:
+            out = re.sub(r'\$([A-Za-z_][A-Za-z0-9_]*)', repl, out)
+        except KeyError as e:
+            raise ValueError(f'undefined variable: ${e.args[0]}')
+        return out.replace(PLACEHOLDER, '$')
+
+    def do_let(self, arg):
+        """let NAME=VALUE — 存会话变量(供 $NAME 插值)"""
+        arg = arg.strip()
+        if '=' not in arg:
+            self._err('let requires NAME=VALUE')
+            return
+        name, _, value = arg.partition('=')
+        name = name.strip()
+        if not name.replace('_', '').isalnum():
+            self._err(f'invalid variable name: {name}')
+            return
+        # $$ → $ 转义处理,但不展开 $var
+        self.session.variables[name] = value.replace('$$', '$')
 
     # ----- 占位 do_*(后续任务逐步实现) ------------------------------------
 
