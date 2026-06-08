@@ -295,3 +295,35 @@ def test_shell_escape_reports_nonzero_exit():
     out = _run(r, '! sh -c "echo bad; exit 3"')
     assert 'bad' in out
     assert 'exit code' in out or '3' in out
+
+
+def test_undo_restores_value(tmp_path):
+    p = tmp_path / 's.inp'; p.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    r = ShellREPL()
+    _run(r, f'load {p} as v1')
+    # 改值
+    _run(r, 'set physics refvel 99.0')
+    assert r.session.files['v1'].dirty is True
+    # 撤销
+    out = _run(r, 'undo')
+    assert 'undone' in out.lower() or 'restored' in out.lower() or '回滚' in out
+    # 验证值已恢复
+    out2 = _run(r, 'get refvel -b physics')
+    assert '1.0' in out2
+
+
+def test_undo_empty_errors():
+    r = ShellREPL()
+    out = _run(r, 'undo')
+    assert 'nothing' in out.lower() or 'undo' in out.lower()
+
+
+def test_undo_multiple_steps(tmp_path):
+    p = tmp_path / 's.inp'; p.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    r = ShellREPL()
+    _run(r, f'load {p} as v1')
+    _run(r, 'set physics refvel 99.0')
+    _run(r, 'set physics refvel 88.0')
+    _run(r, 'undo 2')
+    out = _run(r, 'get refvel -b physics')
+    assert '1.0' in out

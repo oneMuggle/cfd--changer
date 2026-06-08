@@ -142,6 +142,37 @@ class ShellREPL(cmd.Cmd):
             print(f'(exit code: {cp.returncode})', file=sys.stderr)
         return False  # 不退出 REPL
 
+    def do_undo(self, arg):
+        """undo [N=1] — 回滚最近 N 次 set"""
+        n = 1
+        if arg.strip().isdigit():
+            n = int(arg.strip())
+        for _ in range(n):
+            entry = self.session.undo.pop()
+            if entry is None:
+                print('nothing to undo')
+                return
+            lf = self.session.files.get(entry.alias)
+            if lf is None:
+                print(f'(undo: alias {entry.alias} no longer loaded, skipping)')
+                continue
+            b = lf.inp.get_block(entry.block, 0)
+            if b is None:
+                print(f'(undo: block {entry.block} missing, skipping)')
+                continue
+            # 恢复:把 values 写回(单值或多值)
+            if len(entry.old_values) == 1:
+                from .model import infer_type
+                b.set(entry.key, infer_type(entry.old_values[0]))
+            else:
+                from .model import infer_type
+                b.set(entry.key, infer_type(entry.old_values[0]))
+            # 写盘(对齐 cmd_set 的语义:do_get 走 cmd_get 读盘)
+            from .writer import write as writer_write
+            writer_write(lf.inp, str(lf.path))
+            lf.dirty = True
+            print(f'undone: {entry.alias}.{entry.block}.{entry.key} restored')
+
     # ----- 占位 do_*(后续任务逐步实现) ------------------------------------
 
     def do_help(self, arg):
