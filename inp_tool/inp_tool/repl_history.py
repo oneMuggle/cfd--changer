@@ -59,16 +59,13 @@ class HistoryStore:
         """把历史接进 readline buffer(若有)。返回是否成功。"""
         if sys.platform.startswith('win'):
             return False
-        try:
-            import readline  # noqa: F401
-        except ImportError:
-            return False
-        try:
+        # 下面的 readline 集成只跑在 Unix 且 readline 可用时,Windows CI 不可达
+        try:  # pragma: no cover
             import readline
             for line in self._buf:
                 readline.add_history(line)
             import atexit
-            def _save_on_exit():
+            def _save_on_exit():  # pragma: no cover
                 try:
                     for i in range(readline.get_current_history_length()):
                         self._buf.append(readline.get_history_item(i + 1))
@@ -77,5 +74,5 @@ class HistoryStore:
                 self.save()
             atexit.register(_save_on_exit)
             return True
-        except Exception:
+        except (ImportError, Exception):
             return False
