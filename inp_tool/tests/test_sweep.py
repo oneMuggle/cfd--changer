@@ -183,6 +183,131 @@ class TestFreestreamPreset:
         # 警告消息写到 stderr
         assert "guiopts" in captured.err.lower() or "warn" in captured.err.lower()
 
+    def test_apply_preserves_template_ma_when_only_alpha_swept(self, tmp_path):
+        """Bug fix regression: 只 --alpha 时,模板的 aero_ma / aero_temp / refvel
+        应被保留,U/V/W 用保留的 mach+T 进行几何分解。"""
+        from inp_tool import parse_file
+
+        sample = tmp_path / "t.inp"
+        sample.write_text(
+            "system begin\n"
+            "system end\n"
+            "guiopts begin\n"
+            "aero_pres 1.013250e+005\n"
+            "aero_temp 2.880000e+002\n"
+            "aero_u 3.000000e+001\n"
+            "aero_v 0.0\n"
+            "aero_w 0.0\n"
+            "aero_ma 8.000000e-001\n"
+            "aero_alpha 0.000000e+000\n"
+            "aerobeta 0.000000e+000\n"
+            "aero_re 1.000000e+006\n"
+            "guiopts end\n"
+            "physics begin\n"
+            "refvel -1.0\n"
+            "reftem 2.880000e+002\n"
+            "refpre 1.013250e+005\n"
+            "physics end\n"
+        )
+        inp = parse_file(str(sample))
+        preset = FreestreamPreset(gamma=1.4, R=287.05)
+        # 只传 alpha,不传 mach / T / pinf
+        applied = preset.apply(inp, {"alpha": 10.0})
+
+        # 1. 模板的 aero_ma=0.8 必须被保留
+        ma = inp.get("guiopts", "aero_ma")
+        assert ma is not None
+        assert abs(ma - 0.8) < 1e-9, f"aero_ma 应保留模板值 0.8,实得 {ma}"
+
+        # 2. 模板的 aero_temp=288.00 必须被保留
+        temp = inp.get("guiopts", "aero_temp")
+        assert temp is not None
+        assert abs(temp - 288.0) < 1e-9, f"aero_temp 应保留模板值 288.0,实得 {temp}"
+
+        # 3. U/V/W 用 ma=0.8, alpha=10°, beta=0, T=288 重算
+        a = math.sqrt(1.4 * 287.05 * 288.0)
+        expected_U = 0.8 * a * math.cos(math.radians(10.0))
+        expected_W = 0.8 * a * math.sin(math.radians(10.0))
+        expected_refvel = 0.8 * a  # 模长守恒 = Ma * a
+        u = inp.get("guiopts", "aero_u")
+        v = inp.get("guiopts", "aero_v")
+        w = inp.get("guiopts", "aero_w")
+        assert u is not None and abs(u - expected_U) < 0.1, \
+            f"aero_u 应 ≈ {expected_U},实得 {u}"
+        assert v is not None and abs(v - 0.0) < 1e-6, \
+            f"aero_v 应 = 0 (beta=0),实得 {v}"
+        assert w is not None and abs(w - expected_W) < 0.1, \
+            f"aero_w 应 ≈ {expected_W},实得 {w}"
+
+        # 4. 模板的 physics.reftem=288.00 必须被保留(因为 T_inf 没传)
+        reftem = inp.get("physics", "reftem")
+        assert reftem is not None
+        assert abs(reftem - 288.0) < 1e-9, \
+            f"reftem 应保留模板值 288.0,实得 {reftem}"
+
+        # 5. refvel 模板原值是 -1("use computed" 哨兵),因 alpha 变化应被重写
+        refvel = inp.get("physics", "refvel")
+        assert refvel is not None
+        assert abs(refvel - expected_refvel) < 0.1, \
+            f"refvel 应 ≈ {expected_refvel},实得 {refvel}"
+
+        # 6. applied 字典应记录 alpha 被改
+        assert "guiopts.aero_alpha" in applied
+        assert abs(applied["guiopts.aero_alpha"] - 10.0) < 1e-9
+
+    def test_apply_preserves_template_T_when_only_mach_swept(self, tmp_path):
+        """只 --mach 时,模板的 T/pres 必须保留。"""
+        from inp_tool import parse_file
+
+        sample = tmp_path / "t.inp"
+        sample.write_text(
+            "guiopts begin\n"
+            "aero_pres 1.013250e+005\n"
+            "aero_temp 3.000000e+002\n"
+            "aero_u 0.0\n"
+            "aero_v 0.0\n"
+            "aero_w 0.0\n"
+            "aero_ma 0.0\n"
+            "aero_alpha 0.0\n"
+            "aerobeta 0.0\n"
+            "guiopts end\n"
+            "physics begin\n"
+            "refvel 0.0\n"
+            "reftem 3.000000e+002\n"
+            "refpre 1.013250e+005\n"
+            "physics end\n"
+        )
+        inp = parse_file(str(sample))
+        preset = FreestreamPreset(gamma=1.4, R=287.05)
+        preset.apply(inp, {"mach": 0.6})
+        # 模板的 T=300 必须保留
+        assert abs(inp.get("guiopts", "aero_temp") - 300.0) < 1e-9
+        assert abs(inp.get("physics", "reftem") - 300.0) < 1e-9
+        # mach 改了,refvel 必然改了
+        a = math.sqrt(1.4 * 287.05 * 300.0)
+        assert abs(inp.get("physics", "refvel") - 0.6 * a) < 0.1
+
+    def test_apply_uses_project_defaults_when_template_has_no_values(self, tmp_path):
+        """模板 guiopts 块里没有 aero_ma/aero_temp/aero_pres,回退到项目级默认。"""
+        from inp_tool import parse_file
+
+        sample = tmp_path / "t.inp"
+        sample.write_text(
+            "guiopts begin\n"
+            "aero_u 0.0\n"
+            "aero_v 0.0\n"
+            "aero_w 0.0\n"
+            "guiopts end\n"
+        )
+        inp = parse_file(str(sample))
+        preset = FreestreamPreset(gamma=1.4, R=287.05)
+        # 不传 mach / T / pinf
+        preset.apply(inp, {"alpha": 0.0, "beta": 0.0})
+        # 应当用项目级默认 mach=0, T=288.15, p=101325.0
+        assert abs(inp.get("guiopts", "aero_ma") - 0.0) < 1e-9
+        assert abs(inp.get("guiopts", "aero_temp") - 288.15) < 1e-9
+        assert abs(inp.get("guiopts", "aero_pres") - 101325.0) < 1e-9
+
 
 # ======================================================================
 # 命名模板
