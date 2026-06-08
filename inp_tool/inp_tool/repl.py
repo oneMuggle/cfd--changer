@@ -106,8 +106,11 @@ class ShellREPL(cmd.Cmd):
         简化策略:基于第一个 token 决定补全类别,忽略 state 索引
         (readline 会从返回列表中按顺序取第 state 个)。
         """
-        import readline
-        line = readline.get_line_buffer()
+        try:
+            import readline
+            line = readline.get_line_buffer()
+        except ImportError:
+            line = ''  # 非 readline 环境(Windows 或非交互)下无 line buffer
         tokens = line.split()
         if not tokens or (len(tokens) == 1 and not text):
             # 第一个 token
@@ -528,9 +531,8 @@ class ShellREPL(cmd.Cmd):
     def do_sweep(self, arg):
         """sweep [args...] — 批量生成算例(委托 cmd_sweep)"""
         from .cli import cmd_sweep
-        import shlex
         try:
-            tokens = shlex.split(arg)
+            tokens = arg.split()
         except ValueError as e:
             self._err(f'parse error: {e}')
             return
