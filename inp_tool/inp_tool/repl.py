@@ -233,13 +233,10 @@ class ShellREPL(cmd.Cmd):
             if b is None:
                 print(f'(undo: block {entry.block} missing, skipping)')
                 continue
-            # 恢复:把 values 写回(单值或多值)
-            if len(entry.old_values) == 1:
-                from .model import infer_type
-                b.set(entry.key, infer_type(entry.old_values[0]))
-            else:
-                from .model import infer_type
-                b.set(entry.key, infer_type(entry.old_values[0]))
+            # 恢复:把值写回(当前数据模型下 old_values 必为单值)
+            from .model import infer_type
+            b.set(entry.key, infer_type(entry.old_values[0]))
+            # TODO: multi-value undo(待 Value.raw 支持 list 字段时启用)
             # 写盘(对齐 cmd_set 的语义:do_get 走 cmd_get 读盘)
             from .writer import write as writer_write
             writer_write(lf.inp, str(lf.path))
@@ -531,12 +528,28 @@ class ShellREPL(cmd.Cmd):
         except ValueError as e:
             self._err(f'parse error: {e}')
             return
-        from argparse import Namespace
-        ns = Namespace(
-            first=None, config=None, alpha=None, beta=None, mach=None,
-            t_inf=None, p_inf=None, out=None, manifest=None,
-            dry_run=False, verbose=False, interactive=False, _tokens=tokens,
-        )
+        # 构建一个与 cli.py sweep subparser 一致的本地 parser
+        # (subparser 的 --t-inf 映射 dest=t_inf,--p-inf 映射 dest=p_inf)
+        from argparse import ArgumentParser
+        p = ArgumentParser(prog='sweep', add_help=False)
+        p.add_argument('first', nargs='?', default=None)
+        p.add_argument('config', nargs='?', default=None)
+        p.add_argument('--alpha', default=None)
+        p.add_argument('--beta', default=None)
+        p.add_argument('--mach', default=None)
+        p.add_argument('--t-inf', dest='t_inf', default=None)
+        p.add_argument('--p-inf', dest='p_inf', default=None)
+        p.add_argument('--out', default=None)
+        p.add_argument('--manifest', default=None)
+        p.add_argument('--dry-run', dest='dry_run', action='store_true')
+        p.add_argument('-v', '--verbose', dest='verbose', action='store_true')
+        p.add_argument('-i', '--interactive', dest='interactive', action='store_true')
+        try:
+            ns = p.parse_args(tokens)
+        except SystemExit:
+            # argparse 在参数错误时会 sys.exit;拦截并提示
+            self._err('sweep: invalid arguments (see above)')
+            return
         # 把 session.variables 作为兜底默认(任何 None 字段)
         for key in ('alpha', 'beta', 'mach', 't_inf', 'p_inf'):
             v = self.session.variables.get(key)

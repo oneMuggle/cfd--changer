@@ -360,6 +360,24 @@ def test_sweep_command_available():
     assert r.session.current == 'v1'  # sweep 失败不应破坏 current
 
 
+def test_sweep_runs_with_args(tmp_path):
+    """do_sweep 必须真的跑出算例,不只是 'Unknown syntax' 检查。"""
+    template = tmp_path / 'tmpl.inp'
+    template.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    out_dir = tmp_path / 'cases'
+    r = ShellREPL()
+    out = _run(
+        r,
+        f'load {template} as v1',
+        f'sweep {template} --alpha 0,4 --mach 0.6,0.8 --out {out_dir}',
+    )
+    # alpha 2 × mach 2 = 4 cases;另外若 freestream 引入 t_inf/p_inf 扫描,数量可能 ≥ 4
+    generated = list(out_dir.glob('*.inp'))
+    assert len(generated) >= 4, (
+        f"expected >=4 .inp files, got {len(generated)}. REPL output:\n{out}"
+    )
+
+
 def test_completer_attached_to_repl():
     """ShellREPL 必须挂一个 InpCompleter 实例供 complete() 调度。"""
     from inp_tool.repl_completer import InpCompleter
