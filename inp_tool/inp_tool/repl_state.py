@@ -51,3 +51,38 @@ class ReplSession:
     current: Optional[str] = None
     undo: UndoLog = field(default_factory=UndoLog)
     variables: Dict[str, str] = field(default_factory=dict)
+
+    def load(self, path: Path, alias: Optional[str] = None) -> str:
+        """加载文件到 session,返回实际使用的 alias。
+
+        alias 为 None 时用 Path(path).stem;冲突时追加 _2/_3/...。
+        """
+        from .parser import parse_file  # 延迟导入避免循环
+
+        if alias is None:
+            alias = path.stem
+        original = alias
+        n = 2
+        while alias in self.files:
+            alias = f'{original}_{n}'
+            n += 1
+        self.files[alias] = LoadedFile(alias=alias, path=path, inp=parse_file(str(path)))
+        self.current = alias
+        return alias
+
+    def unload(self, alias: str, force: bool = False) -> None:
+        """从 session 移除文件。dirty 状态默认拒绝;force=True 强卸。"""
+        lf = self.files[alias]  # KeyError 自然抛出
+        if lf.dirty and not force:
+            raise RuntimeError(
+                f"alias '{alias}' has unsaved changes; use unload -f to force"
+            )
+        del self.files[alias]
+        if self.current == alias:
+            self.current = None
+
+    def use(self, alias: str) -> None:
+        """切换 current 指针。alias 不存在时抛 KeyError。"""
+        if alias not in self.files:
+            raise KeyError(alias)
+        self.current = alias

@@ -43,3 +43,78 @@ def test_replsession_starts_empty():
     assert s.current is None
     assert len(s.undo) == 0
     assert s.variables == {}
+
+
+def test_load_adds_file_and_sets_current(tmp_path):
+    s = ReplSession()
+    fake_path = tmp_path / 'mcfd.inp'
+    fake_path.write_text('placeholder')
+    s.load(fake_path, alias='v1')
+    assert 'v1' in s.files
+    assert s.current == 'v1'
+    assert s.files['v1'].path == fake_path
+
+
+def test_load_default_alias_is_stem(tmp_path):
+    s = ReplSession()
+    p = tmp_path / 'mcfd_v1.inp'
+    p.write_text('x')
+    s.load(p)
+    assert s.current == 'mcfd_v1'
+
+
+def test_load_collision_appends_suffix(tmp_path):
+    s = ReplSession()
+    p1 = tmp_path / 'a.inp'; p1.write_text('x')
+    p2 = tmp_path / 'a_2.inp'; p2.write_text('x')  # 同 stem 'a' 冲突
+    s.load(p1, alias='a')
+    s.load(p2, alias='a')  # 显式 alias='a' 与已有冲突
+    assert 'a' in s.files
+    assert 'a_2' in s.files
+    # 第二次 load 的 current 指向新别名
+    assert s.current == 'a_2'
+
+
+def test_unload_removes_file(tmp_path):
+    s = ReplSession()
+    p = tmp_path / 'a.inp'; p.write_text('x')
+    s.load(p, alias='a')
+    s.unload('a')
+    assert 'a' not in s.files
+
+
+def test_unload_dirty_raises_without_force(tmp_path):
+    s = ReplSession()
+    p = tmp_path / 'a.inp'; p.write_text('x')
+    s.load(p, alias='a')
+    s.files['a'].dirty = True
+    with pytest.raises(RuntimeError, match='unsaved'):
+        s.unload('a')
+    # -f 强卸通过
+    s.unload('a', force=True)
+    assert 'a' not in s.files
+
+
+def test_unload_current_clears_pointer(tmp_path):
+    s = ReplSession()
+    p = tmp_path / 'a.inp'; p.write_text('x')
+    s.load(p, alias='a')
+    s.unload('a')
+    assert s.current is None
+
+
+def test_use_switches_current(tmp_path):
+    s = ReplSession()
+    p1 = tmp_path / 'a.inp'; p1.write_text('x')
+    p2 = tmp_path / 'b.inp'; p2.write_text('x')
+    s.load(p1, alias='a')
+    s.load(p2, alias='b')
+    assert s.current == 'b'
+    s.use('a')
+    assert s.current == 'a'
+
+
+def test_use_unknown_raises(tmp_path):
+    s = ReplSession()
+    with pytest.raises(KeyError):
+        s.use('nope')
