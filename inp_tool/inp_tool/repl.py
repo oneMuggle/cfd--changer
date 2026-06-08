@@ -449,6 +449,33 @@ class ShellREPL(cmd.Cmd):
         if rc:
             self._err(f'cmd_parse returned {rc}')
 
+    def do_sweep(self, arg):
+        """sweep [args...] — 批量生成算例(委托 cmd_sweep)"""
+        from .cli import cmd_sweep
+        import shlex
+        try:
+            tokens = shlex.split(arg)
+        except ValueError as e:
+            self._err(f'parse error: {e}')
+            return
+        from argparse import Namespace
+        ns = Namespace(
+            first=None, config=None, alpha=None, beta=None, mach=None,
+            t_inf=None, p_inf=None, out=None, manifest=None,
+            dry_run=False, verbose=False, interactive=False, _tokens=tokens,
+        )
+        # 把 session.variables 作为兜底默认(任何 None 字段)
+        for key in ('alpha', 'beta', 'mach', 't_inf', 'p_inf'):
+            v = self.session.variables.get(key)
+            if v is not None and getattr(ns, key) is None:
+                try:
+                    setattr(ns, key, float(v))
+                except ValueError:
+                    setattr(ns, key, v)
+        rc = cmd_sweep(ns)
+        if rc:
+            self._err(f'cmd_sweep returned {rc}')
+
 
 def main(preload: Optional[List[str]] = None) -> int:
     """REPL 入口。从 CLI 的 `shell` 子命令调用。

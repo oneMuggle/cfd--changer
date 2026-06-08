@@ -340,3 +340,21 @@ def test_set_then_set_undo_chain(tmp_path):
     _run(r, 'undo')
     out = _run(r, 'get refvel -b physics')
     assert '50.0' in out, f"expected 50.0, got: {out}"
+
+
+def test_sweep_command_available():
+    """do_sweep 必须存在并能调 cmd_sweep(只验证可达,完整 sweep 流程由 cli 已有测试覆盖)。"""
+    # 直接验证:do_sweep 是可调用的方法
+    assert hasattr(ShellREPL, 'do_sweep')
+    assert callable(ShellREPL.do_sweep)
+    # 走 onecmd 路径:不能掉到 cmd.Cmd 默认 'Unknown syntax' 分支
+    p = SAMPLE_V1
+    r = ShellREPL()
+    out = _run(
+        r,
+        f'load {p} as v1',
+        'let alpha=2.5',
+        'sweep --help',
+    )
+    assert 'Unknown syntax' not in out  # do_sweep 必须存在并被分派
+    assert r.session.current == 'v1'  # sweep 失败不应破坏 current
