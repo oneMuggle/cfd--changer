@@ -63,6 +63,17 @@ jobs:
           conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
             --cov=inp_tool --cov-report=term --cov-fail-under=80
 
+      - name: REPL smoke test
+        shell: bash -l {0}
+        # v0.5.0: 非交互式跑 REPL 验证 shell 子命令 + load/set/status/undo 链路。
+        # stdin 重定向到 tests/data/repl_smoke.txt(load → files → set → status →
+        # undo → files → exit)。默认 working-directory: inp_tool,所以 tests/data/
+        # 路径就是相对的;无需显式 cd。
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          conda run -n cfdchanger python -m inp_tool.cli shell < tests/data/repl_smoke.txt
+
       - name: Generate coverage HTML (ubuntu only)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8'
         shell: bash -l {0}

@@ -1,0 +1,7 @@
+load tests/data/sample_v1.inp
+files
+set physics refvel 42.0
+status
+undo
+files
+exit

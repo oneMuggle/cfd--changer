@@ -135,7 +135,7 @@ def _parse_csv_floats(s: str):
 # ============================================================
 # Shell 补全 (Phase D)
 # ============================================================
-_SUBCOMMANDS = ["parse", "get", "set", "diff", "info", "sweep", "completion"]
+_SUBCOMMANDS = ["parse", "get", "set", "diff", "info", "sweep", "completion", "shell"]
 
 
 def _bash_completion() -> str:
@@ -248,6 +248,18 @@ def cmd_completion(args):
     except ValueError as e:
         print(f"completion: {e}", file=sys.stderr)
         return 2
+
+
+# ============================================================
+# 交互式 REPL (Phase B: 委托给 repl.main)
+# ============================================================
+def cmd_shell(args):
+    """inp-tool shell [files...] — 启动交互式 REPL。
+
+    可选地预加载 0 或多个 .inp 文件(自动按 basename 起 alias)。
+    """
+    from .repl import main as repl_main
+    return repl_main(args.files)
 
 
 # ============================================================
@@ -538,6 +550,14 @@ def main(argv=None):
     sc = sub.add_parser('completion', help='输出 shell 补全脚本 (bash/zsh/fish)')
     sc.add_argument('shell', choices=['bash', 'zsh', 'fish'], help='目标 shell')
     sc.set_defaults(func=cmd_completion)
+
+    # === shell 子命令(交互式 REPL) ===
+    ssh = sub.add_parser(
+        'shell',
+        help='启动交互式 REPL(可预加载 0 或多个 .inp)',
+    )
+    ssh.add_argument('files', nargs='*', help='启动时预加载的 .inp 文件(可选)')
+    ssh.set_defaults(func=cmd_shell)
 
     args = p.parse_args(argv)
     return args.func(args)
