@@ -120,6 +120,28 @@ class ShellREPL(cmd.Cmd):
         # $$ → $ 转义处理,但不展开 $var
         self.session.variables[name] = value.replace('$$', '$')
 
+    def _do_shell(self, cmdline: str) -> bool:
+        """执行 shell 命令,透传 stdout/stderr;非零退出打印 exit code。"""
+        import subprocess
+        if not cmdline.strip():
+            self._err('empty shell command')
+            return False
+        try:
+            cp = subprocess.run(
+                cmdline, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+        except FileNotFoundError as e:
+            self._err(f'command not found: {e}')
+            return False
+        if cp.stdout:
+            print(cp.stdout.decode('utf-8', errors='replace'), end='')
+        if cp.stderr:
+            print(cp.stderr.decode('utf-8', errors='replace'), end='', file=sys.stderr)
+        if cp.returncode != 0:
+            print(f'(exit code: {cp.returncode})', file=sys.stderr)
+        return False  # 不退出 REPL
+
     # ----- 占位 do_*(后续任务逐步实现) ------------------------------------
 
     def do_help(self, arg):

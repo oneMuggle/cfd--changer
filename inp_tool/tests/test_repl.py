@@ -282,3 +282,16 @@ def test_double_dollar_literal():
     out = _run(r, 'let val=$$x')
     # $$ 转义为字面 $,x 不展开
     assert r.session.variables.get('val') == '$x'
+
+
+def test_shell_escape_runs_command():
+    r = ShellREPL()
+    out = _run(r, '! echo hello')
+    assert 'hello' in out
+
+
+def test_shell_escape_reports_nonzero_exit():
+    r = ShellREPL()
+    out = _run(r, '! sh -c "echo bad; exit 3"')
+    assert 'bad' in out
+    assert 'exit code' in out or '3' in out
