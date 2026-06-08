@@ -129,3 +129,22 @@ def test_save_as_creates_new_file(tmp_path):
     assert r.session.files['a'].dirty is False
     # alias 的 path 指向新文件
     assert r.session.files['a'].path == new_p
+
+
+def test_unload_force_flag_in_any_position(tmp_path):
+    """I3 修复:unload -f a 与 unload a -f 都要工作。"""
+    p = tmp_path / 'a.inp'; p.write_text('x')
+    r = ShellREPL()
+    _run(r, f'load {p} as a')
+    r.session.files['a'].dirty = True
+    _run(r, 'unload -f a')  # -f 在 alias 前
+    assert 'a' not in r.session.files
+
+
+def test_unload_unknown_alias_returns_cleanly(tmp_path):
+    """I1 修复:unload 不存在的 alias 时,_err 后无 fall-through。"""
+    r = ShellREPL()
+    out = _run(r, 'unload nope')
+    assert 'not loaded' in out
+    # prompt 保持默认(没有 current)
+    assert r.prompt == 'inp> '

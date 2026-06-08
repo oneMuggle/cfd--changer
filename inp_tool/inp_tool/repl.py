@@ -117,12 +117,17 @@ class ShellREPL(cmd.Cmd):
         if not parts:
             self._err('unload requires an alias')
             return
-        alias = parts[0]
+        non_flags = [p for p in parts if p != '-f']
+        if not non_flags:
+            self._err('unload requires an alias')
+            return
+        alias = non_flags[0]
         force = '-f' in parts
         try:
             self.session.unload(alias, force=force)
         except KeyError:
             self._err(f"alias '{alias}' not loaded.")
+            return
         except RuntimeError as e:
             self._err(str(e))
             return
@@ -130,7 +135,10 @@ class ShellREPL(cmd.Cmd):
             self._refresh_prompt()
 
     def do_status(self, arg):
-        """status — 列出每个 alias 的未保存改动"""
+        """status — 列出每个 alias 的未保存改动
+
+        TODO: 与 do_files 共享输出格式;若 status 演化(undo count, save time 等),可分裂
+        """
         if not self.session.files:
             print('(no files loaded)')
             return
@@ -170,8 +178,11 @@ class ShellREPL(cmd.Cmd):
             path = self.session.files[alias].path
         try:
             write(self.session.files[alias].inp, str(path))
-        except (OSError, PermissionError) as e:
+        except PermissionError as e:
             self._err(f'permission denied: {path} ({e})')
+            return
+        except OSError as e:
+            self._err(f'write failed: {path} ({e})')
             return
         self.session.files[alias].dirty = False
         self.session.files[alias].last_saved_text = to_text(self.session.files[alias].inp)
