@@ -381,7 +381,7 @@ def test_prompt_changes_when_file_loaded(tmp_path):
     p = tmp_path / 'x.inp'; p.write_text('placeholder')
     r = ShellREPL()
     _run(r, f'load {p}')
-    assert r.prompt == 'inp[v1]> '  # 'x' 是 stem
+    assert r.prompt == 'inp[x]> '  # 'x' 是 stem('x.inp' 去后缀)
 
 
 def test_intro_banner_present():

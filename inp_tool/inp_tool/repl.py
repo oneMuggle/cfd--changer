@@ -9,6 +9,7 @@ from typing import List, Optional
 
 import readline  # noqa: F401  # for tab completion hook
 
+from . import __version__
 from .repl_history import HistoryStore
 from .repl_state import ReplSession
 
@@ -23,7 +24,7 @@ REPL_COMMANDS = {
 
 class ShellREPL(cmd.Cmd):
     intro = (
-        "inp-tool v0.5.0 interactive shell. "
+        f"inp-tool {__version__} interactive shell. "
         "Type 'help' for commands, 'exit' to quit."
     )
     prompt = 'inp> '
@@ -132,9 +133,6 @@ class ShellREPL(cmd.Cmd):
             self.prompt = f'inp[{self.session.current}]> '
         else:
             self.prompt = 'inp> '
-
-    def _print(self, msg: str) -> None:
-        print(msg)
 
     def _err(self, msg: str) -> None:
         print(f'error: {msg}', file=sys.stderr)
@@ -293,11 +291,11 @@ class ShellREPL(cmd.Cmd):
         print(f'loaded: {actual}  ({path})')
 
     def do_files(self, arg):
-        """files — 列出已加载 alias / 路径 / 状态"""
+        """files — 列出已加载 alias / 路径 / 状态(按 alias 字母序)"""
         if not self.session.files:
             print('(no files loaded)')
             return
-        for a, lf in self.session.files.items():
+        for a, lf in sorted(self.session.files.items()):
             mark = '*' if a == self.session.current else ' '
             tag = 'dirty' if lf.dirty else 'clean'
             print(f'{mark} {a:15s} {str(lf.path):40s}  [{tag}]')
