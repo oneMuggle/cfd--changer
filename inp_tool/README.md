@@ -317,6 +317,72 @@ refvel = sqrt(U² + V² + W²)        # 模长 = Ma·a
 pytest tests/test_sweep.py tests/test_sweep_generate.py tests/test_sweep_cli.py tests/test_sweep_api.py -v
 ```
 
+## REPL 模式(交互式 shell)
+
+`inp-tool shell` 进入交互式 shell,适合多文件来回切换、反复 get/set 调参。
+
+### 快速开始
+
+```bash
+$ inp-tool shell mcfd_v1.inp mcfd_v2.inp
+inp-tool v0.5.0 interactive shell. Type 'help' for commands, 'exit' to quit.
+inp[mcfd_v2]> use v1
+inp[v1]> get refvel -b physics
+v1[physics][0].refvel = 50.0  (raw: '50.0')
+inp[v1]> set physics refvel 75.0
+已写入: ...
+inp[v1]> status
+* v1  mcfd_v1.inp  [unsaved changes]
+  mcfd_v2  mcfd_v2.inp  [clean]
+inp[v1]> undo
+undone: v1.physics.refvel restored
+inp[v1]> save
+saved: v1 -> mcfd_v1.inp
+inp[v1]> v2:diff v1
+差异条数: ...
+inp[v1]> exit
+```
+
+### 常用命令
+
+| 命令 | 作用 |
+|---|---|
+| `load <path> [as ALIAS]` | 加载文件 |
+| `files` | 列出已加载 |
+| `use ALIAS` | 切换 current |
+| `info` / `get KEY -b BLOCK` | 读(基于 current) |
+| `set BLOCK KEY VALUE` | 改,自动标 dirty,记入 undo |
+| `diff <other>` | current vs other |
+| `undo [N]` | 回滚最近 N 次 set |
+| `save` / `save as PATH` | 写盘 |
+| `let NAME=VALUE` | 存会话变量;`$NAME` 在命令中插值 |
+| `! <cmd>` | shell escape |
+| `! N` | 重新执行 history 第 N 条 |
+| `history` | 列出最近命令 |
+| `help [CMD]` | 帮助 |
+| `exit` | 退出(dirty 时提示) |
+
+### 前缀覆盖
+
+任何命令前可加 `<alias>:` 绕过 current:
+
+```
+inp> v1:set physics refvel 75.0
+```
+
+### 变量插值
+
+```
+inp> let alpha=3.5
+inp> sweep --alpha $alpha
+```
+
+未定义变量 → `error: undefined variable: $name`。`$$` 转义为字面 `$`。
+
+### 历史
+
+存到 `~/.inp_history`,最多 1000 行,跨会话保留。Tab 键补全命令、alias、块名、键名。
+
 ## 已知限制 (v0.2 残留)
 
 - 多行 values 只能配 seq.# / seq# 模式(其他复合头需扩展)
