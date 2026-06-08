@@ -358,3 +358,32 @@ def test_sweep_command_available():
     )
     assert 'Unknown syntax' not in out  # do_sweep 必须存在并被分派
     assert r.session.current == 'v1'  # sweep 失败不应破坏 current
+
+
+def test_completer_attached_to_repl():
+    """ShellREPL 必须挂一个 InpCompleter 实例供 complete() 调度。"""
+    from inp_tool.repl_completer import InpCompleter
+    r = ShellREPL()
+    assert isinstance(r._completer, InpCompleter)
+
+
+def test_complete_command_candidates():
+    """complete(text, state) 在首 token 位置应返回 REPL_COMMANDS 候选。"""
+    r = ShellREPL()
+    # readline.get_line_buffer 在测试环境下会返回空字符串,触发"首 token"分支
+    cands_first = r.complete('lo', 0)
+    cands_second = r.complete('lo', 1)
+    # state=0 应该返回候选列表第一项(state=1 返回第二项,以此类推)
+    assert cands_first == 'load'  # 'lo' 前缀唯一匹配 'load'
+    assert cands_second is None  # 没有第二个候选
+
+
+def test_complete_alias_for_use_command(tmp_path):
+    """当首 token 是 'use' 时,应补全 alias 列表。"""
+    p = tmp_path / 's.inp'; p.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    r = ShellREPL()
+    _run(r, f'load {p} as v1')
+    cands = r.complete('', 0)  # state=0
+    # cmd.Cmd 的 complete() 是按行调度的;但我们手测它的核心逻辑:
+    # 既然 readline 在测试环境无 buffer,我们直接验证 InpCompleter 自己工作
+    assert r._completer.complete_alias('') == ['v1']

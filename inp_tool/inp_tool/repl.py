@@ -7,6 +7,8 @@ import cmd
 import sys
 from typing import List, Optional
 
+import readline  # noqa: F401  # for tab completion hook
+
 from .repl_state import ReplSession
 
 
@@ -29,6 +31,10 @@ class ShellREPL(cmd.Cmd):
         super().__init__(completekey=completekey)
         self.session = session or ReplSession()
         self._refresh_prompt()
+        # Lazy import: repl_completer imports REPL_COMMANDS from repl, so direct
+        # top-level import in repl.py would create a cycle.
+        from .repl_completer import InpCompleter
+        self._completer = InpCompleter(self.session)
 
     def onecmd(self, line):
         """在分发到 cmd.Cmd 前,先剥离 '<alias>:' 前缀,再做 $var 插值。"""
@@ -72,6 +78,40 @@ class ShellREPL(cmd.Cmd):
             self._err(str(e))
             return False
         return super().onecmd(line)
+
+    # ----- Tab 补全 ------------------------------------------------------
+
+    def complete(self, text, state):
+        """cmd.Cmd 调用入口。state 是第 N 次按 Tab(0..N-1)。
+
+        简化策略:基于第一个 token 决定补全类别,忽略 state 索引
+        (readline 会从返回列表中按顺序取第 state 个)。
+        """
+        import readline
+        line = readline.get_line_buffer()
+        tokens = line.split()
+        if not tokens or (len(tokens) == 1 and not text):
+            # 第一个 token
+            cands = self._completer.complete_command(text)
+        else:
+            cmd_name = tokens[0]
+            # 处理 <alias>: 前缀:剥离,补全后续
+            if ':' in cmd_name:
+                cmd_name = cmd_name.split(':', 1)[1] or ''
+            if cmd_name in ('use', 'unload', 'save'):
+                cands = self._completer.complete_alias(text)
+            elif cmd_name in ('get', 'set'):
+                if text or (len(tokens) >= 2 and tokens[-1] == '-b'):
+                    cands = self._completer.complete_block(
+                        self.session.current or '', text,
+                    )
+                else:
+                    cands = self._completer.complete_command(text)
+            else:
+                cands = self._completer.complete_command(text)
+        if state < len(cands):
+            return cands[state]
+        return None
 
     # ----- 内部辅助 -------------------------------------------------------
 
