@@ -8,6 +8,10 @@ import pytest
 from inp_tool.repl import ShellREPL
 
 
+SAMPLE_V1 = Path(__file__).parent / 'data' / 'sample_v1.inp'
+SAMPLE_V2 = Path(__file__).parent / 'data' / 'sample_v2.inp'
+
+
 def _run(repl, *lines):
     """喂入多行命令,返回 stdout + stderr 的合并输出。"""
     out, err = io.StringIO(), io.StringIO()
@@ -148,3 +152,53 @@ def test_unload_unknown_alias_returns_cleanly(tmp_path):
     assert 'not loaded' in out
     # prompt 保持默认(没有 current)
     assert r.prompt == 'inp> '
+
+
+def test_info_runs_on_current(tmp_path):
+    p = tmp_path / 's1.inp'
+    p.write_text(SAMPLE_V1.read_text())
+    r = ShellREPL()
+    out = _run(r, f'load {p}', 'info')
+    assert '块列表' in out or 'block' in out.lower()
+    assert 'physics' in out
+
+
+def test_get_reads_value(tmp_path):
+    p = tmp_path / 's1.inp'
+    p.write_text(SAMPLE_V1.read_text())
+    r = ShellREPL()
+    out = _run(r, f'load {p}', 'get refvel -b physics')
+    assert 'refvel' in out
+    assert '50.0' in out
+
+
+def test_get_missing_key_errors(tmp_path):
+    p = tmp_path / 's1.inp'
+    p.write_text(SAMPLE_V1.read_text())
+    r = ShellREPL()
+    out = _run(r, f'load {p}', 'get nope -b physics')
+    assert '不存在' in out or 'not found' in out.lower()
+
+
+def test_set_marks_dirty(tmp_path):
+    p = tmp_path / 's1.inp'
+    p.write_text(SAMPLE_V1.read_text())
+    r = ShellREPL()
+    _run(r, f'load {p} as v1', 'set physics refvel 75.0')
+    assert r.session.files['v1'].dirty is True
+
+
+def test_diff_between_two_files(tmp_path):
+    p1 = tmp_path / 'v1.inp'
+    p2 = tmp_path / 'v2.inp'
+    p1.write_text(SAMPLE_V1.read_text())
+    p2.write_text(SAMPLE_V2.read_text())
+    r = ShellREPL()
+    out = _run(
+        r,
+        f'load {p1} as v1',
+        f'load {p2} as v2',
+        'use v1',
+        'diff v2',
+    )
+    assert 'refvel' in out

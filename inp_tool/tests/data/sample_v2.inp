@@ -1,0 +1,9 @@
+# sample v2
+system begin
+  title "case v2"
+  cfl 0.005
+system end
+physics begin
+  refvel -1.0
+  cfl 0.005
+physics end

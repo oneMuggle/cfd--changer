@@ -197,6 +197,126 @@ class ShellREPL(cmd.Cmd):
         """alias for exit"""
         return True
 
+    # ----- 委托给 cli.py 的 cmd_* ----------------------------------------
+
+    def _ns(self, **kwargs):
+        """构造 argparse.Namespace 包装,subcommands 期待这个类型。"""
+        from argparse import Namespace
+        return Namespace(**kwargs)
+
+    def do_info(self, arg):
+        """info — 显示当前文件的结构(委托 cmd_info)"""
+        if not self.session.current:
+            self._err('no file is current. type `load <path>` first.')
+            return
+        from .cli import cmd_info
+        ns = self._ns(file=str(self.session.files[self.session.current].path))
+        rc = cmd_info(ns)
+        if rc:
+            self._err(f'cmd_info returned {rc}')
+
+    def do_get(self, arg):
+        """get KEY [-b BLOCK] [-i IDX] — 读一个值(委托 cmd_get)"""
+        if not self.session.current:
+            self._err('no file is current.')
+            return
+        from .cli import cmd_get
+        import shlex
+        try:
+            tokens = shlex.split(arg)
+        except ValueError as e:
+            self._err(f'parse error: {e}')
+            return
+        block = None
+        block_idx = None
+        if '-b' in tokens:
+            i = tokens.index('-b')
+            block = tokens[i + 1] if i + 1 < len(tokens) else None
+        if '-i' in tokens:
+            i = tokens.index('-i')
+            block_idx = int(tokens[i + 1]) if i + 1 < len(tokens) else None
+        # 第一个非 flag 的 token 是 key
+        key = next((t for t in tokens if not t.startswith('-') and t != block), None)
+        if not key:
+            self._err('get requires a key')
+            return
+        ns = self._ns(
+            file=str(self.session.files[self.session.current].path),
+            block=block, block_idx=block_idx, key=key,
+        )
+        rc = cmd_get(ns)
+        if rc:
+            self._err(f'cmd_get returned {rc}')
+
+    def do_set(self, arg):
+        """set BLOCK KEY VALUE — 改一个值,标记 dirty(委托 cmd_set)"""
+        if not self.session.current:
+            self._err('no file is current.')
+            return
+        from .cli import cmd_set
+        import shlex
+        try:
+            tokens = shlex.split(arg)
+        except ValueError as e:
+            self._err(f'parse error: {e}')
+            return
+        if len(tokens) < 3:
+            self._err('set requires: set <block> <key> <value>')
+            return
+        block, key, value = tokens[0], tokens[1], tokens[2]
+        alias = self.session.current
+        lf = self.session.files[alias]
+        # 拍旧值
+        b = lf.inp.get_block(block, 0)
+        old_values = []
+        if b is not None:
+            v = b.get_value(key)
+            if v is not None:
+                old_values = list(v.raw) if isinstance(v.raw, list) else [v.raw]
+        # 调 handler(不写盘,handler 写盘逻辑靠 args.output,默认会写)
+        ns = self._ns(
+            file=str(lf.path), block=block, block_idx=0, key=key, value=value,
+            output=None, force=False,
+        )
+        rc = cmd_set(ns)
+        if rc == 0:
+            lf.dirty = True
+            from .repl_state import UndoEntry
+            self.session.undo.push(UndoEntry(
+                alias=alias, block=block, key=key, old_values=old_values,
+            ))
+
+    def do_diff(self, arg):
+        """diff ALIAS — current vs 指定 alias(委托 cmd_diff)"""
+        if not self.session.current:
+            self._err('no file is current.')
+            return
+        from .cli import cmd_diff
+        other = arg.strip()
+        if not other:
+            self._err('diff requires another alias')
+            return
+        if other not in self.session.files:
+            self._err(f"alias '{other}' not loaded.")
+            return
+        a_path = str(self.session.files[self.session.current].path)
+        b_path = str(self.session.files[other].path)
+        ns = self._ns(a=a_path, b=b_path, unified=False)
+        rc = cmd_diff(ns)
+        if rc:
+            self._err(f'cmd_diff returned {rc}')
+
+    def do_parse(self, arg):
+        """parse — 显示当前文件完整结构(委托 cmd_parse)"""
+        if not self.session.current:
+            self._err('no file is current.')
+            return
+        from .cli import cmd_parse
+        ns = self._ns(file=str(self.session.files[self.session.current].path))
+        rc = cmd_parse(ns)
+        if rc:
+            self._err(f'cmd_parse returned {rc}')
+
 
 def main(preload: Optional[List[str]] = None) -> int:
     """REPL 入口。从 CLI 的 `shell` 子命令调用。
