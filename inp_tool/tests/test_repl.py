@@ -387,3 +387,18 @@ def test_complete_alias_for_use_command(tmp_path):
     # cmd.Cmd 的 complete() 是按行调度的;但我们手测它的核心逻辑:
     # 既然 readline 在测试环境无 buffer,我们直接验证 InpCompleter 自己工作
     assert r._completer.complete_alias('') == ['v1']
+
+
+def test_history_command_lists_recent():
+    r = ShellREPL()
+    _run(r, 'let a=1', 'let b=2', 'let c=3')
+    out = _run(r, 'history 10')
+    assert 'let a=1' in out
+    assert 'let b=2' in out
+    assert 'let c=3' in out
+
+
+def test_rerun_re_executes_history_entry():
+    r = ShellREPL()
+    _run(r, 'let x=42', '! 1')
+    assert r.session.variables.get('x') == '42'

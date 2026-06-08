@@ -9,6 +9,7 @@ from typing import List, Optional
 
 import readline  # noqa: F401  # for tab completion hook
 
+from .repl_history import HistoryStore
 from .repl_state import ReplSession
 
 
@@ -35,26 +36,34 @@ class ShellREPL(cmd.Cmd):
         # top-level import in repl.py would create a cycle.
         from .repl_completer import InpCompleter
         self._completer = InpCompleter(self.session)
+        self.history = HistoryStore()
+        self.history.load()
+        self.history.bind_readline()
 
     def onecmd(self, line):
-        """在分发到 cmd.Cmd 前,先剥离 '<alias>:' 前缀,再做 $var 插值。"""
+        """在分发到 cmd.Cmd 前,先剥离 '<alias>:' 前缀,再做 $var 插值,最后记入历史。"""
         line = line.strip()
         if not line or line.startswith('#'):
             return False
-        # let 命令不走插值(它就是定义变量的)
+        # 单独 '!N' rerun
+        if line.startswith('!') and line[1:].strip().isdigit():
+            return self.do_rerun(line[1:].strip())
+        # let 不插值
         if line.startswith('let '):
-            return super().onecmd(line)
+            result = super().onecmd(line)
+            self.history.append(line)
+            return result
         if line.startswith('!'):
-            # shell escape 不做插值前缀剥离
             try:
-                line = self._interpolate(line[1:])
+                cmdline = self._interpolate(line[1:])
             except ValueError as e:
                 self._err(str(e))
                 return False
-            return self._do_shell(line)
+            result = self._do_shell(cmdline)
+            self.history.append(line)
+            return result
         if line.startswith('?'):
-            # 别名 rerun 暂未实现
-            self._err('!N rerun is not yet implemented (Phase 8)')
+            self._err('!N rerun: use !N (without ?)')
             return False
         # 剥离 <alias>: 前缀
         if ':' in line:
@@ -68,16 +77,19 @@ class ShellREPL(cmd.Cmd):
                     except ValueError as e:
                         self._err(str(e))
                         return False
-                    return super().onecmd(rest)
+                    result = super().onecmd(rest)
+                    self.history.append(line)
+                    return result
                 finally:
                     self.session.current = saved
-        # 默认路径:整行插值
         try:
             line = self._interpolate(line)
         except ValueError as e:
             self._err(str(e))
             return False
-        return super().onecmd(line)
+        result = super().onecmd(line)
+        self.history.append(line)
+        return result
 
     # ----- Tab 补全 ------------------------------------------------------
 
@@ -159,6 +171,29 @@ class ShellREPL(cmd.Cmd):
             return
         # $$ → $ 转义处理,但不展开 $var
         self.session.variables[name] = value.replace('$$', '$')
+
+    def do_history(self, arg):
+        """history [N=20] — 列出最近 N 条命令"""
+        n = 20
+        if arg.strip().isdigit():
+            n = int(arg.strip())
+        recent = self.history.recent(n)
+        for i, line in enumerate(recent, start=1):
+            print(f'  {i:4d}  {line}')
+
+    def do_rerun(self, arg):
+        """! N — 重新执行 history 第 N 条(N 从 1 开始)"""
+        if not arg.strip().isdigit():
+            self._err('rerun requires a number')
+            return
+        n = int(arg.strip())
+        recent = self.history.recent(1000)
+        if n < 1 or n > len(recent):
+            self._err(f'history entry {n} out of range')
+            return
+        target = recent[n - 1]
+        print(f'rerunning: {target}')
+        return self.onecmd(target)
 
     def _do_shell(self, cmdline: str) -> bool:
         """执行 shell 命令,透传 stdout/stderr;非零退出打印 exit code。"""
