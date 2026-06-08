@@ -4,8 +4,9 @@
 状态由 ReplSession 管理,IO 通过 stdout/stderr。
 """
 import cmd
+import math
 import sys
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 # NOTE: readline 是 Unix-only stdlib,Windows 没有。
 # 因此 readline 必须在能用的地方做 late import:
@@ -24,6 +25,7 @@ from .repl_state import ReplSession
 REPL_COMMANDS = {
     'load', 'unload', 'files', 'use', 'status', 'save',
     'info', 'get', 'set', 'diff', 'sweep', 'parse',
+    'aero',  # 单算例 freestream 编辑
     'undo', 'let', 'help', 'history', 'exit', 'quit',
 }
 
@@ -569,6 +571,232 @@ class ShellREPL(cmd.Cmd):
         rc = cmd_sweep(ns)
         if rc:
             self._err(f'cmd_sweep returned {rc}')
+
+    # ----- 单算例 freestream 编辑(do_aero) ----------------------------
+
+    def _aero_keymap(self, key: str) -> Optional[str]:
+        """把用户输入的 key 归一化到内部 state key。未知返回 None。"""
+        k = key.lower()
+        if k in ('ma', 'mach'):
+            return 'ma'
+        if k in ('alpha', 'aoa'):
+            return 'alpha'
+        if k == 'beta':
+            return 'beta'
+        if k in ('t', 't_inf', 't-inf', 'temp', 'temperature'):
+            return 'T'
+        if k in ('p', 'p_inf', 'p-inf', 'pres', 'pressure'):
+            return 'p'
+        return None
+
+    def _aero_current(self) -> Dict[str, float]:
+        """读当前 freestream 状态。缺失字段用项目级 fallback(mach=0,T=288.15,p=101325)。"""
+
+        def _existing(block, key, cast, default):
+            if block is None:
+                return default
+            v = block.get_value(key)
+            if v is None:
+                return default
+            try:
+                return cast(v.typed)
+            except (TypeError, ValueError):
+                return default
+
+        if not self.session.current:
+            return {
+                'ma': 0.0, 'alpha': 0.0, 'beta': 0.0,
+                'T': 288.15, 'p': 101325.0,
+                'u': 0.0, 'v': 0.0, 'w': 0.0, 'refvel': 0.0,
+            }
+        lf = self.session.files[self.session.current]
+        gb = lf.inp.get_block('guiopts', 0)
+        pb = lf.inp.get_block('physics', 0)
+        ma = _existing(gb, 'aero_ma', float, 0.0)
+        alpha = _existing(gb, 'aero_alpha', float, 0.0)
+        beta = _existing(gb, 'aerobeta', float, 0.0)
+        T = _existing(gb, 'aero_temp', float, 288.15)
+        p = _existing(gb, 'aero_pres', float, 101325.0)
+        u = _existing(gb, 'aero_u', float, 0.0)
+        v = _existing(gb, 'aero_v', float, 0.0)
+        w = _existing(gb, 'aero_w', float, 0.0)
+        refvel = _existing(pb, 'refvel', float, 0.0)
+        return {
+            'ma': ma, 'alpha': alpha, 'beta': beta, 'T': T, 'p': p,
+            'u': u, 'v': v, 'w': w, 'refvel': refvel,
+        }
+
+    def _aero_raw(self, keymap: Dict[str, str]) -> Dict[str, str]:
+        """读 guiopts 字段的 raw 字符串表示(给 undo 用)。
+        仅对 keymap 中列出的 internal key 返回值。
+        """
+        out: Dict[str, str] = {}
+        if not self.session.current:
+            return out
+        lf = self.session.files[self.session.current]
+        gb = lf.inp.get_block('guiopts', 0)
+        if gb is None:
+            return out
+        for internal, kw in keymap.items():
+            v = gb.get_value(kw)
+            if v is not None:
+                out[internal] = v.raw
+        return out
+
+    def _aero_format(self, state: Dict[str, float]) -> str:
+        """格式化 1 行 freestream 状态摘要。"""
+        mag = math.sqrt(state['u'] ** 2 + state['v'] ** 2 + state['w'] ** 2)
+        # 角度显示 1 位小数,其他用紧凑表示
+        return (
+            f"Ma={state['ma']:.4g}  α={state['alpha']:.1f}°  "
+            f"β={state['beta']:.1f}°  T={state['T']:.4g}K  p={state['p']:.4g}Pa\n"
+            f"U={state['u']:.4g}  V={state['v']:.4g}  W={state['w']:.4g}  "
+            f"|V|={mag:.4g}  refvel={state['refvel']:.4g}"
+        )
+
+    def _aero_apply(
+        self, new: Dict[str, float], changed: set,
+        keymap: Dict[str, str], old_raw_map: Dict[str, str],
+    ) -> None:
+        """把 new 写回 lf.inp 的 guiopts / physics 块,标 dirty,推 undo。
+
+        - new: 完整的新状态(mach/alpha/beta/T/p/u/v/w/refvel)
+        - changed: 用户显式改的 internal key 集合
+        - keymap: internal key -> guiopts keyword 的映射
+        - old_raw_map: 改前对应 guiopts keyword 的 raw 字符串(供 undo)
+        """
+        from .parser import parse_file
+        from .writer import write as writer_write
+        from .repl_state import UndoEntry
+
+        alias = self.session.current
+        lf = self.session.files[alias]
+        gb = lf.inp.get_block('guiopts', 0)
+        pb = lf.inp.get_block('physics', 0)
+        if gb is None or pb is None:
+            self._err('aero: current file has no guiopts or physics block')
+            return
+
+        def _set_or_append(block, key, value):
+            if block.set(key, value):
+                return False  # 已存在,更新
+            block.append(key, value)
+            return True  # 新增
+
+        # guiopts:写所有 8 个字段(强耦合)
+        guiopts_pairs = {
+            'aero_alpha': new['alpha'],
+            'aerobeta': new['beta'],
+            'aero_ma': new['ma'],
+            'aero_u': new['u'],
+            'aero_v': new['v'],
+            'aero_w': new['w'],
+            'aero_temp': new['T'],
+            'aero_pres': new['p'],
+        }
+        for k, v in guiopts_pairs.items():
+            _set_or_append(gb, k, v)
+
+        # physics:refvel 总是写(recompute);reftem/refpre 跟随 T/p
+        _set_or_append(pb, 'refvel', new['refvel'])
+        if 'T' in changed:
+            _set_or_append(pb, 'reftem', new['T'])
+        if 'p' in changed:
+            _set_or_append(pb, 'refpre', new['p'])
+
+        # 写盘
+        writer_write(lf.inp, str(lf.path))
+        # 同步 lf.inp(避免连续 set 后 in-memory 落后)
+        lf.inp = parse_file(str(lf.path))
+        lf.dirty = True
+
+        # 推 undo:只针对用户显式改的 guiopts 字段;
+        # physics.refvel/reftem/refpre 是派生的,不单独 undo。
+        for k in changed:
+            guiopts_key = keymap[k]
+            # 优先用 raw(给 infer_type 还原);缺失则用 typed 强转字符串
+            if k in old_raw_map:
+                old_raw = old_raw_map[k]
+            else:
+                # 新增的字段(模板没有),没有 old — 跳过 undo 推送
+                # 这是空 old,do_undo 恢复时再处理
+                old_raw = ''
+            self.session.undo.push(UndoEntry(
+                alias=alias, block='guiopts', key=guiopts_key,
+                old_values=[old_raw],
+            ))
+
+    def do_aero(self, arg):
+        """aero — 显示当前 freestream 状态(无参)或改 freestream(KEY=VALUE)"""
+        if not self.session.current:
+            self._err('aero: no file is current. use `load <path>` first.')
+            return
+        current = self._aero_current()
+
+        if not arg.strip():
+            print(self._aero_format(current))
+            return
+
+        # 解析 KEY=VALUE 串
+        changes: Dict[str, float] = {}
+        for token in arg.split():
+            if '=' not in token:
+                self._err(f'aero: expected KEY=VALUE, got {token!r}')
+                return
+            key, _, val = token.partition('=')
+            key = key.strip()
+            try:
+                num = float(val)
+            except ValueError:
+                self._err(f'aero: {key} must be a number, got {val!r}')
+                return
+            norm = self._aero_keymap(key)
+            if norm is None:
+                self._err(
+                    f"aero: unknown key {key!r}. supported: Ma, alpha, beta, T, p"
+                )
+                return
+            changes[norm] = num
+
+        # merge:changes 覆盖 current
+        new_state = {**current, **changes}
+
+        # 重算 U/V/W
+        from .sweep import FreestreamPreset
+        uvw = FreestreamPreset().compute_uvw({
+            'alpha': new_state['alpha'],
+            'beta': new_state['beta'],
+            'mach': new_state['ma'],
+            'T_inf': new_state['T'],
+        })
+        new_state['u'] = uvw['U']
+        new_state['v'] = uvw['V']
+        new_state['w'] = uvw['W']
+        new_state['refvel'] = math.sqrt(
+            uvw['U'] ** 2 + uvw['V'] ** 2 + uvw['W'] ** 2
+        )
+
+        # 读旧 raw(供 undo 用);只对用户改的字段
+        keymap = {
+            'ma': 'aero_ma',
+            'alpha': 'aero_alpha',
+            'beta': 'aerobeta',
+            'T': 'aero_temp',
+            'p': 'aero_pres',
+        }
+        old_raw_map = self._aero_raw(keymap)
+
+        # 写回
+        self._aero_apply(new_state, set(changes.keys()), keymap, old_raw_map)
+
+        # 打印
+        order = ['ma', 'alpha', 'beta', 'T', 'p']
+        labels = {'ma': 'Ma', 'alpha': 'alpha', 'beta': 'beta', 'T': 'T', 'p': 'p'}
+        change_str = ', '.join(
+            f"{labels[k]} {current[k]}→{changes[k]}" for k in order if k in changes
+        )
+        print(f'aero: {change_str}')
+        print(self._aero_format(new_state))
 
 
 def main(preload: Optional[List[str]] = None) -> int:
