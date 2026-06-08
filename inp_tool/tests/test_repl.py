@@ -202,3 +202,44 @@ def test_diff_between_two_files(tmp_path):
         'diff v2',
     )
     assert 'refvel' in out
+
+
+def test_alias_prefix_overrides_current(tmp_path):
+    """v1: 前缀使 get 作用于 v1 而非 current。"""
+    s1 = tmp_path / 's1.inp'
+    s1.write_text('physics begin\n  refvel 50.0\nphysics end\n')
+    s2 = tmp_path / 's2.inp'
+    s2.write_text('physics begin\n  refvel -1.0\nphysics end\n')
+    r = ShellREPL()
+    out = _run(
+        r,
+        f'load {s1} as v1',
+        f'load {s2} as v2',
+        'v1:get refvel -b physics',
+    )
+    # v1 的 refvel 是 50.0
+    assert '50.0' in out
+
+
+def test_alias_prefix_with_set(tmp_path):
+    """v1: 前缀的 set 标记 v1 dirty,v2 不受影响。"""
+    s1 = tmp_path / 's1.inp'; s1.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    s2 = tmp_path / 's2.inp'; s2.write_text('physics begin\n  refvel 2.0\nphysics end\n')
+    r = ShellREPL()
+    _run(
+        r,
+        f'load {s1} as v1',
+        f'load {s2} as v2',
+        'v1:set physics refvel 99.0',
+    )
+    assert r.session.files['v1'].dirty is True
+    assert r.session.files['v2'].dirty is False
+
+
+def test_alias_prefix_with_unknown_alias(tmp_path):
+    """未加载的 alias:前缀应被忽略或报错(不崩)。"""
+    p = tmp_path / 's.inp'; p.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    r = ShellREPL()
+    # 不崩 + r.session.current 保持为 v1
+    _run(r, f'load {p} as v1', 'nope:get refvel -b physics')
+    assert r.session.current == 'v1'

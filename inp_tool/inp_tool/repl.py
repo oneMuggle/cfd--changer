@@ -30,6 +30,22 @@ class ShellREPL(cmd.Cmd):
         self.session = session or ReplSession()
         self._refresh_prompt()
 
+    def onecmd(self, line):
+        """在分发到 cmd.Cmd 前,先剥离 '<alias>:' 前缀。"""
+        line = line.strip()
+        if ':' in line and not line.startswith('!') and not line.startswith('?'):
+            # 仅当冒号前是一个单词(不是参数中的 url 等)才算前缀
+            head, _, rest = line.partition(':')
+            if head and head.replace('_', '').isalnum() and head in self.session.files:
+                saved = self.session.current
+                self.session.current = head
+                try:
+                    return super().onecmd(rest.strip())
+                finally:
+                    self.session.current = saved
+                return False
+        return super().onecmd(line)
+
     # ----- 内部辅助 -------------------------------------------------------
 
     def _refresh_prompt(self) -> None:
