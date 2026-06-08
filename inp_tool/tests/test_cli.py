@@ -112,3 +112,35 @@ def test_python_dash_m_inp_tool():
     )
     assert r.returncode == 0
     assert "0.4.2" in r.stdout
+
+
+# ========== shell (Task 16) ==========
+def test_shell_subcommand_in_help():
+    """`inp-tool --help` 应包含 'shell' 子命令。"""
+    from inp_tool.cli import main
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            main(['--help'])
+    except SystemExit:
+        pass
+    out = buf.getvalue()
+    assert 'shell' in out
+
+
+def test_shell_via_subprocess(tmp_path):
+    """非交互式跑一条 load + exit,验证子命令可达。"""
+    p = tmp_path / 's.inp'
+    p.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    import subprocess, sys, os
+    cp = subprocess.run(
+        [sys.executable, '-m', 'inp_tool.cli', 'shell', str(p)],
+        input='files\nexit\n',
+        capture_output=True, text=True, timeout=10,
+        env={**os.environ, 'TERM': 'dumb'},  # avoid readline/prompt interference
+    )
+    assert cp.returncode == 0, f'shell exited with {cp.returncode}: stderr={cp.stderr}'
+    # 's' is the stem of s.inp — should appear in the files listing
+    assert 's' in cp.stdout
