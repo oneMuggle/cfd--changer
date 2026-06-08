@@ -7,7 +7,13 @@ import cmd
 import sys
 from typing import List, Optional
 
-import readline  # noqa: F401  # for tab completion hook
+# NOTE: readline 是 Unix-only stdlib,Windows 没有。
+# 因此 readline 必须在能用的地方做 late import:
+# - ShellREPL.complete() (此文件内,line 103)
+# - HistoryStore.bind_readline() (repl_history.py,try-guarded)
+# 这里禁止写 `import readline`,否则 Windows 整个 repl 模块
+# 都 import 不进来,并级联破坏从 .repl import REPL_COMMANDS
+# 的 repl_completer。
 
 from . import __version__
 from .repl_history import HistoryStore
@@ -567,12 +573,25 @@ def main(preload: Optional[List[str]] = None) -> int:
     """REPL 入口。从 CLI 的 `shell` 子命令调用。
 
     preload: 启动时预加载的文件路径列表(自动按 basename 起 alias)。
+
+    行为分流:
+    - tty 模式: 走 cmd.Cmd.cmdloop() 交互式
+    - 非 tty 模式 (管道/文件重定向): 逐行读 stdin,处理完即退出
     """
+    import sys
     repl = ShellREPL()
     for path in preload or []:
         repl.onecmd(f'load {path}')
-    try:
-        repl.cmdloop()
-    except KeyboardInterrupt:
-        print()  # 换行
+    if sys.stdin.isatty():
+        try:
+            repl.cmdloop()
+        except KeyboardInterrupt:
+            print()  # 换行
+    else:
+        # 非交互式: 读 stdin 的所有行,逐条 onecmd,EOF 后退出
+        for line in sys.stdin:
+            line = line.rstrip('\n')
+            if not line:
+                continue
+            repl.onecmd(line)
     return 0

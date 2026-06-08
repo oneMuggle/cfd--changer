@@ -420,3 +420,38 @@ def test_rerun_re_executes_history_entry():
     r = ShellREPL()
     _run(r, 'let x=42', '! 1')
     assert r.session.variables.get('x') == '42'
+
+
+def test_main_runs_script_from_non_tty_stdin(monkeypatch, tmp_path):
+    """Bug 2 回归测试:非 tty stdin 应逐行处理并返回 0。"""
+    from inp_tool.repl import main
+    import sys
+    import io
+    p = tmp_path / 's.inp'
+    p.write_text('physics begin\n  refvel 1.0\nphysics end\n')
+    monkeypatch.setattr(sys, 'stdin', io.StringIO('files\nexit\n'))
+    monkeypatch.setattr(sys, 'stdout', io.StringIO())
+    # isatty() 需要返回 False,默认 StringIO 的 isatty() 就是 False
+    rc = main()
+    assert rc == 0
+
+
+def test_module_importable_without_readline(monkeypatch):
+    """Bug 1 回归测试:repl 模块在 readline 不可用时仍能 import。"""
+    import sys
+    # 模拟 readline 不存在
+    saved_readline = sys.modules.get('readline')
+    sys.modules['readline'] = None  # 让 import readline 失败
+    try:
+        # 强制重新 import
+        if 'inp_tool.repl' in sys.modules:
+            del sys.modules['inp_tool.repl']
+        import inp_tool.repl  # 应当不抛 ModuleNotFoundError
+        assert hasattr(inp_tool.repl, 'ShellREPL')
+    finally:
+        if saved_readline is not None:
+            sys.modules['readline'] = saved_readline
+        elif 'readline' in sys.modules:
+            del sys.modules['readline']
+        if 'inp_tool.repl' in sys.modules:
+            del sys.modules['inp_tool.repl']
