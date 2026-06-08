@@ -100,24 +100,49 @@ class FreestreamPreset:
     def apply(self, inp: InpFile, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         把 preset 应用到 InpFile。返回 {applied_key: value} 记录本次改了什么。
+
+        若 params 里没给 mach / T / p_inf,沿用 InpFile 模板里的现有值;
+        若 InpFile 模板也没有(罕见),则用项目级默认(mach→0, T→288.15, p→101325)。
         """
         applied: Dict[str, Any] = {}
-        uvw = self.compute_uvw(params)
         alpha = float(params.get("alpha", 0.0))
         beta = float(params.get("beta", 0.0))
-        mach = float(params.get("mach", 0.0))
-        T = float(params.get("T_inf", 288.15))
-        refvel = math.sqrt(uvw["U"] ** 2 + uvw["V"] ** 2 + uvw["W"] ** 2)
+
+        # 读模板默认值(guiopts 块)
+        gb = inp.get_block("guiopts")
+        pb = inp.get_block("physics") if self.update_physics else None
+
+        def _existing_typed(block, key, cast, default):
+            if block is None:
+                return default
+            v = block.get_value(key)
+            if v is None:
+                return default
+            try:
+                return cast(v.typed)
+            except (TypeError, ValueError):
+                return default
+
+        template_ma = _existing_typed(gb, "aero_ma", float, 0.0)
+        template_T = _existing_typed(gb, "aero_temp", float, 288.15)
+        template_p = _existing_typed(gb, "aero_pres", float, 101325.0)
+
+        mach = float(params["mach"]) if "mach" in params else template_ma
+        T = float(params["T_inf"]) if "T_inf" in params else template_T
+        p_inf = float(params["p_inf"]) if "p_inf" in params else template_p
+
+        # 重算 U/V/W 用最终的 mach + T(几何分解必然依赖这两个)
+        a = self.speed_of_sound_at(T)
+        U = mach * a * math.cos(math.radians(alpha)) * math.cos(math.radians(beta))
+        V = mach * a * math.sin(math.radians(beta))
+        W = mach * a * math.sin(math.radians(alpha)) * math.cos(math.radians(beta))
+        uvw = {"U": U, "V": V, "W": W}
+        refvel = math.sqrt(U * U + V * V + W * W)
 
         # --- guiopts 块 ---
-        gb = inp.get_block("guiopts")
-        if gb is None:
-            print(
-                "[sweep] WARN: template has no `guiopts` block; "
-                "aero_* fields will not be updated.",
-                file=sys.stderr,
-            )
-        else:
+        if gb is not None:
+            # 这 6 个字段是强耦合的(mach/alpha/beta → U/V/W 几何分解),
+            # 必须一起写,不能只写 alpha
             pairs = {
                 "aero_alpha": alpha,
                 "aero_beta": beta,
@@ -126,35 +151,41 @@ class FreestreamPreset:
                 "aero_v": uvw["V"],
                 "aero_w": uvw["W"],
                 "aero_temp": T,
+                "aero_pres": p_inf,
             }
-            if "p_inf" in params:
-                pairs["aero_pres"] = float(params["p_inf"])
             for k, v in pairs.items():
                 if gb.set(k, v):
                     applied[f"guiopts.{k}"] = v
                 else:
-                    # 字段不存在,append
                     gb.append(k, v)
                     applied[f"guiopts.{k}"] = v
+        else:
+            print(
+                "[sweep] WARN: template has no `guiopts` block; "
+                "aero_* fields will not be updated.",
+                file=sys.stderr,
+            )
 
         # --- physics 块 ---
-        if self.update_physics:
-            pb = inp.get_block("physics")
-            if pb is None:
-                print(
-                    "[sweep] WARN: template has no `physics` block; "
-                    "refvel/reftem/refpre will not be updated.",
-                    file=sys.stderr,
-                )
-            else:
+        if self.update_physics and pb is not None:
+            # refvel 需要 U/V/W 被重算(任何角度/马赫变化)
+            if "mach" in params or "alpha" in params or "beta" in params:
                 if pb.set("refvel", refvel):
                     applied["physics.refvel"] = refvel
+            # reftem 跟 T 绑定
+            if "T_inf" in params:
                 if pb.set("reftem", T):
                     applied["physics.reftem"] = T
-                if "p_inf" in params:
-                    p = float(params["p_inf"])
-                    if pb.set("refpre", p):
-                        applied["physics.refpre"] = p
+            # refpre 跟 p 绑定
+            if "p_inf" in params:
+                if pb.set("refpre", p_inf):
+                    applied["physics.refpre"] = p_inf
+        elif self.update_physics and pb is None:
+            print(
+                "[sweep] WARN: template has no `physics` block; "
+                "refvel/reftem/refpre will not be updated.",
+                file=sys.stderr,
+            )
 
         return applied
 

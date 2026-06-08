@@ -142,3 +142,65 @@ class TestSweepCLI:
         )
         # 缺少 sweeps 应该报错
         assert rc != 0
+
+    def test_sweep_cli_alpha_only_preserves_template_ma(self, tmp_path):
+        """Bug fix regression: --alpha alone should preserve template's aero_ma/u/v/w/temp."""
+        import re as _re
+        template = tmp_path / "t.inp"
+        template.write_text(
+            "system begin\n"
+            "system end\n"
+            "guiopts begin\n"
+            "aero_pres 1.013250e+005\n"
+            "aero_temp 2.880000e+002\n"
+            "aero_u 3.000000e+001\n"
+            "aero_v 0.0\n"
+            "aero_w 0.0\n"
+            "aero_ma 8.000000e-001\n"
+            "aero_alpha 0.000000e+000\n"
+            "aerobeta 0.000000e+000\n"
+            "aero_re 1.000000e+006\n"
+            "guiopts end\n"
+            "physics begin\n"
+            "refvel -1.0\n"
+            "reftem 2.880000e+002\n"
+            "refpre 1.013250e+005\n"
+            "physics end\n"
+        )
+        out_dir = tmp_path / "out"
+        rc, out, err = _run_cli(
+            "sweep", str(template),
+            "--alpha", "0,10",
+            "--out", str(out_dir),
+        )
+        assert rc == 0, f"stderr={err}"
+        # 检查生成的 case_10.0.inp: aero_ma 必须仍是 0.8
+        case_10 = out_dir / "case_10.0.inp"
+        assert case_10.exists(), f"未生成 case_10.0.inp,目录={list(out_dir.glob('*'))}"
+        text = case_10.read_text()
+
+        # 1. aero_ma 应保留模板的 0.8
+        ma_line = next(l for l in text.splitlines() if l.startswith("aero_ma "))
+        assert "8.000000e-001" in ma_line or "0.8" in ma_line, \
+            f"aero_ma 未保留(模板=0.8),实际行={ma_line!r}"
+
+        # 2. aero_temp 应保留模板的 288.0
+        temp_line = next(l for l in text.splitlines() if l.startswith("aero_temp "))
+        assert "2.880000e+002" in temp_line or "288" in temp_line, \
+            f"aero_temp 未保留(模板=288),实际行={temp_line!r}"
+
+        # 3. aero_u 应被重算为 Ma=0.8, alpha=10° 的值
+        # a = sqrt(1.4*287.05*288) ≈ 340.29
+        # U = 0.8*340.29*cos(10°) ≈ 268.0
+        u_line = next(l for l in text.splitlines() if l.startswith("aero_u "))
+        m = _re.search(r"(-?\d+\.?\d*[eE]?[+-]?\d*)", u_line[len("aero_u "):])
+        u_val = float(m.group(1))
+        assert 260 < u_val < 280, f"aero_u 应 ≈ 268 (Ma=0.8, alpha=10),实得 {u_val}"
+
+        # 4. case_0.0.inp 也应保留 Ma=0.8
+        case_0 = out_dir / "case_0.0.inp"
+        assert case_0.exists()
+        text0 = case_0.read_text()
+        ma0_line = next(l for l in text0.splitlines() if l.startswith("aero_ma "))
+        assert "8.000000e-001" in ma0_line or "0.8" in ma0_line, \
+            f"case_0.0.inp 的 aero_ma 未保留,实际行={ma0_line!r}"
