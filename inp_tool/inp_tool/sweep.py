@@ -728,9 +728,12 @@ def _apply_overrides(inp: InpFile, overrides: Dict[str, Any]) -> None:
 # v0.8.0:整算例目录复制核心
 # ============================================================
 def _match_any(name: str, patterns: List[str]) -> bool:
-    """fnmatch 风格通配符匹配,任一 pattern 命中即返回 True"""
+    """fnmatch 风格通配符匹配,任一 pattern 命中即返回 True。
+
+    容忍 user 在 CLI 写 `mlog/` (带 trailing / 习惯),自动 strip。
+    """
     from fnmatch import fnmatch
-    return any(fnmatch(name, p) for p in patterns)
+    return any(fnmatch(name, p.rstrip("/")) for p in patterns)
 
 
 def _copy_one(src: "os.PathLike", dst: "os.PathLike", strategy: CopyStrategy) -> None:
@@ -810,6 +813,13 @@ def _copy_case_files(
         for f in files:
             rel_path = os.path.join(rel, f) if rel != "." else f
             if _match_any(rel_path, exclude):
+                continue
+            # 关键:mcfd.inp 必须由 generate() 用 write_preserve() 写入(覆盖模板修改版),
+            # 若此处也复制/硬链接,HARDLINK/SYMLINK 策略下会共享 inode,
+            # 后续 write_preserve() 写 dst 时会同步覆盖源 mcfd.inp → 静默数据损坏
+            if f == "mcfd.inp":
+                # 仍记入 copied 列表(让 manifest 反映完整文件清单)
+                copied.append(rel_path)
                 continue
             src_f = os.path.join(root, f)
             dst_f = os.path.join(dst, rel_path)

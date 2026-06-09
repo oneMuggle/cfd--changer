@@ -80,59 +80,70 @@ def _make_simple_base(base):
 
 class TestCopyCaseFiles:
     def test_copy_strategy_creates_real_files(self, tmp_path):
-        """COPY:目标目录里有真实文件(非链接)"""
+        """COPY:目标目录里有真实文件(非链接)。
+        mcfd.inp 不由 _copy_case_files 创建(由 generate() 用 write_preserve 写入,
+        避免 HARDLINK/SYMLINK 下共享 inode 损坏源)。"""
         base = _make_simple_base(tmp_path / "base")
         dst = tmp_path / "case"
         copied = _copy_case_files(str(base), str(dst), [], CopyStrategy.COPY)
-        # 全部文件都复制了
-        assert (dst / "mcfd.inp").is_file()
+        # mcfd.inp 不创建(契约:由 caller 写)
+        assert not (dst / "mcfd.inp").exists()
+        # 其他文件复制了
         assert (dst / "data.bin").is_file()
         assert (dst / "config.txt").is_file()
-        # data.bin 不是 symlink,不是 hardlink
-        st = os.stat(dst / "data.bin")
+        # data.bin 不是 symlink
         assert not os.path.islink(dst / "data.bin")
+        # copied 列表含 mcfd.inp(供 manifest 反映完整文件清单)
+        assert "mcfd.inp" in copied
 
     def test_hardlink_strategy_shares_inode(self, tmp_path):
-        """HARDLINK:目标 data.bin 与源共享 inode"""
+        """HARDLINK:目标 data.bin 与源共享 inode(但 mcfd.inp 不参与)"""
         base = _make_simple_base(tmp_path / "base")
         dst = tmp_path / "case"
         _copy_case_files(str(base), str(dst), [], CopyStrategy.HARDLINK)
-        # 硬链接的 st_ino 应相同
+        # 硬链接的 st_ino 应相同(data.bin 是普通硬链接)
         assert os.stat(base / "data.bin").st_ino == os.stat(dst / "data.bin").st_ino
-        # 但不是 symlink
+        # 不是 symlink
         assert not os.path.islink(dst / "data.bin")
+        # mcfd.inp 不在 dst(由 caller 写),避免共享 inode
+        assert not (dst / "mcfd.inp").exists()
 
     def test_symlink_strategy_creates_symlinks(self, tmp_path):
-        """SYMLINK:目标文件都是 symlink(指回源)"""
+        """SYMLINK:目标文件都是 symlink(指回源);mcfd.inp 例外(不参与)"""
         base = _make_simple_base(tmp_path / "base")
         dst = tmp_path / "case"
         _copy_case_files(str(base), str(dst), [], CopyStrategy.SYMLINK)
-        # 全部都是 symlink
-        for f in ["mcfd.inp", "data.bin", "config.txt"]:
+        # mcfd.inp 不在 dst(避免 symlink 写入损坏源)
+        assert not (dst / "mcfd.inp").exists()
+        # data.bin / config.txt 是 symlink
+        for f in ["data.bin", "config.txt"]:
             assert os.path.islink(dst / f), f"{f} should be symlink"
             # 链接目标应是源文件绝对路径
             target = os.readlink(dst / f)
             assert os.path.basename(target) == f
 
     def test_returns_copied_file_list(self, tmp_path):
-        """返回的 copied 列表含全部相对路径(供 manifest 用)"""
+        """返回的 copied 列表含全部相对路径(供 manifest 用,mcfd.inp 也在)"""
         base = _make_simple_base(tmp_path / "base")
         dst = tmp_path / "case"
         copied = _copy_case_files(str(base), str(dst), [], CopyStrategy.COPY)
         assert set(copied) == {"mcfd.inp", "data.bin", "config.txt"}
 
     def test_exclude_applied(self, tmp_path):
-        """排除规则生效:默认排除 *.bak"""
+        """排除规则生效:排除 *.bak;也容忍 trailing / (H1 fix)"""
         base = tmp_path / "base"
         base.mkdir()
         (base / "keep.txt").write_text("k\n")
         (base / "x.bak").write_text("b\n")
+        (base / "mlog").mkdir()
+        (base / "mlog" / "x.log").write_text("log\n")
         dst = tmp_path / "case"
-        copied = _copy_case_files(str(base), str(dst), ["*.bak"], CopyStrategy.COPY)
+        # 容忍 "mlog/" trailing slash (H1 fix)
+        copied = _copy_case_files(str(base), str(dst), ["*.bak", "mlog/"], CopyStrategy.COPY)
         assert (dst / "keep.txt").is_file()
         assert not (dst / "x.bak").exists()
-        assert "keep.txt" in copied
-        assert "x.bak" not in copied
+        # mlog/ 被 strip 后匹配 mlog 目录,子文件也不应被打包
+        assert not (dst / "mlog").exists()
 
     def test_source_dir_not_found_raises(self, tmp_path):
         """src 不存在时抛 FileNotFoundError"""

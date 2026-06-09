@@ -380,6 +380,41 @@ class TestPerDirGenerate:
         assert (out / "case" / "mcfd.inp").is_file()
         assert (out / "case" / "mcfd.bc").is_file()
 
+    def test_per_dir_hardlink_does_not_corrupt_source_mcfd_inp(self, tmp_path):
+        """回归测试(CRITICAL C1):
+        HARDLINK/SYMLINK 策略下,generate() 写 case_X/mcfd.inp 时
+        不应损坏 source_dir/mcfd.inp(因为 mcfd.inp 不走硬链接/符号链接)。
+        旧实现会先 os.link(src mcfd.inp, dst mcfd.inp) 再 write_preserve(dst),
+        导致源 mcfd.inp 被同时覆盖。
+        """
+        base = tmp_path / "base"
+        _make_base_case(base)
+        template = base / "mcfd.inp"
+        # 源 mcfd.inp 原始内容
+        original_src_content = template.read_text()
+        out = tmp_path / "out"
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "source_dir": str(base),
+            "copy_strategy": "hardlink",
+            "sweeps": {"alpha": [0.0, 4.0, 8.0]},  # 用 float 让 default naming 包含小数
+        })
+        from inp_tool.sweep import generate
+        generate(cs)
+        # 关键断言:源的 mcfd.inp 必须 byte-identical(没被改)
+        assert template.read_text() == original_src_content
+        # 同时 case_X/mcfd.inp 应是修改后的(改过 alpha)
+        for case_dir in (out / "case_0.0", out / "case_4.0", out / "case_8.0"):
+            assert case_dir.exists()
+            assert (case_dir / "mcfd.inp").is_file()
+            # case_X/mcfd.inp 不应是 source 的硬链接(应该独立)
+            src_inode = os.stat(template).st_ino
+            dst_inode = os.stat(case_dir / "mcfd.inp").st_ino
+            assert src_inode != dst_inode, (
+                "mcfd.inp 应该是独立文件而非源硬链接(否则写入会损坏源)"
+            )
+
 
 # ======================================================================
 # Phase 4:manifest 扩展(per_dir 模式)

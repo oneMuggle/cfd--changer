@@ -538,6 +538,7 @@ def _apply_v080_overrides(cs, args):
     """v0.8.0:把 CLI 传入的 --source-dir/--copy-strategy/--exclude 应用到 cs。
 
     优先级:CLI flag > config 文件 > 默认值
+    --exclude: 累加到 cs.exclude(不替换默认),用户用 --no-default-exclude 清空
     """
     if getattr(args, "source_dir", None):
         cs.source_dir = args.source_dir
@@ -546,8 +547,8 @@ def _apply_v080_overrides(cs, args):
         cs.copy_strategy = CopyStrategy(args.copy_strategy)
     excl = getattr(args, "exclude", None)
     if excl:
-        # argparse action='append' 多次传时合并;空 list 表示不传
-        cs.exclude = list(excl) if excl else cs.exclude
+        # 累加到现有规则(保留默认),避免用户写 --exclude foo 时静默丢 *.bak 等
+        cs.exclude = list(cs.exclude) + list(excl)
 
 
 def main(argv=None):
