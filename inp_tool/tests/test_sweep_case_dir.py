@@ -357,6 +357,29 @@ class TestPerDirGenerate:
         # 但 output_dir 下不应有 case_0 / case_4 子目录
         assert not out.exists() or list(out.iterdir()) == []
 
+    def test_per_dir_force_overwrites(self, tmp_path):
+        """per_dir 模式:force=True 覆盖已存在的目标子目录"""
+        base = tmp_path / "base"
+        _make_base_case(base)
+        template = base / "mcfd.inp"
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "case").mkdir()  # 预创建
+        (out / "case" / "old_file.txt").write_text("stale")
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "source_dir": str(base),
+            "sweeps": {"alpha": [0]},
+        })
+        from inp_tool.sweep import generate
+        # force=True 不抛错
+        report = generate(cs, force=True)
+        # 旧文件被清除,新文件到位
+        assert not (out / "case" / "old_file.txt").exists()
+        assert (out / "case" / "mcfd.inp").is_file()
+        assert (out / "case" / "mcfd.bc").is_file()
+
 
 # ======================================================================
 # Phase 4:manifest 扩展(per_dir 模式)

@@ -762,6 +762,7 @@ def _copy_case_files(
     dst: "os.PathLike",
     exclude: List[str],
     strategy: CopyStrategy,
+    force: bool = False,
 ) -> List[str]:
     """递归复制 src 目录内容到 dst(不含 mcfd.inp,会在外层由 write_preserve 覆盖)。
 
@@ -770,23 +771,28 @@ def _copy_case_files(
         dst: 目标子目录(将被创建)
         exclude: fnmatch 风格的排除模式(默认含 *.bak / mlog / nodesout.bin)
         strategy: 复制策略
+        force: 目标已存在时是否覆盖(默认 False 抛错)
 
     Returns:
         实际处理的文件相对路径列表(供 manifest 用)
 
     Raises:
-        FileExistsError: dst 已存在(避免静默覆盖)
+        FileExistsError: dst 已存在且 force=False
         FileNotFoundError: src 不存在
     """
+    import shutil as _shutil
     src = str(src)
     dst = str(dst)
     if not os.path.isdir(src):
         raise FileNotFoundError(f"source_dir not found: {src}")
     if os.path.exists(dst):
-        raise FileExistsError(
-            f"target case directory already exists: {dst}; "
-            f"use a different naming template or remove the directory"
-        )
+        if not force:
+            raise FileExistsError(
+                f"target case directory already exists: {dst}; "
+                f"use --force to overwrite or change the naming template"
+            )
+        # force=True → 删了重建
+        _shutil.rmtree(dst)
 
     os.makedirs(dst, exist_ok=False)
     copied: List[str] = []
@@ -825,7 +831,7 @@ def _file_sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
+def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> SweepReport:
     """
     解析模板 -> 摊平 specs(笛卡尔展开在此) -> 每个 case 应用 preset + overrides ->
     写盘 -> 累积报告。
@@ -912,6 +918,7 @@ def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
                     dst=path,
                     exclude=sweep.exclude,
                     strategy=sweep.copy_strategy,
+                    force=force,
                 )
                 # 2) 写修改后的 mcfd.inp
                 write_preserve(inp, os.path.join(path, "mcfd.inp"))
