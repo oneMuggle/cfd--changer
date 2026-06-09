@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.7.0] - 2026-06-09
+
+### Added
+- **sweep 灵活化**:三种新模式 + CSV loader,完全向后兼容
+  - `CartesianSpec` / `ExplicitCase` dataclass + `CaseSweep.specs` 字段 + `materialize()` 方法
+  - `cases:` 显式列表模式(`cases: [{...}, ...]`)
+  - `groups:` 分组继承模式(`common` 字段自动注入,`{group}` 命名占位符)
+  - 混合模式(`sweeps` + `cases` + `groups` 共存)
+  - `CaseSweep.from_csv(path, template, output_dir, ...)` 加载 CSV(必填表头,列类型一致)
+  - CLI 新增 `--template` / `--naming` flag 支持 CSV 模式:`inp-tool sweep cases.csv --template t.inp --naming "case_a{alpha}.inp"`
+- 文档:`docs/technical/04-sweep-architecture.md` 加 §2.4 CaseSpec 抽象;`05-sweep-usage.md` 加 §6 三种模式 + 4 个完整示例(显式 / 分组 / 多组 / CSV)
+- 60+ 新测试(`test_sweep_backward` / `test_sweep_explicit` / `test_sweep_groups` / `test_sweep_mixed` / `test_sweep_csv` / `test_sweep_cli_csv`)
+
+### Changed
+- `CaseSweep` 内部用 `specs` 列表统一 case 归一化;`generate()` 走 `materialize()` 路径
+- 命名模板支持 `{group}` 占位符(由 `materialize` 注入)
+- 现有 `sweeps:` YAML 行为零变化(241 老测试全绿)
+
+### Compatibility
+- `sweeps: SweepSpec` 字段保留,老 API `cs.sweeps.values` 仍可用
+- `expand_cartesian(spec: SweepSpec)` 仍可独立调用
+- 老 CLI 调用(`inp-tool sweep sweep.yaml --alpha ...`)零修改继续可用
+
 ## [v0.6.1] - 2026-06-09
 
 ### Fixed
