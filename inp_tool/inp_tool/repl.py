@@ -596,6 +596,10 @@ class ShellREPL(cmd.Cmd):
         p = argparse.ArgumentParser(prog="sweep-config", add_help=False)
         p.add_argument("path")
         p.add_argument("-y", "--yes", action="store_true")
+        # 2026-06-09 post-review M1: 显式给无参场景一个友好提示
+        if not arg.strip():
+            self._err("sweep-config: missing PATH argument (try `sweep-config --help`)")
+            return
         try:
             ns = p.parse_args(arg.split())
         except SystemExit:

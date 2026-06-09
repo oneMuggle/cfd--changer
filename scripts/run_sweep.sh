@@ -31,12 +31,6 @@ INP_TOOL_DIR="$REPO_ROOT/inp_tool"
 
 [[ -d "$INP_TOOL_DIR" ]] || { echo "error: $INP_TOOL_DIR not found" >&2; exit 2; }
 
-# 验证 conda env
-if ! conda run -n cfdchanger python -c "import sys; sys.exit(0)" 2>/dev/null; then
-    echo "error: conda env 'cfdchanger' not available" >&2
-    exit 2
-fi
-
 # 验证 config 文件存在
 [[ -f "$CFG" ]] || { echo "error: config not found: $CFG" >&2; exit 2; }
 
@@ -49,6 +43,12 @@ echo "  config:  $CFG"
 echo "  extra:   $*"
 
 cd "$INP_TOOL_DIR"
+# 验证 conda env + inp_tool 包(2026-06-09 post-review H1 强化)
+# 必须在 cd 之后,否则 Python 会从外层 inp_tool/ 目录(非包)import,AttributeError
+if ! conda run -n cfdchanger python -c "import inp_tool; print(inp_tool.__version__)" 2>/dev/null; then
+    echo "error: conda env 'cfdchanger' lacks inp_tool" >&2
+    exit 2
+fi
 conda run -n cfdchanger python -m inp_tool.cli sweep \
     --out "$OUT_DEFAULT" \
     --manifest "$OUT_DEFAULT/manifest.json" \
