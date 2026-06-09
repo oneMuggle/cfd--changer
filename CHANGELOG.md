@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.8.1] - 2026-06-09
+
+### Fixed
+- **WizardSweep 缺 v0.8.0 引导**:原 v0.8.0 release 时漏了 REPL `wizard sweep` 命令的 source_dir 引导(只更新了 CLI flag + `inp-tool sweep -i`),导致 REPL user 拿不到 per_dir 模式。本次把 WizardSweep 从 7 步扩到 8 步(新增 step_5_source_dir:问基础算例目录 + 复制策略),三入口(CLI / interactive / REPL wizard) 完全一致
+- **预览行增加源目录显示**:per_dir 模式时,step_7_preview 显式打印 `源目录: <path> (策略: hardlink)`,用户确认前能看到
+
 ## [v0.8.0] - 2026-06-09
 
 ### Added
