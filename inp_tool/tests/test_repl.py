@@ -630,3 +630,33 @@ def test_aero_non_numeric_value_errors(tmp_path):
     assert "'abc'" in out
     lf = r.session.files['v1']
     assert lf.dirty is False
+
+
+def test_aero_does_not_write_to_disk_without_save(tmp_path):
+    """Bug fix: 'aero' command must NOT write to disk without 'save'.
+
+    REPL 合约:`aero` 只改 in-memory 状态 + 标 dirty,`save` 才是显式
+    commit。'aero' 偷偷写盘会破坏 `undo`,也与 `set` / `let` 行为不一致。
+    """
+    import hashlib
+    p = tmp_path / 's.inp'
+    p.write_text('system begin\nsystem end\nguiopts begin\n'
+                 'aero_pres 1.013250e+005\naero_temp 2.880000e+002\n'
+                 'aero_u 3.000000e+001\naero_v 0.0\naero_w 0.0\n'
+                 'aero_ma 8.000000e-001\naero_alpha 0.000000e+000\n'
+                 'aerobeta 0.000000e+000\naero_re 1.000000e+006\n'
+                 'guiopts end\n'
+                 'physics begin\nrefvel -1.0\nreftem 2.880000e+002\n'
+                 'refpre 1.013250e+005\nphysics end\n')
+    before_hash = hashlib.md5(p.read_bytes()).hexdigest()
+    r = ShellREPL()
+    _run(r, f'load {p} as v1', 'aero alpha=5')
+    after_hash = hashlib.md5(p.read_bytes()).hexdigest()
+    assert before_hash == after_hash, (
+        f"aero secretly wrote to disk! before={before_hash[:8]} after={after_hash[:8]}"
+    )
+    # dirty 标志应仍被设置(in-memory 状态已变)
+    assert r.session.files['v1'].dirty is True
+    # in-memory 状态确实改了(通过 aero 查询验证)
+    out = _run(r, 'aero')
+    assert 'α=5.0' in out or 'α=5' in out
