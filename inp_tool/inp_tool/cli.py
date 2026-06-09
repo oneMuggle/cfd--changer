@@ -396,7 +396,7 @@ def cmd_sweep(args):
         return 0
 
     # 解析 first/config: 1 个参数按 config 处理;2 个参数按 template+config
-    if args.config is None and args.first is not None and args.first.lower().endswith((".json", ".yaml", ".yml")):
+    if args.config is None and args.first is not None and args.first.lower().endswith((".json", ".yaml", ".yml", ".csv")):
         template = None
         config = args.first
     else:
@@ -407,7 +407,38 @@ def cmd_sweep(args):
         if not os.path.isfile(config):
             print(f"sweep: config not found: {config}", file=sys.stderr)
             return 2
-        if config.lower().endswith((".yaml", ".yml")):
+        if config.lower().endswith(".csv"):
+            # PR #1:CSV 模式,需要 --template 提供模板路径
+            csv_template = getattr(args, "template", None)
+            if not csv_template:
+                print(
+                    "sweep: CSV mode requires --template <template.inp>",
+                    file=sys.stderr,
+                )
+                return 2
+            if not os.path.isfile(csv_template):
+                print(
+                    f"sweep: template not found: {csv_template}",
+                    file=sys.stderr,
+                )
+                return 2
+            # 默认输出目录 = CSV 文件所在目录的 ./sweep_cases
+            csv_out = args.out or os.path.join(
+                os.path.dirname(os.path.abspath(config)) or ".",
+                "sweep_cases",
+            )
+            try:
+                cs = CaseSweep.from_csv(
+                    config,
+                    template=csv_template,
+                    output_dir=csv_out,
+                    naming=getattr(args, "naming", None),
+                    manifest_path=args.manifest,
+                )
+            except (KeyError, ValueError, FileNotFoundError) as e:
+                print(f"sweep: invalid CSV: {e}", file=sys.stderr)
+                return 2
+        elif config.lower().endswith((".yaml", ".yml")):
             try:
                 cs = CaseSweep.from_yaml(config)
             except ImportError as e:
@@ -535,6 +566,9 @@ def main(argv=None):
     )
     sw.add_argument('first', nargs='?', help='模板 .inp 路径 / 或唯一参数:JSON config')
     sw.add_argument('config', nargs='?', help='可选: JSON 配置文件')
+    # PR #1:CSV 模式专用
+    sw.add_argument('--template', help='模板 .inp 路径(CSV 模式必填)')
+    sw.add_argument('--naming', help='命名模板(CSV 模式专用,如 case_a{alpha}.inp)')
     sw.add_argument('--alpha', help='攻角扫描(逗号分隔,deg)')
     sw.add_argument('--beta', help='侧滑角扫描(逗号分隔,deg)')
     sw.add_argument('--mach', help='马赫数扫描(逗号分隔)')
