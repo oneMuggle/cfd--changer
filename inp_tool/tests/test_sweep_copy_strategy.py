@@ -56,8 +56,11 @@ class TestCopyOne:
         _copy_one(str(src), str(dst), CopyStrategy.SYMLINK)
         assert os.path.islink(dst)
         # Windows 上 os.readlink 返回 extended path 格式 (\\?\C:\...);
-        # pathlib.Path 会在 == 比较时规范化路径,跨平台安全
-        assert Path(os.readlink(dst)) == src
+        # 需手动 strip \\?\ 前缀才能跨平台比较
+        target = os.readlink(dst)
+        if target.startswith("\\\\?\\"):
+            target = target[4:]
+        assert Path(target) == src
         # 删源后目标成死链接
         src.unlink()
         assert os.path.islink(dst)
