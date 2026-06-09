@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.8.0] - 2026-06-09
+
+### Added
+- **整算例目录生成(sweep per-case dir 模式)**:从 `reference/suanli` 等基础算例目录一键复制 + 批量改 `mcfd.inp`,每个 case = 完整可运行算例目录(网格/配置/物性/脚本全到位),而非孤立 .inp 文件
+- **`source_dir` 字段**:`CaseSweep.source_dir: Optional[str]`(None = 老 flat 行为,设值 = 整目录复制)
+- **`CopyStrategy` 枚举**:`copy` / `hardlink`(默认,零空间)/ `symlink`,每种都支持失败自动退化(跨 FS / Windows 权限)
+- **`_resolve_layout(cs) -> "flat" | "per_dir"`**:依据 `source_dir` 自动判定,无 bool 字段
+- **`_copy_case_files()` 核心**:递归复制 + fnmatch 排除 + 友好错误(FileNotFoundError / FileExistsError)
+- **CLI 4 个新 flag**:`--source-dir DIR` / `--copy-strategy {copy,hardlink,symlink}` / `--exclude PATTERN`(可多次传)/ `--force`(per_dir 时覆盖已存在)
+- **interactive prompt**:`build_sweep_config_interactive()` 新增 source_dir + copy_strategy 引导(source_dir 非空时才问 copy_strategy)
+- **manifest 扩展**:per_dir 模式 manifest 顶层新增 `layout` / `source_dir` / `copy_strategy` / `exclude`;每 case 新增 `files`(实际处理文件清单);flat 模式 manifest 零变化
+- **`DEFAULT_EXCLUDE` 常量**:默认 `*.bak` / `*.BAK` / `mlog` / `nodesout.bin` / `*.log`
+- **新模块导出**:`from inp_tool import CopyStrategy, DEFAULT_EXCLUDE`
+- ~40 新测试:`test_sweep_case_dir.py` / `test_sweep_copy_strategy.py` / `test_sweep_interactive.py` 加 source_dir 用例
+- **CLI help 自动更新**:`inp-tool sweep --help` 立即可见 4 个新 flag
+
+### Changed
+- `generate()` 新增 `force: bool = False` 形参(透传 CLI `--force`)
+- `_copy_case_files()` 新增 `force: bool = False` 形参
+- `build_sweep_config_interactive()` prompt 序列:11 → 12 步(加 source_dir)
+- `CaseResult` 新增 `files_copied: Optional[List[str]]` 字段
+- `SweepReport` 新增 `layout` / `source_dir` / `copy_strategy` / `exclude` 字段
+
+### Compatibility
+- 100% 向后兼容:不给 `source_dir` 时行为与 v0.7.1 完全一致;现有 359 测试零修改
+- 现有 manifest 文件无需重写(flat 模式 manifest 字段集零变化)
+- API 签名只有 additive 变化(新字段都带默认值)
+
+### Verified
+- 真实算例 smoke:`reference/suanli` (544MB) 跑 2-case sweep,hardlink 模式耗时 < 1s
+- inode 共享验证:`cellsin.bin` 源/目标 st_ino 相同
+- 排除规则验证:`*.bak` / `mlog/` / `nodesout.bin` / `*.log` 均未被打包
+- manifest 字段:`layout=per_dir` / `source_dir` / `copy_strategy=hardlink` / `exclude` 全到位
+
 ## [v0.7.1] - 2026-06-09
 
 ### Added

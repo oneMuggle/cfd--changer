@@ -146,6 +146,34 @@ case_a20_b10.inp
 case_a20_b15.inp
 ```
 
+### 整算例目录模式(v0.8.0+)
+
+如果基础算例是**完整目录**(含网格/配置/物性/脚本,如 `reference/suanli/`),普通 sweep 只会生成孤立的 mcfd.inp,跑不起来。v0.8.0 起,设 `source_dir` 后,wizard 会**把基础算例整目录复制到每个子算例**,只覆盖 mcfd.inp。
+
+CLI 等价命令(同样效果):
+```bash
+inp-tool sweep config.yaml \
+  --source-dir /path/to/reference/suanli \
+  --copy-strategy hardlink
+```
+
+输出示例(`/tmp/my_sweep/`):
+```
+case_a10_b05/   ← 完整算例
+  ├── mcfd.inp           (修改后)
+  ├── cellsin.bin        (硬链接,0 空间)
+  ├── nodesin.bin
+  ├── mcfd.bc / mcfd.grp
+  ├── npfopts.inp / pltopts.inp
+  ├── C.dat / O2.dat / ...
+  └── run_cfdpp.pbs
+case_a10_b08/
+  ...
+manifest.json   ← 含 layout/source_dir/copy_strategy/files
+```
+
+**复制策略选 `hardlink`(默认)** 最经济:100 个 case × 544MB = 0 额外磁盘。改 `mcfd.inp` 时只影响自身,网格是只读共享。
+
 ### CSV 模式示例
 
 ```
