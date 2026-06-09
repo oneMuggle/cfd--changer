@@ -287,5 +287,104 @@ used_names = {"case_0.inp": 0}
 | 命名模板用 `str.format` | 与 Python 习惯一致,无新语法学习成本 |
 | 单值轴不进默认 naming | 文件名不被 T_inf/p_inf 等常量污染,可读性 |
 | `applied` 字段记录真实改动 | 用户可核对方程与模板默认值的差异 |
+| 不修改 `source_dir` 自身的文件 | 只读 + 硬链接/符号链接 0 写源端,保护用户数据 |
+
+## 9. v0.8.0:整算例目录模式(per_dir)
+
+### 9.1 背景
+
+真实算例是**完整目录**(网格/配置/物性/作业脚本),而非孤立 `mcfd.inp`。v0.7.x 只能写 mcfd.inp,用户必须手动 `cp -r` 基础算例到每个子算例,体验断链。v0.8.0 新增 `source_dir` 字段,直接把基础算例整目录复制到每个子算例,只覆盖 mcfd.inp。
+
+### 9.2 布局自动判定
+
+```python
+def _resolve_layout(sweep: CaseSweep) -> str:
+    return "per_dir" if sweep.source_dir else "flat"
+```
+
+- `source_dir=None` → **flat**(v0.7.x 行为,1 个 case = 1 个 .inp 文件)
+- `source_dir=path` → **per_dir**(1 个 case = 1 个子目录,完整算例)
+
+无 bool 字段,避免冗余配置。
+
+### 9.3 流程
+
+```
+             ┌──────────────────────┐
+             │ source_dir (基础算例) │
+             └────┬─────────────────┘
+                  ▼  (os.walk + fnmatch 排除 *.bak / mlog / nodesout.bin)
+             ┌──────────────────────┐
+             │ 每个文件按 strategy   │
+             │  copy / hardlink /   │  ← 默认 hardlink
+             │  symlink             │
+             └────┬─────────────────┘
+                  ▼
+             ┌──────────────────────┐
+             │ output_dir / case_X/ │  ← 子目录名 = render_case_name(... ext="")
+             │   ├── mcfd.inp  (覆)  │
+             │   ├── cellsin.bin    │
+             │   ├── nodesin.bin    │
+             │   └── ...            │
+             └──────────────────────┘
+                  ▼
+             ┌──────────────────────┐
+             │ write_preserve()     │  ← 修改后的 mcfd.inp
+             │ 覆盖 mcfd.inp        │
+             └──────────────────────┘
+```
+
+### 9.4 CopyStrategy 退化链
+
+| 策略 | 首选 | 失败 → 退化 | 失败 → 退化 | 备注 |
+|---|---|---|---|---|
+| `copy` | `shutil.copy2` | — | — | 最慢、最占空间 |
+| `hardlink` | `os.link` | `shutil.copy2` | — | 默认,跨 FS 失败才退化 |
+| `symlink` | `os.symlink` | `os.link` | `shutil.copy2` | Windows 需 dev mode |
+
+### 9.5 manifest 扩展(per_dir 模式)
+
+```json
+{
+  "template": "reference/suanli/mcfd.inp",
+  "template_sha256": "...",
+  "generated_at": "2026-06-09T20:30:00",
+  "layout": "per_dir",                  ← 新
+  "source_dir": "reference/suanli",     ← 新
+  "copy_strategy": "hardlink",          ← 新
+  "exclude": ["*.bak", "mlog", "..."],  ← 新
+  "total": 2,
+  "cases": [
+    {
+      "case_id": "case_0.0",
+      "path": "/tmp/sweep_smoke_v080a/case_0.0",
+      "files": ["mcfd.inp", "cellsin.bin", ...],   ← 新(17 个文件清单)
+      "params": {"alpha": 0.0, "beta": 0.0, "mach": 0.6},
+      "applied": {"guiopts.aero_alpha": 0.0, "guiopts.aero_u": 204.99, ...}
+    }
+  ]
+}
+```
+
+**flat 模式 manifest 零变化**(新增字段仅 per_dir 写入),保持完全向后兼容。
+
+### 9.6 性能(实测,reference/suanli 544MB)
+
+| 模式 | 100 cases | IO | 磁盘占用 |
+|---|---|---|---|
+| `copy` | ~5min | 读 544MB × 100 = 54GB | +54GB |
+| `hardlink`(默认) | <5s | 0(全 inode 操作) | +0 |
+| `symlink` | <5s | 0 | +0(跨 FS) |
+
+### 9.7 默认排除规则
+
+| 模式 | 原因 |
+|---|---|
+| `*.bak` / `*.BAK` | 备份文件,不应进算例 |
+| `mlog` | 求解器运行时日志目录 |
+| `nodesout.bin` | 求解器输出(下次跑会被覆写) |
+| `*.log` | 通用日志 |
+
+用户可用 `--exclude` 多次传覆盖默认。
 | `dry_run` 单独参数 | CI 验证用,无需占位文件 |
 | 不用 `eval()` / `exec()` | 任何用户输入的 str 都不参与代码求值,安全 |

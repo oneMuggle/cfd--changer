@@ -27,6 +27,8 @@ from .sweep import (
     SweepReport,
     CaseSweep,
     generate,
+    CopyStrategy,        # v0.8.0
+    DEFAULT_EXCLUDE,     # v0.8.0
 )
 
 __all__ = [
@@ -38,5 +40,7 @@ __all__ = [
     'SweepSpec', 'expand_cartesian', 'FreestreamPreset',
     'render_case_name', 'CaseResult', 'SweepReport',
     'CaseSweep', 'generate',
+    # v0.8.0 整算例目录模式
+    'CopyStrategy', 'DEFAULT_EXCLUDE',
 ]
-__version__ = '0.7.1'
+__version__ = '0.8.0'

@@ -6,13 +6,16 @@ mcfd.inp sweep 批量算例生成器 v0.1
 - SweepSpec: 笛卡尔积展开
 - render_case_name: 命名模板
 - CaseResult / SweepReport: 结果聚合
+- CopyStrategy (v0.8.0):整算例目录复制策略
 """
 from __future__ import annotations
 import copy
+import enum
 import hashlib
 import math
 import os
 import re
+import shutil
 import sys
 import itertools
 import json
@@ -26,6 +29,36 @@ from .writer import write as write_inp
 
 # 一个 sweep 轴的值可以是标量或列表
 SweepValue = Union[int, float, str, List[Union[int, float, str]]]
+
+
+# ============================================================
+# v0.8.0:CopyStrategy + 整算例目录生成
+# ============================================================
+class CopyStrategy(str, enum.Enum):
+    """整算例目录复制策略(per_dir 模式)"""
+    COPY = "copy"          # shutil.copy2(慢,占空间)
+    HARDLINK = "hardlink"  # os.link(快,零空间,跨 inode 但同 FS)— 默认
+    SYMLINK = "symlink"    # os.symlink(零空间,跨 FS,Windows 需 dev mode)
+
+
+# 默认排除规则:基础算例目录里"不该被打包进子算例"的文件
+DEFAULT_EXCLUDE: List[str] = [
+    "*.bak",         # 备份
+    "*.BAK",
+    "mlog",          # 上次运行的日志目录
+    "nodesout.bin",  # 求解器输出(下次跑会被覆写)
+    "*.log",         # 通用日志
+]
+
+
+def _resolve_layout(sweep: "CaseSweep") -> str:
+    """根据 source_dir 是否设置决定输出布局。
+
+    Returns:
+        "flat"    — source_dir 未设,每个 case = 1 个 .inp 文件(v0.7.x 行为)
+        "per_dir" — source_dir 有值,每个 case = 1 个子目录(完整算例)
+    """
+    return "per_dir" if sweep.source_dir else "flat"
 
 
 @dataclass
@@ -243,20 +276,31 @@ class CaseResult:
     path: str
     params: Dict[str, Any] = field(default_factory=dict)
     applied: Dict[str, Any] = field(default_factory=dict)
+    # v0.8.0:per_dir 模式时记录实际复制/链接的文件列表(供 manifest 用)
+    # flat 模式时为 None
+    files_copied: Optional[List[str]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "case_id": self.case_id,
             "path": self.path,
             "params": dict(self.params),
             "applied": dict(self.applied),
         }
+        if self.files_copied is not None:
+            d["files"] = list(self.files_copied)
+        return d
 
 
 @dataclass
 class SweepReport:
     template: str
     cases: List[CaseResult] = field(default_factory=list)
+    # v0.8.0:per_dir 模式时记录元信息(flat 模式为 None,保持向后兼容)
+    layout: Optional[str] = None
+    source_dir: Optional[str] = None
+    copy_strategy: Optional[str] = None
+    exclude: Optional[List[str]] = None
 
     @property
     def total(self) -> int:
@@ -266,11 +310,22 @@ class SweepReport:
         return iter(self.cases)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "template": self.template,
             "total": self.total,
             "cases": [c.to_dict() for c in self.cases],
         }
+        # 仅 per_dir 模式写入新字段(flat 模式不污染 manifest)
+        if self.layout == "per_dir":
+            d["layout"] = "per_dir"
+            d["source_dir"] = self.source_dir
+            d["copy_strategy"] = (
+                self.copy_strategy.value
+                if hasattr(self.copy_strategy, "value")
+                else self.copy_strategy
+            )
+            d["exclude"] = list(self.exclude or [])
+        return d
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
@@ -325,6 +380,10 @@ class CaseSweep:
     naming_ext: str = ".inp"
     # PR #1 新增:统一 spec 列表(老 sweeps 字段保留,向后兼容)
     specs: List[Union[CartesianSpec, ExplicitCase]] = field(default_factory=list)
+    # v0.8.0 新增:整算例目录模式
+    source_dir: Optional[str] = None
+    copy_strategy: CopyStrategy = CopyStrategy.HARDLINK
+    exclude: List[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE))
 
     # --------------------- 构造 ---------------------
     @classmethod
@@ -373,6 +432,21 @@ class CaseSweep:
         # naming_ext: 2026-06-09 起可配置,默认 ".inp" 保持向后兼容
         naming_ext = d.get("naming_ext", ".inp")
 
+        # v0.8.0:整算例目录模式字段
+        source_dir = d.get("source_dir")  # 缺省/None → flat 模式
+        # copy_strategy:接受字符串("copy"/"hardlink"/"symlink")或枚举实例
+        cs_raw = d.get("copy_strategy", CopyStrategy.HARDLINK)
+        try:
+            copy_strategy = cs_raw if isinstance(cs_raw, CopyStrategy) else CopyStrategy(cs_raw)
+        except ValueError as e:
+            raise ValueError(
+                f"CaseSweep config: invalid copy_strategy {cs_raw!r}; "
+                f"expected one of {[s.value for s in CopyStrategy]}"
+            ) from e
+        # exclude:None 或缺省 → 用 DEFAULT_EXCLUDE 的副本(避免共享 mutable)
+        exclude_raw = d.get("exclude")
+        exclude = list(exclude_raw) if exclude_raw else list(DEFAULT_EXCLUDE)
+
         return cls(
             template=d["template"],
             output_dir=d["output_dir"],
@@ -383,6 +457,9 @@ class CaseSweep:
             manifest_path=manifest_path,
             naming_ext=naming_ext,
             specs=specs,
+            source_dir=source_dir,
+            copy_strategy=copy_strategy,
+            exclude=exclude,
         )
 
     def materialize(self) -> List[ExplicitCase]:
@@ -648,6 +725,112 @@ def _apply_overrides(inp: InpFile, overrides: Dict[str, Any]) -> None:
 
 
 # ============================================================
+# v0.8.0:整算例目录复制核心
+# ============================================================
+def _match_any(name: str, patterns: List[str]) -> bool:
+    """fnmatch 风格通配符匹配,任一 pattern 命中即返回 True。
+
+    容忍 user 在 CLI 写 `mlog/` (带 trailing / 习惯),自动 strip。
+    """
+    from fnmatch import fnmatch
+    return any(fnmatch(name, p.rstrip("/")) for p in patterns)
+
+
+def _copy_one(src: "os.PathLike", dst: "os.PathLike", strategy: CopyStrategy) -> None:
+    """按 strategy 把 src 复制/链接到 dst。失败自动退化(详见各分支)。"""
+    src = str(src)
+    dst = str(dst)
+    if strategy == CopyStrategy.COPY:
+        shutil.copy2(src, dst)
+    elif strategy == CopyStrategy.HARDLINK:
+        try:
+            os.link(src, dst)
+        except OSError:
+            # 跨 FS / 权限不足 → 退化到 copy
+            shutil.copy2(src, dst)
+    elif strategy == CopyStrategy.SYMLINK:
+        try:
+            os.symlink(src, dst)
+        except OSError:
+            try:
+                os.link(src, dst)
+            except OSError:
+                shutil.copy2(src, dst)
+    else:
+        raise ValueError(f"unknown copy strategy: {strategy!r}")
+
+
+def _copy_case_files(
+    src: "os.PathLike",
+    dst: "os.PathLike",
+    exclude: List[str],
+    strategy: CopyStrategy,
+    force: bool = False,
+) -> List[str]:
+    """递归复制 src 目录内容到 dst(不含 mcfd.inp,会在外层由 write_preserve 覆盖)。
+
+    Args:
+        src: 源目录(基础算例)
+        dst: 目标子目录(将被创建)
+        exclude: fnmatch 风格的排除模式(默认含 *.bak / mlog / nodesout.bin)
+        strategy: 复制策略
+        force: 目标已存在时是否覆盖(默认 False 抛错)
+
+    Returns:
+        实际处理的文件相对路径列表(供 manifest 用)
+
+    Raises:
+        FileExistsError: dst 已存在且 force=False
+        FileNotFoundError: src 不存在
+    """
+    import shutil as _shutil
+    src = str(src)
+    dst = str(dst)
+    if not os.path.isdir(src):
+        raise FileNotFoundError(f"source_dir not found: {src}")
+    if os.path.exists(dst):
+        if not force:
+            raise FileExistsError(
+                f"target case directory already exists: {dst}; "
+                f"use --force to overwrite or change the naming template"
+            )
+        # force=True → 删了重建
+        _shutil.rmtree(dst)
+
+    os.makedirs(dst, exist_ok=False)
+    copied: List[str] = []
+
+    for root, dirs, files in os.walk(src):
+        rel = os.path.relpath(root, src)
+        # 排除目录(原地修改 dirs 以让 os.walk 跳过)
+        dirs[:] = [
+            d for d in dirs
+            if not _match_any(
+                os.path.join(rel, d) if rel != "." else d,
+                exclude,
+            )
+        ]
+        for f in files:
+            rel_path = os.path.join(rel, f) if rel != "." else f
+            if _match_any(rel_path, exclude):
+                continue
+            # 关键:mcfd.inp 必须由 generate() 用 write_preserve() 写入(覆盖模板修改版),
+            # 若此处也复制/硬链接,HARDLINK/SYMLINK 策略下会共享 inode,
+            # 后续 write_preserve() 写 dst 时会同步覆盖源 mcfd.inp → 静默数据损坏
+            if f == "mcfd.inp":
+                # 仍记入 copied 列表(让 manifest 反映完整文件清单)
+                copied.append(rel_path)
+                continue
+            src_f = os.path.join(root, f)
+            dst_f = os.path.join(dst, rel_path)
+            os.makedirs(os.path.dirname(dst_f), exist_ok=True)
+            _copy_one(src_f, dst_f, strategy)
+            copied.append(rel_path)
+
+    return copied
+
+
+# ============================================================
 # generate() 主流程
 # ============================================================
 def _file_sha256(path: str) -> str:
@@ -658,13 +841,15 @@ def _file_sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
+def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> SweepReport:
     """
     解析模板 -> 摊平 specs(笛卡尔展开在此) -> 每个 case 应用 preset + overrides ->
     写盘 -> 累积报告。
 
     PR #1:不再直接 expand_cartesian(sweep.sweeps),统一走 cs.materialize(),
     支持 sweeps / cases / groups / 混合模式。
+
+    v0.8.0:支持 source_dir → per_dir 模式(整算例目录生成)。
     """
     if not dry_run:
         os.makedirs(sweep.output_dir, exist_ok=True)
@@ -681,7 +866,23 @@ def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
     if sweep.sweeps.values:
         _check_naming_against_sweep(sweep.naming, sweep.sweeps)
 
-    report = SweepReport(template=sweep.template)
+    # v0.8.0:布局判定
+    layout = _resolve_layout(sweep)
+    # per_dir 模式:目录名无 .inp 扩展
+    # flat 模式:文件名带 naming_ext(默认 .inp)
+    naming_ext = "" if layout == "per_dir" else sweep.naming_ext
+
+    report = SweepReport(
+        template=sweep.template,
+        layout=layout,
+        source_dir=sweep.source_dir,
+        copy_strategy=(
+            sweep.copy_strategy.value
+            if hasattr(sweep.copy_strategy, "value")
+            else sweep.copy_strategy
+        ) if layout == "per_dir" else None,
+        exclude=list(sweep.exclude) if layout == "per_dir" else None,
+    )
     used_names: Dict[str, int] = {}
 
     for case_spec in flat:
@@ -703,7 +904,7 @@ def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
         if case_spec.group is not None:
             render_params["group"] = case_spec.group
         base_name = render_case_name(
-            sweep.naming, render_params, ext=sweep.naming_ext
+            sweep.naming, render_params, ext=naming_ext
         )
         name = base_name
         if name in used_names:
@@ -717,9 +918,22 @@ def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
         path = os.path.join(sweep.output_dir, name)
 
         # 写盘
+        files_copied: Optional[List[str]] = None
         if not dry_run:
             from .writer import write_preserve
-            write_preserve(inp, path)
+            if layout == "per_dir":
+                # 1) 复制基础算例目录(不含 mcfd.inp,会被覆盖)
+                files_copied = _copy_case_files(
+                    src=sweep.source_dir,
+                    dst=path,
+                    exclude=sweep.exclude,
+                    strategy=sweep.copy_strategy,
+                    force=force,
+                )
+                # 2) 写修改后的 mcfd.inp
+                write_preserve(inp, os.path.join(path, "mcfd.inp"))
+            else:
+                write_preserve(inp, path)
 
         # 记录
         case = CaseResult(
@@ -727,6 +941,7 @@ def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
             path=path,
             params=dict(params),
             applied=applied,
+            files_copied=files_copied,
         )
         report.cases.append(case)
 

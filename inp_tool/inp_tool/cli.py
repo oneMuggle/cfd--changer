@@ -326,6 +326,16 @@ def build_sweep_config_interactive():
             return None
 
     output_dir = _prompt("输出目录", default="./sweep_cases")
+    source_dir = _prompt(
+        "基础算例目录 source_dir (空=只写 mcfd.inp)",
+        default="",
+    )
+    copy_strategy = "hardlink"
+    if source_dir:
+        copy_strategy = _prompt(
+            "复制策略 copy/hardlink/symlink (默认 hardlink)",
+            default="hardlink",
+        )
     alpha_s = _prompt("攻角 alpha 扫描 (deg,逗号分隔)", default="0,4,8")
     beta_s = _prompt("侧滑角 beta 扫描 (deg,逗号分隔)", default="0")
     mach_s = _prompt("马赫 mach 扫描 (逗号分隔)", default="0.6,0.8")
@@ -351,6 +361,9 @@ def build_sweep_config_interactive():
         },
         "dry_run": dry,
     }
+    if source_dir:
+        cfg["source_dir"] = source_dir
+        cfg["copy_strategy"] = copy_strategy
     if naming:
         cfg["naming"] = naming
     if manifest:
@@ -383,9 +396,11 @@ def cmd_sweep(args):
             return 2
         if args.manifest:
             cs.manifest_path = args.manifest
+        # v0.8.0:CLI flag 也应用到 interactive 模式
+        _apply_v080_overrides(cs, args)
         if args.dry_run:
             print("[sweep] DRY RUN: no files will be written")
-        report = generate(cs, dry_run=args.dry_run)
+        report = generate(cs, dry_run=args.dry_run, force=getattr(args, "force", False))
         print(f"[sweep] generated {report.total} cases -> {cs.output_dir}")
         if report.total <= 20 or args.verbose:
             for c in report.cases:
@@ -501,10 +516,13 @@ def cmd_sweep(args):
             print(f"sweep: invalid config: {e}", file=sys.stderr)
             return 2
 
+    # v0.8.0:应用 CLI 覆盖到 cs(整算例目录模式)
+    _apply_v080_overrides(cs, args)
+
     if args.dry_run:
         print("[sweep] DRY RUN: no files will be written")
 
-    report = generate(cs, dry_run=args.dry_run)
+    report = generate(cs, dry_run=args.dry_run, force=getattr(args, "force", False))
 
     print(f"[sweep] generated {report.total} cases -> {cs.output_dir}")
     if report.total <= 20 or args.verbose:
@@ -514,6 +532,23 @@ def cmd_sweep(args):
     if cs.manifest_path and not args.dry_run:
         print(f"[sweep] manifest -> {cs.manifest_path}")
     return 0
+
+
+def _apply_v080_overrides(cs, args):
+    """v0.8.0:把 CLI 传入的 --source-dir/--copy-strategy/--exclude 应用到 cs。
+
+    优先级:CLI flag > config 文件 > 默认值
+    --exclude: 累加到 cs.exclude(不替换默认),用户用 --no-default-exclude 清空
+    """
+    if getattr(args, "source_dir", None):
+        cs.source_dir = args.source_dir
+    if getattr(args, "copy_strategy", None):
+        from .sweep import CopyStrategy
+        cs.copy_strategy = CopyStrategy(args.copy_strategy)
+    excl = getattr(args, "exclude", None)
+    if excl:
+        # 累加到现有规则(保留默认),避免用户写 --exclude foo 时静默丢 *.bak 等
+        cs.exclude = list(cs.exclude) + list(excl)
 
 
 def main(argv=None):
@@ -594,6 +629,24 @@ def main(argv=None):
     sw.add_argument('--dry-run', action='store_true', help='只打印不写盘')
     sw.add_argument('-v', '--verbose', action='store_true', help='列出所有 case')
     sw.add_argument('-i', '--interactive', action='store_true', help='走 prompt 序列')
+    # v0.8.0:整算例目录模式
+    sw.add_argument(
+        '--source-dir', dest='source_dir',
+        help='基础算例目录(设置后每个 case = 完整子目录,默认只写 mcfd.inp)',
+    )
+    sw.add_argument(
+        '--copy-strategy', dest='copy_strategy',
+        choices=['copy', 'hardlink', 'symlink'],
+        help='source_dir 复制策略(默认 hardlink)',
+    )
+    sw.add_argument(
+        '--exclude', dest='exclude', action='append', default=[],
+        help='排除规则(fnmatch 风格),可多次传,默认 *.bak mlog nodesout.bin *.log',
+    )
+    sw.add_argument(
+        '--force', action='store_true',
+        help='per_dir 模式时覆盖已存在的子目录(默认报错)',
+    )
     sw.set_defaults(func=cmd_sweep)
 
     sc = sub.add_parser('completion', help='输出 shell 补全脚本 (bash/zsh/fish)')
