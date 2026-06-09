@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.6.0] - 2026-06-08
+
+### Added
+- REPL `aero` 命令:统一管理 mcfd.inp 的攻角 / 来流参数
+  - 无参 `aero` — 一行总览当前 `Ma / α / β / T / p / U / V / W / refvel`
+  - `aero Ma=X alpha=Y beta=Z [T=X] [p=X]` — 一行多参设置,**U/V/W 自动几何分解**(复用 v0.5.1 修复后的 `FreestreamPreset`),未改字段保留模板值
+  - `undo` — 撤销最近的 `aero` 改动
+  - 与 `sweep`(批量扫)互补:`aero` 单点编辑,`sweep` 生成 N 个算例
+
+### 用法
+
+```bash
+inp> aero                                  # 一行总览
+Ma=0.8  α=0.0°  β=0.0°  T=288K  p=1.013e+05Pa
+U=30  V=0  W=0  |V|=30  refvel=-1
+
+inp> aero alpha=5                          # 改 α,U/V/W 自动重算
+aero: alpha 0.0→5.0
+Ma=0.8  α=5.0°  β=0.0°  T=288K  p=1.013e+05Pa
+U=271.1  V=0  W=23.72  |V|=272.2  refvel=272.2
+
+inp> aero Ma=0.85 alpha=10 beta=2         # 同时改 3 个
+inp> undo                                  # 一键回滚
+inp> save                                  # 写盘
+```
+
+### 回归覆盖
+- 10 个新测试 (`test_aero_*`),234 passed / 6 skipped,无回归
+- 详见 [PR #4](https://github.com/oneMuggle/cfd--changer/pull/4)
+
 ## [v0.5.1] - 2026-06-08
 
 ### Fixed
