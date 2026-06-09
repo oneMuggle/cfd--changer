@@ -660,3 +660,64 @@ def test_aero_does_not_write_to_disk_without_save(tmp_path):
     # in-memory 状态确实改了(通过 aero 查询验证)
     out = _run(r, 'aero')
     assert 'α=5.0' in out or 'α=5' in out
+
+
+# ======================================================================
+# sweep-config 命令(2026-06-09 计划:项 3)
+# ======================================================================
+import json as _json
+
+
+def test_sweep_config_valid_shows_preview(tmp_path, monkeypatch):
+    """sweep-config <valid.json> 应先打印 case 清单再问 y/N,默认 N 时不写盘"""
+    cfg = tmp_path / "s.json"
+    cfg.write_text(_json.dumps({
+        "template":   str(SAMPLE_V1),
+        "output_dir": str(tmp_path / "out"),
+        "sweeps":     {"alpha": [0, 5]},
+    }))
+    r = ShellREPL()
+    # mock input() 返回 'n' 拒绝
+    monkeypatch.setattr('builtins.input', lambda *_a, **_k: 'n')
+    out = _run(r, f'sweep-config {cfg}')
+    assert 'PREVIEW' in out
+    assert 'alpha=0' in out
+    assert 'alpha=5' in out
+    # N 拒绝 → 不写盘
+    assert 'cancelled' in out.lower()
+    assert not (tmp_path / "out").exists()
+
+
+def test_sweep_config_invalid_prints_error(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"template": "x"}')  # 缺 output_dir / sweeps
+    r = ShellREPL()
+    out = _run(r, f'sweep-config {bad}')
+    assert 'error' in out.lower() or 'invalid' in out.lower()
+
+
+def test_sweep_config_yes_flag_skips_confirm(tmp_path, monkeypatch):
+    """-y/--yes 应直接写盘不询问"""
+    cfg = tmp_path / "s.json"
+    cfg.write_text(_json.dumps({
+        "template":   str(SAMPLE_V1),
+        "output_dir": str(tmp_path / "out"),
+        "sweeps":     {"alpha": [0, 5]},  # 2 值,默认 naming 才会含 {alpha}
+    }))
+    r = ShellREPL()
+    # 防御:即使 input() 被 monkeypatch,也不应被调用
+    import builtins
+    def _explode(*_a, **_k):
+        raise AssertionError("input() should not be called with -y")
+    monkeypatch.setattr(builtins, 'input', _explode)
+    out = _run(r, f'sweep-config -y {cfg}')
+    assert 'generated' in out.lower()
+    # 默认 naming = "case_{alpha}" → case_0.inp, case_5.inp
+    assert (tmp_path / "out" / "case_0.inp").exists()
+    assert (tmp_path / "out" / "case_5.inp").exists()
+
+
+def test_sweep_config_missing_file_errors():
+    r = ShellREPL()
+    out = _run(r, 'sweep-config /no/such/file.json')
+    assert 'not found' in out.lower() or 'error' in out.lower()

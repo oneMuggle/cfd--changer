@@ -33,6 +33,7 @@
 | [11-ci-cd](11-ci-cd.md) | CI/CD 配置 | GitHub Actions matrix + environment.yml | 当前主线 |
 | [**12-architecture-overview**](12-architecture-overview.md) | **inp_tool 架构总览** | 包结构 / 模块依赖 / 数据流 / 入口点 / 外部依赖 | **基础** |
 | [13-core-modules](13-core-modules.md) | 核心模块设计 | parser / writer / model / diff 4 模块详细 | 当前主线 |
+| [14-sweep-case-study](14-sweep-case-study.md) | sweep 案例研究 | 基于 2026-06-09 验证的 1D/2D sweep + 物理量校验 + naming 速查 + 已知坑 | 当前主线 |
 
 ---
 

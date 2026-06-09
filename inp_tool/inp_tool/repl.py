@@ -26,6 +26,7 @@ REPL_COMMANDS = {
     'load', 'unload', 'files', 'use', 'status', 'save',
     'info', 'get', 'set', 'diff', 'sweep', 'parse',
     'aero',  # 单算例 freestream 编辑
+    'sweep-config',  # 2026-06-09 新增:从 JSON/YAML 跑 sweep(预校验+预览)
     'undo', 'let', 'help', 'history', 'exit', 'quit',
 }
 
@@ -96,6 +97,18 @@ class ShellREPL(cmd.Cmd):
         except ValueError as e:
             self._err(str(e))
             return False
+        # 2026-06-09: 支持连字符命令名(如 sweep-config)
+        # stdlib cmd.Cmd 把 'sweep-config foo' 拆成 cmd='sweep' arg='-config foo',
+        # 视为 flag。我们提前检查首 token 是否有 '-' 且对应 do_<name> 方法存在,
+        # 有则手工分发;否则走默认 cmd.Cmd。
+        head, _, _tail = line.partition(' ')
+        if '-' in head:
+            method_name = 'do_' + head.replace('-', '_')
+            method = getattr(self, method_name, None)
+            if method is not None:
+                result = method(_tail)
+                self.history.append(line)
+                return result
         result = super().onecmd(line)
         self.history.append(line)
         return result
@@ -571,6 +584,76 @@ class ShellREPL(cmd.Cmd):
         rc = cmd_sweep(ns)
         if rc:
             self._err(f'cmd_sweep returned {rc}')
+
+    # ----- sweep-config:从 JSON/YAML 加载并预览+确认 (2026-06-09) -----
+
+    def do_sweep_config(self, arg):
+        """sweep-config [-y] PATH — 加载 sweep 配置文件,预览 case 清单,确认后写盘"""
+        import argparse
+        from pathlib import Path
+        from .sweep import CaseSweep, generate, expand_cartesian
+
+        p = argparse.ArgumentParser(prog="sweep-config", add_help=False)
+        p.add_argument("path")
+        p.add_argument("-y", "--yes", action="store_true")
+        # 2026-06-09 post-review M1: 显式给无参场景一个友好提示
+        if not arg.strip():
+            self._err("sweep-config: missing PATH argument (try `sweep-config --help`)")
+            return
+        try:
+            ns = p.parse_args(arg.split())
+        except SystemExit:
+            return
+
+        path = Path(ns.path)
+        if not path.is_file():
+            self._err(f"sweep-config: file not found: {path}")
+            return
+
+        # 1. 解析
+        try:
+            if path.suffix.lower() in (".yaml", ".yml"):
+                cs = CaseSweep.from_yaml(str(path))
+            else:
+                cs = CaseSweep.from_json(str(path))
+        except (KeyError, ValueError) as e:
+            self._err(f"sweep-config: invalid config: {e}")
+            return
+        except ImportError as e:
+            self._err(f"sweep-config: {e}")
+            return
+
+        # 2. 预览(展开笛卡尔积,仅展示)
+        try:
+            cases = expand_cartesian(cs.sweeps)
+        except ValueError as e:
+            self._err(f"sweep-config: {e}")
+            return
+
+        print(f"=== PREVIEW ({len(cases)} cases) ===")
+        for combo in cases:
+            params_str = " ".join(f"{k}={v}" for k, v in combo.items())
+            print(f"  {params_str}")
+        print(f"template: {cs.template}")
+        print(f"output:   {cs.output_dir}")
+        if cs.manifest_path:
+            print(f"manifest: {cs.manifest_path}")
+
+        # 3. 确认
+        if not ns.yes:
+            try:
+                ans = input("proceed? [y/N] ")
+            except (EOFError, KeyboardInterrupt):
+                ans = "n"
+            if ans.strip().lower() not in ("y", "yes"):
+                print("cancelled.")
+                return
+
+        # 4. 执行
+        report = generate(cs, dry_run=False)
+        print(f"generated {report.total} cases -> {cs.output_dir}")
+        if cs.manifest_path:
+            print(f"manifest -> {cs.manifest_path}")
 
     # ----- 单算例 freestream 编辑(do_aero) ----------------------------
 
