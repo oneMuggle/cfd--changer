@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.7.1] - 2026-06-09
+
+### Added
+- **i18n 基础设施**:`inp_tool/i18n.py` 纯 stdlib dict i18n + `t(key, **kw)` + `set_lang(zh|en)` + `INP_TOOL_LANG` 环境变量
+- **REPL 中文化**:默认 zh,`--lang en` 切英文;intro / help / 错误带建议;启动打印"快速开始"面板(5 命令)
+- **3 个任务向导**(`wizard` / `wizard modify-file` / `wizard sweep` / `wizard diff`):
+  - `WizardBase` 抽象 + 通用 `input_text` / `confirm` / `menu` 组件
+  - `WizardModifyFile` 5 步:选文件 → 选字段 → 输值 → 预览 → 输出
+  - `WizardSweep` 7 步:模板 → 模式(笛卡尔/cases/groups/CSV)→ 填参 → 命名 → 输出 → 预览 → 执行(用 PR #1 新能力)
+  - `WizardDiff` 3 步:基准 → 对比 → 输出格式
+- **CLI `--lang` flag**:顶层 `--lang zh|en` 切语言
+- **新模块**:`inp_tool/wizard.py`(`WizardCancel` / `WizardBase` / 3 个具体向导 / 4 个入口函数)
+- **用户手册**:`docs/user-manual/` 新建,4 文件:README + 01-quickstart + 02-repl-tour + 03-tasks
+- ~60 新测试:`test_i18n` / `test_repl_zh` / `test_wizard_{modify_file,sweep,diff,menu}`
+
+### Compatibility
+- 老 API 不变;`cs.sweeps.values` / `expand_cartesian(spec)` 等所有 v0.7.0 API 仍可用
+- 老 CLI 调用零修改继续可用
+- 老用户用 `--lang en` 切回英文(全功能等价)
+- `tutorial` 命令保留(5 步自动演示)
+
 ## [v0.7.0] - 2026-06-09
 
 ### Added

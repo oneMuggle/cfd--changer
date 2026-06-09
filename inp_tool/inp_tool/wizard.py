@@ -1,0 +1,696 @@
+"""
+inp_tool 任务向导(Task Wizards)模块 v0.7.1
+
+提供 3 个任务导向的向导,每个都是完成具体工作的工具:
+
+  - wizard modify-file  — 修改单个 .inp 的来流参数(5 步)
+  - wizard sweep        — 批量生成算例(7 步,用 PR #1 的新能力)
+  - wizard diff         — 比较两个 .inp 文件(3 步)
+
+无参 `wizard` 显示菜单。
+
+设计:
+- WizardBase 抽象基类: 步骤定义 + 公共流程
+- WizardSession 状态: 当前步骤 / 数据累积 / 历史(支持 back)
+- 通用组件 menu / confirm / input_text(走 i18n)
+"""
+from __future__ import annotations
+import sys
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from . import i18n
+from .i18n import t, get_lang
+from .repl_state import ReplSession
+
+
+# ============================================================
+# 异常
+# ============================================================
+class WizardCancel(Exception):
+    """用户选择取消(按 Q / Ctrl+C)"""
+    pass
+
+
+# ============================================================
+# 通用组件(走 i18n)
+# ============================================================
+def _print(s: str) -> None:
+    """统一 print 到 stdout"""
+    print(s)
+
+
+def input_text(
+    question: str,
+    default: Optional[str] = None,
+    validator: Optional[Callable[[str], Optional[str]]] = None,
+) -> str:
+    """问一个文本问题,空回车=default。"""
+    if default is None or default == "":
+        suffix = ": "
+    else:
+        suffix = f" [{default}]: "
+    while True:
+        try:
+            raw = input(question + suffix)
+        except (EOFError, KeyboardInterrupt):
+            raise WizardCancel()
+        raw = raw.strip()
+        if raw == "":
+            if default is not None:
+                return default
+            return raw
+        if validator is not None:
+            err = validator(raw)
+            if err is not None:
+                _print(f"  {err}")
+                continue
+        return raw
+
+
+def confirm(question: str, default: bool = False) -> bool:
+    """y/N 确认。"""
+    suffix = " [Y/n]: " if default else " [y/N]: "
+    while True:
+        try:
+            raw = input(question + suffix)
+        except (EOFError, KeyboardInterrupt):
+            raise WizardCancel()
+        raw = raw.strip().lower()
+        if raw == "":
+            return default
+        if raw in ("y", "yes", "是", "好"):
+            return True
+        if raw in ("n", "no", "否", "不"):
+            return False
+        if get_lang() == "zh":
+            _print("  请输入 y 或 n")
+        else:
+            _print("  Please enter y or n")
+
+
+def menu(
+    prompt: str,
+    choices: List[Tuple[str, str, str]],
+    default: Optional[str] = None,
+) -> str:
+    """显示一个数字菜单,返回选中 key。"""
+    is_zh = get_lang() == "zh"
+    _print(prompt)
+    for key, label_zh, label_en in choices:
+        label = label_zh if is_zh else label_en
+        _print(f"  [{key}] {label}")
+    while True:
+        try:
+            suffix = f" [{default}]: " if default else ": "
+            raw = input("> " + suffix)
+        except (EOFError, KeyboardInterrupt):
+            raise WizardCancel()
+        raw = raw.strip()
+        if raw == "" and default is not None:
+            return default
+        for key, _, _ in choices:
+            if raw.upper() == key.upper():
+                if key.upper() == "Q":
+                    raise WizardCancel()
+                return key
+        if is_zh:
+            _print(f"  无效选择: {raw!r},请重试。")
+        else:
+            _print(f"  Invalid choice: {raw!r}, please retry.")
+
+
+# ============================================================
+# Wizard 框架
+# ============================================================
+class WizardBase:
+    """所有任务向导的基类。"""
+    title: str = ""
+    description: str = ""
+
+    def __init__(self, session: Optional[ReplSession] = None):
+        self.session = session
+        self.data: Dict[str, Any] = {}
+        self.history: List[str] = []
+        self._cancelled = False
+
+    def run(self) -> None:
+        """主循环:依次走每个步骤,最后 execute。"""
+        if not self.steps:
+            raise NotImplementedError(f"{self.__class__.__name__}: empty steps")
+        self._print_header()
+        for step_name in self.steps:
+            self._print_step_header(step_name)
+            method = getattr(self, step_name, None)
+            if method is None:
+                raise NotImplementedError(
+                    f"{self.__class__.__name__}: missing method {step_name}"
+                )
+            try:
+                result = method(self.data)
+            except WizardCancel:
+                self._print_cancelled()
+                return
+            if result is None:
+                self._print_cancelled()
+                return
+            next_name, new_data = result
+            if next_name == "__done__":
+                # 跳到 execute(不再走 step)
+                self.data.update(new_data)
+                break
+            self.data.update(new_data)
+            self.history.append(step_name)
+        self._print_execute_header()
+        try:
+            self.execute(self.data)
+        except WizardCancel:
+            self._print_cancelled()
+            return
+        self._print_done()
+
+    def _print_header(self) -> None:
+        sep = "═" * 60
+        _print(f"\n{sep}")
+        _print(f"  {self.title}")
+        _print(sep)
+        if self.description:
+            _print(self.description)
+            _print("")
+
+    def _print_step_header(self, step_name: str) -> None:
+        total = len(self.steps)
+        import re
+        m = re.match(r"step_(\d+)_(.+)", step_name)
+        if m:
+            step_num, step_desc = m.group(1), m.group(2).replace("_", " ")
+            if get_lang() == "zh":
+                _print(f"\n──── 步骤 {step_num}/{total}: {step_desc} ────")
+            else:
+                _print(f"\n──── Step {step_num}/{total}: {step_desc} ────")
+        else:
+            _print(f"\n──── {step_name} ────")
+
+    def _print_cancelled(self) -> None:
+        if get_lang() == "zh":
+            _print("\n✗ 已取消。")
+        else:
+            _print("\n✗ Cancelled.")
+
+    def _print_execute_header(self) -> None:
+        if get_lang() == "zh":
+            _print("\n──── 执行 ────")
+        else:
+            _print("\n──── Executing ────")
+
+    def _print_done(self) -> None:
+        if get_lang() == "zh":
+            _print("\n✓ 向导完成。")
+        else:
+            _print("\n✓ Wizard done.")
+
+    def execute(self, data: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
+
+# ============================================================
+# 3 个具体向导
+# ============================================================
+
+class WizardModifyFile(WizardBase):
+    """修改单个 .inp 文件的来流参数。5 步。"""
+    title_zh = "向导:修改单个 .inp 文件"
+    title_en = "Wizard: Modify a single .inp file"
+    description_zh = (
+        "用途:打开一个 .inp,改它的来流参数(Ma/α/β/T/p),保存到磁盘。"
+    )
+    description_en = (
+        "Purpose: Open a .inp, edit its freestream (Ma/α/β/T/p), save to disk."
+    )
+
+    @property
+    def title(self) -> str:
+        return self.title_zh if get_lang() == "zh" else self.title_en
+
+    @property
+    def description(self) -> str:
+        return self.description_zh if get_lang() == "zh" else self.description_en
+
+    steps = [
+        "step_1_select_file",
+        "step_2_select_fields",
+        "step_3_enter_values",
+        "step_4_preview",
+        "step_5_output",
+    ]
+
+    def step_1_select_file(self, data: dict):
+        from pathlib import Path
+        _print("加载一个 .inp 文件,作为修改目标。")
+        if self.session and self.session.current:
+            cur_path = str(self.session.files[self.session.current].path)
+            _print(f"  当前已加载: {cur_path}")
+            ans = confirm(f"  使用当前已加载文件?", default=True)
+            if ans:
+                return ("step_2_select_fields", {"file": cur_path})
+        while True:
+            path_str = input_text("文件路径(可拖入)")
+            if not path_str:
+                raise WizardCancel()
+            p = Path(path_str)
+            if not p.is_file():
+                _print(f"  文件不存在: {p}")
+                continue
+            return ("step_2_select_fields", {"file": str(p)})
+
+    def step_2_select_fields(self, data: dict):
+        is_zh = get_lang() == "zh"
+        if is_zh:
+            _print("  可选项:1 2 3 4 5 all done Q")
+            _print("  (1=Ma 2=alpha 3=beta 4=T 5=p)")
+        else:
+            _print("  Options: 1 2 3 4 5 all done Q")
+            _print("  (1=Ma 2=alpha 3=beta 4=T 5=p)")
+        chosen: List[str] = []
+        while True:
+            try:
+                raw = input_text("  字段")
+            except WizardCancel:
+                return None
+            raw = raw.strip()
+            if raw == "" or raw.lower() == "done":
+                break
+            if raw.lower() == "all":
+                chosen = ["Ma", "alpha", "beta", "T", "p"]
+                break
+            tokens = raw.split()
+            for tok in tokens:
+                if tok == "1":
+                    chosen.append("Ma")
+                elif tok == "2":
+                    chosen.append("alpha")
+                elif tok == "3":
+                    chosen.append("beta")
+                elif tok == "4":
+                    chosen.append("T")
+                elif tok == "5":
+                    chosen.append("p")
+                elif tok.lower() == "q":
+                    return None
+            if chosen:
+                break
+            if is_zh:
+                _print("  请至少选一个字段")
+            else:
+                _print("  Please pick at least one field")
+        if not chosen:
+            return None
+        return ("step_3_enter_values", {"fields": chosen})
+
+    def step_3_enter_values(self, data: dict):
+        values = {}
+        for field_name in data["fields"]:
+            v = input_text(f"  {field_name} 新值", default="")
+            if not v:
+                continue
+            try:
+                values[field_name] = float(v)
+            except ValueError:
+                if get_lang() == "zh":
+                    _print(f"  '{v}' 不是有效数字,跳过 {field_name}")
+                else:
+                    _print(f"  '{v}' not a number, skip {field_name}")
+        if not values:
+            if get_lang() == "zh":
+                _print("  没有有效输入,取消。")
+            else:
+                _print("  No valid input, cancelled.")
+            return None
+        return ("step_4_preview", {"values": values})
+
+    def step_4_preview(self, data: dict):
+        is_zh = get_lang() == "zh"
+        if is_zh:
+            _print("  预览变更:")
+        else:
+            _print("  Preview changes:")
+        for k, v in data["values"].items():
+            _print(f"    {k} → {v}")
+        if confirm("  确认继续?", default=True):
+            return ("step_5_output", {})
+        return None
+
+    def step_5_output(self, data: dict):
+        from pathlib import Path
+        src = Path(data["file"])
+        suffix = "_modified"
+        dst = src.parent / f"{src.stem}{suffix}{src.suffix}"
+        if get_lang() == "zh":
+            _print(f"  输出: {dst}")
+        else:
+            _print(f"  Output: {dst}")
+        return ("__done__", {"output": str(dst)})
+
+    def execute(self, data: dict) -> None:
+        is_zh = get_lang() == "zh"
+        if is_zh:
+            _print(f"  → 加载 {data['file']}")
+            _print(f"  → 应用 {len(data['values'])} 个字段修改")
+            _print(f"  → 写入 {data.get('output', data['file'])}")
+            _print("  (modify-file 真实写入实现见后续 PR。本次为占位骨架。)")
+        else:
+            _print(f"  → load {data['file']}")
+            _print(f"  → apply {len(data['values'])} field changes")
+            _print(f"  → write {data.get('output', data['file'])}")
+
+
+class WizardSweep(WizardBase):
+    """批量生成算例。7 步:用 PR #1 的新能力。"""
+    title_zh = "向导:批量生成算例"
+    title_en = "Wizard: Batch-generate cases"
+    description_zh = (
+        "适用:从 1 个模板出发,扫一组参数,生成 N 个 .inp。"
+    )
+    description_en = (
+        "Use: From 1 template, sweep parameters, generate N .inp files."
+    )
+
+    @property
+    def title(self) -> str:
+        return self.title_zh if get_lang() == "zh" else self.title_en
+
+    @property
+    def description(self) -> str:
+        return self.description_zh if get_lang() == "zh" else self.description_en
+
+    steps = [
+        "step_1_template",
+        "step_2_mode",
+        "step_3_params",
+        "step_4_naming",
+        "step_5_output",
+        "step_6_preview",
+        "step_7_execute",
+    ]
+
+    def step_1_template(self, data: dict):
+        path = input_text("模板 .inp 路径")
+        if not path:
+            return None
+        from pathlib import Path
+        p = Path(path)
+        if not p.is_file():
+            _print(f"  文件不存在: {p}")
+            return None
+        return ("step_2_mode", {"template": str(p)})
+
+    def step_2_mode(self, data: dict):
+        is_zh = get_lang() == "zh"
+        if is_zh:
+            choices = [
+                ("1", "笛卡尔积 sweeps: {axis: [v1, v2]}", "Cartesian"),
+                ("2", "显式列表 cases: [{...}, ...]", "Explicit list"),
+                ("3", "分组继承 groups: [{name, common, cases}, ...]", "Groups"),
+                ("4", "CSV 文件 cases.csv", "CSV file"),
+                ("Q", "取消", "(quit)"),
+            ]
+            prompt = "选择 sweep 模式:"
+        else:
+            choices = [
+                ("1", "Cartesian: sweeps: {axis: [v1, v2]}", "Cartesian"),
+                ("2", "Explicit list: cases: [{...}, ...]", "Explicit list"),
+                ("3", "Groups: groups: [{name, common, cases}, ...]", "Groups"),
+                ("4", "CSV file cases.csv", "CSV file"),
+                ("Q", "(quit)", "(quit)"),
+            ]
+            prompt = "Pick sweep mode:"
+        key = menu(prompt, choices, default="1")
+        return ("step_3_params", {"mode": key})
+
+    def step_3_params(self, data: dict):
+        is_zh = get_lang() == "zh"
+        mode = data["mode"]
+        if mode == "1":
+            _print("  笛卡尔:用 sweeps: 语法。")
+            _print("  示例:{alpha: [0, 5, 10], mach: [0.6, 0.8]}")
+            raw = input_text("  sweeps(YAML / JSON)")
+            if not raw:
+                return None
+            import yaml
+            try:
+                sweeps = yaml.safe_load(raw)
+                if not isinstance(sweeps, dict):
+                    raise ValueError("expected a dict")
+            except Exception as e:
+                _print(f"  解析失败: {e}")
+                return None
+            return ("step_4_naming", {"sweeps": sweeps})
+        elif mode == "2":
+            _print("  显式列表:每行一个 case,如 {alpha: 10, beta: 5}")
+            raw = input_text("  cases(YAML 列表)")
+            if not raw:
+                return None
+            import yaml
+            try:
+                cases = yaml.safe_load(raw)
+                if not isinstance(cases, list):
+                    raise ValueError("expected a list")
+            except Exception as e:
+                _print(f"  解析失败: {e}")
+                return None
+            return ("step_4_naming", {"cases": cases})
+        elif mode == "3":
+            _print("  分组继承:每组共享 common 字段,组内 cases 是列表")
+            raw = input_text("  groups(YAML 列表)")
+            if not raw:
+                return None
+            import yaml
+            try:
+                groups = yaml.safe_load(raw)
+                if not isinstance(groups, list):
+                    raise ValueError("expected a list")
+            except Exception as e:
+                _print(f"  解析失败: {e}")
+                return None
+            return ("step_4_naming", {"groups": groups})
+        elif mode == "4":
+            csv_path = input_text("  CSV 文件路径")
+            if not csv_path:
+                return None
+            from pathlib import Path
+            if not Path(csv_path).is_file():
+                _print(f"  文件不存在: {csv_path}")
+                return None
+            return ("step_4_naming", {"csv": csv_path})
+        return None
+
+    def step_4_naming(self, data: dict):
+        is_zh = get_lang() == "zh"
+        if is_zh:
+            default = "case_{alpha}"
+            prompt = "  命名模板(可用 {alpha} {beta} {mach} {T} {p} {group})"
+        else:
+            default = "case_{alpha}"
+            prompt = "  Naming template (placeholders: {alpha} {beta} {mach} {T} {p} {group})"
+        naming = input_text(prompt, default=default)
+        return ("step_5_output", {"naming": naming})
+
+    def step_5_output(self, data: dict):
+        is_zh = get_lang() == "zh"
+        if is_zh:
+            default = "./sweep_cases"
+            prompt = "  输出目录"
+        else:
+            default = "./sweep_cases"
+            prompt = "  Output directory"
+        out_dir = input_text(prompt, default=default)
+        if is_zh:
+            manifest = confirm("  生成 manifest.json?", default=True)
+        else:
+            manifest = confirm("  Generate manifest.json?", default=True)
+        manifest_path = None
+        if manifest:
+            from pathlib import Path
+            mp = input_text("  manifest 路径", default=str(Path(out_dir) / "manifest.json"))
+            manifest_path = mp
+        return ("step_6_preview", {"output_dir": out_dir, "manifest_path": manifest_path})
+
+    def step_6_preview(self, data: dict):
+        is_zh = get_lang() == "zh"
+        if is_zh:
+            _print("  预览(简化):")
+            _print(f"    模板: {data['template']}")
+            _print(f"    模式: {data['mode']}")
+            _print(f"    输出: {data['output_dir']}")
+            if data.get("naming"):
+                _print(f"    命名: {data['naming']}")
+        else:
+            _print("  Preview (simplified):")
+            _print(f"    Template: {data['template']}")
+            _print(f"    Mode: {data['mode']}")
+            _print(f"    Output: {data['output_dir']}")
+        if confirm("  确认生成?", default=True):
+            return ("step_7_execute", {})
+        return None
+
+    def step_7_execute(self, data: dict):
+        from .sweep import CaseSweep, generate
+        cfg: Dict[str, Any] = {
+            "template": data["template"],
+            "output_dir": data["output_dir"],
+        }
+        mode = data.get("mode", "1")
+        if mode == "4":
+            cs = CaseSweep.from_csv(
+                data["csv"],
+                template=data["template"],
+                output_dir=data["output_dir"],
+                naming=data.get("naming"),
+                manifest_path=data.get("manifest_path"),
+            )
+        else:
+            if mode == "1":
+                cfg["sweeps"] = data.get("sweeps", {})
+            elif mode == "2":
+                cfg["cases"] = data.get("cases", [])
+            elif mode == "3":
+                cfg["groups"] = data.get("groups", [])
+            if data.get("naming"):
+                cfg["naming"] = data["naming"]
+            if data.get("manifest_path"):
+                cfg["manifest"] = {"path": data["manifest_path"]}
+            cs = CaseSweep.from_dict(cfg)
+        report = generate(cs)
+        _print(f"  生成 {report.total} 个算例 → {data['output_dir']}")
+        if data.get("manifest_path"):
+            _print(f"  manifest → {data['manifest_path']}")
+
+    def execute(self, data: dict) -> None:
+        pass  # step_7 完成
+
+
+class WizardDiff(WizardBase):
+    """比较两个 .inp 文件。3 步。"""
+    title_zh = "向导:比较两个 .inp 文件"
+    title_en = "Wizard: Compare two .inp files"
+    description_zh = "用途:看两个 .inp 文件的字段差异(基准 vs 派生)。"
+    description_en = "Purpose: See field differences between two .inp files (baseline vs derived)."
+
+    @property
+    def title(self) -> str:
+        return self.title_zh if get_lang() == "zh" else self.title_en
+
+    @property
+    def description(self) -> str:
+        return self.description_zh if get_lang() == "zh" else self.description_en
+
+    steps = [
+        "step_1_baseline",
+        "step_2_other",
+        "step_3_format",
+    ]
+
+    def step_1_baseline(self, data: dict):
+        path = input_text("基准 .inp 路径")
+        if not path:
+            return None
+        from pathlib import Path
+        if not Path(path).is_file():
+            _print(f"  文件不存在: {path}")
+            return None
+        return ("step_2_other", {"baseline": path})
+
+    def step_2_other(self, data: dict):
+        path = input_text("对比 .inp 路径")
+        if not path:
+            return None
+        from pathlib import Path
+        if not Path(path).is_file():
+            _print(f"  文件不存在: {path}")
+            return None
+        return ("step_3_format", {"other": path})
+
+    def step_3_format(self, data: dict):
+        is_zh = get_lang() == "zh"
+        if is_zh:
+            choices = [
+                ("1", "side-by-side(逐字段并排)", "side-by-side"),
+                ("2", "unified diff", "unified diff"),
+                ("3", "仅显示有差异的字段", "only changed"),
+                ("Q", "取消", "(quit)"),
+            ]
+            prompt = "选择输出格式:"
+        else:
+            choices = [
+                ("1", "side-by-side (field-by-field)", "side-by-side"),
+                ("2", "unified diff", "unified diff"),
+                ("3", "only changed fields", "only changed"),
+                ("Q", "(quit)", "(quit)"),
+            ]
+            prompt = "Pick output format:"
+        key = menu(prompt, choices, default="1")
+        return ("__done__", {"format": key})
+
+    def execute(self, data: dict) -> None:
+        from .parser import parse_file
+        from .diff import diff as diff_fn
+        a = parse_file(data["baseline"])
+        b = parse_file(data["other"])
+        r = diff_fn(a, b)
+        is_zh = get_lang() == "zh"
+        _print(f"=== {data['baseline']} → {data['other']} ===")
+        if is_zh:
+            _print(f"差异条数: {len(r)}")
+        else:
+            _print(f"Change count: {len(r)}")
+        for e in r.changes:
+            _print(f"  {e}")
+
+
+# ============================================================
+# 菜单入口(无参 `wizard`)
+# ============================================================
+def run_menu(session: Optional[ReplSession] = None) -> None:
+    """无参 wizard 入口。"""
+    is_zh = get_lang() == "zh"
+    if is_zh:
+        choices = [
+            ("1", "modify-file  修改单个 .inp 的来流参数", "modify-file"),
+            ("2", "sweep        批量生成算例(交互式)", "sweep"),
+            ("3", "diff         比较两个 .inp 文件的差异", "diff"),
+            ("Q", "退出", "(quit)"),
+        ]
+        prompt = "═══ inp-tool 向导菜单 ═══\n请选择向导(输入编号):"
+    else:
+        choices = [
+            ("1", "modify-file  edit single .inp freestream", "modify-file"),
+            ("2", "sweep        batch-generate cases", "sweep"),
+            ("3", "diff         compare two .inp files", "diff"),
+            ("Q", "(quit)", "(quit)"),
+        ]
+        prompt = "═══ inp-tool wizard menu ═══\nPick a wizard (number):"
+    try:
+        key = menu(prompt, choices, default="1")
+    except WizardCancel:
+        if is_zh:
+            _print("\n✗ 已退出向导。")
+        else:
+            _print("\n✗ Exited wizard menu.")
+        return
+    if key == "1":
+        WizardModifyFile(session).run()
+    elif key == "2":
+        WizardSweep(session).run()
+    elif key == "3":
+        WizardDiff(session).run()
+
+
+def run_modify_file(session: Optional[ReplSession] = None) -> None:
+    WizardModifyFile(session).run()
+
+
+def run_sweep(session: Optional[ReplSession] = None) -> None:
+    WizardSweep(session).run()
+
+
+def run_diff(session: Optional[ReplSession] = None) -> None:
+    WizardDiff(session).run()

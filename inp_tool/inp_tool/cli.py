@@ -517,11 +517,26 @@ def cmd_sweep(args):
 
 
 def main(argv=None):
+    # v0.7.1:--lang 顶层 flag(必须最早解析,因为 i18n 影响后续所有 help/description)
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument(
+        '--lang', choices=['zh', 'en'], default=None,
+        help='界面语言(zh 中文 / en English),默认 zh',
+    )
+    pre_args, rest_argv = pre_parser.parse_known_args(argv)
+    if pre_args.lang is not None:
+        from . import i18n
+        i18n.set_lang(pre_args.lang)
+
     p = argparse.ArgumentParser(
         prog='inp',
-        description='mcfd.inp 解析、修改、diff 工具 v0.2',
+        description='mcfd.inp 解析、修改、diff 工具',
     )
     p.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
+    p.add_argument(
+        '--lang', choices=['zh', 'en'], default=None,
+        help='界面语言(zh 中文 / en English),默认 zh',
+    )
     sub = p.add_subparsers(dest='cmd', required=True)
 
     sp = sub.add_parser('parse', help='解析并显示结构')

@@ -6,10 +6,22 @@ from pathlib import Path
 import pytest
 
 from inp_tool.repl import ShellREPL
+from inp_tool import i18n
 
 
 SAMPLE_V1 = Path(__file__).parent / 'data' / 'sample_v1.inp'
 SAMPLE_V2 = Path(__file__).parent / 'data' / 'sample_v2.inp'
+
+
+@pytest.fixture(autouse=True)
+def _force_en_for_default_tests():
+    """本文件所有测试强制英文模式(中文化在 test_repl_zh.py 单独测)。
+
+    PR #2 默认语言改为 zh,为了不破坏现有英文断言,这里 autouse 切到 en。
+    """
+    i18n.set_lang("en")
+    yield
+    i18n.set_lang("zh")  # 恢复默认
 
 
 def _run(repl, *lines):

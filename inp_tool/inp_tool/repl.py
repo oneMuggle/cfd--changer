@@ -2,6 +2,8 @@
 
 继承 stdlib cmd.Cmd,把每条用户输入解析后委托给 cli.py 的 cmd_* handler。
 状态由 ReplSession 管理,IO 通过 stdout/stderr。
+
+v0.7.1:中文化(走 i18n 模块)+ 新增 `wizard` / `tutorial` 命令。
 """
 import cmd
 import math
@@ -16,7 +18,8 @@ from typing import Dict, List, Optional
 # 都 import 不进来,并级联破坏从 .repl import REPL_COMMANDS
 # 的 repl_completer。
 
-from . import __version__
+from . import __version__, i18n
+from .i18n import t, get_lang
 from .repl_history import HistoryStore
 from .repl_state import ReplSession
 
@@ -26,16 +29,45 @@ REPL_COMMANDS = {
     'load', 'unload', 'files', 'use', 'status', 'save',
     'info', 'get', 'set', 'diff', 'sweep', 'parse',
     'aero',  # 单算例 freestream 编辑
-    'sweep-config',  # 2026-06-09 新增:从 JSON/YAML 跑 sweep(预校验+预览)
+    'sweep-config',  # v0.7.0:从 JSON/YAML 跑 sweep(预校验+预览)
+    'tutorial',  # v0.7.1:5 步引导教程(自动跑命令,看演示)
+    'wizard',  # v0.7.1:任务向导(用户驱动,完成具体任务)
     'undo', 'let', 'help', 'history', 'exit', 'quit',
 }
 
 
+# 命令分组(给 help / 快速开始面板用)
+_COMMAND_GROUPS_ZH = [
+    ("文件管理", ['load', 'unload', 'files', 'use', 'status', 'save']),
+    ("编辑 / 查看", ['info', 'get', 'set', 'aero', 'parse']),
+    ("比较", ['diff']),
+    ("批量生成", ['sweep', 'sweep-config']),
+    ("任务向导", ['tutorial', 'wizard']),
+    ("会话 / 调试", ['let', 'undo', 'history', 'help', 'exit', 'quit']),
+]
+
+_COMMAND_GROUPS_EN = [
+    ("File Management", ['load', 'unload', 'files', 'use', 'status', 'save']),
+    ("Edit / View", ['info', 'get', 'set', 'aero', 'parse']),
+    ("Compare", ['diff']),
+    ("Batch", ['sweep', 'sweep-config']),
+    ("Tasks", ['tutorial', 'wizard']),
+    ("Session / Debug", ['let', 'undo', 'history', 'help', 'exit', 'quit']),
+]
+
+
+def _get_command_groups() -> list:
+    """按当前语言返回命令分组"""
+    if get_lang() == "zh":
+        return _COMMAND_GROUPS_ZH
+    return _COMMAND_GROUPS_EN
+
+
 class ShellREPL(cmd.Cmd):
-    intro = (
-        f"inp-tool {__version__} interactive shell. "
-        "Type 'help' for commands, 'exit' to quit."
-    )
+    # 启动 banner:i18n 控制(默认 zh)
+    # 注:cmd.Cmd 会在 cmdloop 启动时 print intro
+    # v0.7.1:用 property 让 intro 跟随时下 i18n.set_lang() 切换
+    intro = t("repl.intro", ver=__version__)
     prompt = 'inp> '
 
     def __init__(self, session: Optional[ReplSession] = None, completekey: str = 'tab'):
@@ -49,6 +81,14 @@ class ShellREPL(cmd.Cmd):
         self.history = HistoryStore()
         self.history.load()
         self.history.bind_readline()
+
+    @property
+    def intro(self) -> str:
+        """v0.7.1:动态 intro(跟随时下 i18n.set_lang() 切换)
+
+        cmd.Cmd.cmdloop 启动时 print self.intro,所以必须返回 str。
+        """
+        return t("repl.intro", ver=__version__)
 
     def onecmd(self, line):
         """在分发到 cmd.Cmd 前,先剥离 '<alias>:' 前缀,再做 $var 插值,最后记入历史。"""
@@ -159,7 +199,9 @@ class ShellREPL(cmd.Cmd):
             self.prompt = 'inp> '
 
     def _err(self, msg: str) -> None:
-        print(f'error: {msg}', file=sys.stderr)
+        """统一错误输出(走 i18n 翻译前缀)"""
+        prefix = t("error.prefix")
+        print(f'{prefix}: {msg}', file=sys.stderr)
 
     # ----- 会话变量 + shell escape ---------------------------------------
 
@@ -276,13 +318,25 @@ class ShellREPL(cmd.Cmd):
                 doc = (cmd_method.__doc__ or '').strip()
                 print(f'{arg}: {doc}' if doc else arg)
             else:
-                print(f'no such command: {arg}')
+                if get_lang() == "zh":
+                    print(f'没有这个命令: {arg}')
+                else:
+                    print(f'no such command: {arg}')
         else:
-            print('available commands:')
-            for name in sorted(REPL_COMMANDS):
-                method = getattr(self, f'do_{name}', None)
-                doc = (method.__doc__ or '').splitlines()[0] if method and method.__doc__ else ''
-                print(f'  {name:10s} {doc}')
+            # 分组显示(中英)
+            groups = _get_command_groups()
+            if get_lang() == "zh":
+                print("═══ 可用命令(按功能分组)══════════════════════════════════════")
+            else:
+                print("═══ Available commands (by group) ══════════════════════════════")
+            for group_name, cmds in groups:
+                print(f"\n【{group_name}】")
+                for name in cmds:
+                    method = getattr(self, f'do_{name}', None)
+                    doc = (method.__doc__ or '').splitlines()[0] if method and method.__doc__ else ''
+                    print(f'  {name:14s} {doc}')
+            print()
+            print(t("repl.help_hint"))
 
     def do_load(self, arg):
         """load PATH [as ALIAS] — 加载 .inp 到 session,自动设为 current"""
@@ -301,7 +355,7 @@ class ShellREPL(cmd.Cmd):
         from pathlib import Path
         path = Path(path_str)
         if not path.exists():
-            self._err(f'file not found: {path}')
+            self._err(t("error.file_not_found", path=path))
             return
         try:
             actual = self.session.load(path, alias=alias)
@@ -420,6 +474,67 @@ class ShellREPL(cmd.Cmd):
         """alias for exit"""
         return True
 
+    # ----- v0.7.1:tutorial(自动演示) + wizard(任务向导入口) -----------------
+
+    def do_tutorial(self, arg):
+        """tutorial — 5 步快速上手教程(自动跑命令,看演示)
+
+        自动跑以下 5 步,每步按回车继续:
+          1) 加载示例 .inp
+          2) info(看结构)
+          3) aero Ma=0.8 alpha=5(改来流)
+          4) save(写盘)
+          5) sweep(批量)
+
+        完整实现见 PR #2 阶段 4。
+        """
+        if get_lang() == "zh":
+            print("═══ inp-tool 5 步快速上手教程 ═══")
+            print()
+            print("本教程会带您走完:加载 → 查看 → 修改 → 保存 → 批量生成。")
+            print("每步按回车接受默认值,Ctrl+C 随时退出。")
+            print()
+            print("(tutorial 完整实现在 PR #2 阶段 4。本次为占位,显示说明后退出。)")
+        else:
+            print("═══ inp-tool 5-step quick start tutorial ═══")
+            print()
+            print("This tutorial walks through: load → info → modify → save → batch.")
+            print("Press Enter at each step to accept defaults; Ctrl+C to quit.")
+            print()
+            print("(tutorial full impl in PR #2 stage 4. Stub for now.)")
+
+    def do_wizard(self, arg):
+        """wizard [SUBCOMMAND] — 任务向导(用户驱动,完成具体任务)
+
+        可用子命令(每个是独立的任务向导):
+          modify-file  修改单个 .inp 的来流参数
+          sweep        批量生成算例(交互式)
+          diff         比较两个 .inp 文件的差异
+
+        无参时显示菜单。
+        完整实现见 PR #2 阶段 3-6。
+        """
+        from . import wizard as _wiz
+        if not arg.strip():
+            _wiz.run_menu(self.session)
+            return
+        # 有子命令
+        sub = arg.strip()
+        if sub == "modify-file":
+            _wiz.run_modify_file(self.session)
+        elif sub == "sweep":
+            _wiz.run_sweep(self.session)
+        elif sub == "diff":
+            _wiz.run_diff(self.session)
+        else:
+            if get_lang() == "zh":
+                print(f"wizard: 未知子命令 '{sub}'")
+                print("可用子命令: modify-file / sweep / diff")
+            else:
+                print(f"wizard: unknown subcommand '{sub}'")
+                print("Available: modify-file / sweep / diff")
+
+
     # ----- 委托给 cli.py 的 cmd_* ----------------------------------------
 
     def _ns(self, **kwargs):
@@ -441,7 +556,7 @@ class ShellREPL(cmd.Cmd):
     def do_get(self, arg):
         """get KEY [-b BLOCK] [-i IDX] — 读一个值(委托 cmd_get)"""
         if not self.session.current:
-            self._err('no file is current.')
+            self._err(t("error.no_file_current"))
             return
         from .cli import cmd_get
         import shlex
@@ -474,7 +589,7 @@ class ShellREPL(cmd.Cmd):
     def do_set(self, arg):
         """set BLOCK KEY VALUE — 改一个值,标记 dirty(委托 cmd_set)"""
         if not self.session.current:
-            self._err('no file is current.')
+            self._err(t("error.no_file_current"))
             return
         from .cli import cmd_set
         import shlex
