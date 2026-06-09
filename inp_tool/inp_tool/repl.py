@@ -665,8 +665,6 @@ class ShellREPL(cmd.Cmd):
         - keymap: internal key -> guiopts keyword 的映射
         - old_raw_map: 改前对应 guiopts keyword 的 raw 字符串(供 undo)
         """
-        from .parser import parse_file
-        from .writer import write as writer_write
         from .repl_state import UndoEntry
 
         alias = self.session.current
@@ -705,9 +703,9 @@ class ShellREPL(cmd.Cmd):
             _set_or_append(pb, 'refpre', new['p'])
 
         # 写盘
-        writer_write(lf.inp, str(lf.path))
-        # 同步 lf.inp(避免连续 set 后 in-memory 落后)
-        lf.inp = parse_file(str(lf.path))
+        # (Fix: removed writer_write and parse_file re-load.
+        #  REPL 合约:`aero` / `set` / `let` 只改 in-memory + dirty,
+        #  `save` 才是显式 commit。secret write 会破坏 `undo`。)
         lf.dirty = True
 
         # 推 undo:只针对用户显式改的 guiopts 字段;
