@@ -37,6 +37,31 @@ class SweepSpec:
         return list(self.values.keys())
 
 
+# ============================================================
+# PR #1:CaseSpec 抽象(显式 / 分组 / 笛卡尔的统一归一化)
+# ============================================================
+@dataclass
+class CartesianSpec:
+    """笛卡尔轴集合(由 sweeps 字段生成,经 expand_cartesian 展开)
+
+    与现有 SweepSpec 的关系:CartesianSpec.axes 是 SweepSpec.values
+    的轻量包装。这里 axes 直接持有原 axes(单值轴对笛卡尔无意义,
+    由 expand_cartesian 把单值扩展为 1 元素列表)。
+    """
+    axes: Dict[str, List[float]]
+
+
+@dataclass
+class ExplicitCase:
+    """单个完整 case(显式 / 分组 / CSV 路径的最终归一化形式)
+
+    values: 完整 key→数值(已合并 common + per-case 覆盖)
+    group:  分组名(用于 {group} 命名占位);未分组时为 None
+    """
+    values: Dict[str, float]
+    group: Optional[str] = None
+
+
 def _normalize_axis(v: SweepValue) -> List[Any]:
     """把标量/列表统一为列表"""
     if isinstance(v, (list, tuple)):
@@ -298,6 +323,8 @@ class CaseSweep:
     freestream: Optional[FreestreamPreset] = None
     manifest_path: Optional[str] = None
     naming_ext: str = ".inp"
+    # PR #1 新增:统一 spec 列表(老 sweeps 字段保留,向后兼容)
+    specs: List[Union[CartesianSpec, ExplicitCase]] = field(default_factory=list)
 
     # --------------------- 构造 ---------------------
     @classmethod
@@ -306,14 +333,24 @@ class CaseSweep:
             raise KeyError("CaseSweep config: 'template' is required")
         if "output_dir" not in d:
             raise KeyError("CaseSweep config: 'output_dir' is required")
-        if "sweeps" not in d:
-            raise KeyError("CaseSweep config: 'sweeps' is required")
 
-        sweep_keys = list(d["sweeps"].keys())
-        sweep = SweepSpec(values=d["sweeps"])
-        naming = d.get("naming") or _default_naming(sweep)
-        if d.get("naming"):
-            _check_naming_against_sweep(naming, sweep)
+        # PR #1:从 sweeps / cases / groups 任一字段构造 specs
+        specs = _build_specs_from_dict(d)
+
+        # 老契约:必须有 sweeps 字段(向后兼容)
+        # 1) sweeps 在 → 从 sweeps 构造 SweepSpec(供 cs.sweeps.values 老 API 访问)
+        # 2) sweeps 不在(cases/groups 模式)→ 构造空 SweepSpec(老 API 拿到空 dict)
+        if "sweeps" in d:
+            sweep = SweepSpec(values=d["sweeps"])
+            # 命名校验仍用老 sweeps 字段
+            naming = d.get("naming") or _default_naming(sweep)
+            if d.get("naming"):
+                _check_naming_against_sweep(naming, sweep)
+        else:
+            # cases/groups 模式:用空 SweepSpec 兜底(老 API 行为:空值)
+            sweep = SweepSpec(values={})
+            naming = d.get("naming") or "case"
+            # 不做 _check_naming_against_sweep(strict 模式对 explicit 不适用)
 
         # freestream: 默认开启,{"enabled": False} 显式关闭
         fs_cfg = d.get("freestream", {"enabled": True})
@@ -345,7 +382,22 @@ class CaseSweep:
             freestream=freestream,
             manifest_path=manifest_path,
             naming_ext=naming_ext,
+            specs=specs,
         )
+
+    def materialize(self) -> List[ExplicitCase]:
+        """把 specs 摊平为 ExplicitCase 列表(笛卡尔展开在此完成)"""
+        out: List[ExplicitCase] = []
+        for spec in self.specs:
+            if isinstance(spec, CartesianSpec):
+                # 用临时 SweepSpec 喂给 expand_cartesian
+                # (单值轴会被 expand_cartesian 复制为 1 元素列表,行为不变)
+                tmp = SweepSpec(values=spec.axes)
+                for combo in expand_cartesian(tmp):
+                    out.append(ExplicitCase(values=combo))
+            else:
+                out.append(spec)
+        return out
 
     @classmethod
     def from_json(cls, path: str) -> "CaseSweep":
@@ -371,6 +423,185 @@ class CaseSweep:
         if data is None:
             data = {}  # 空 YAML 当作空 dict,后续 from_dict 报缺字段
         return cls.from_dict(data)
+
+    @classmethod
+    def from_csv(
+        cls,
+        path: str,
+        template: str,
+        output_dir: str,
+        naming: Optional[str] = None,
+        manifest_path: Optional[str] = None,
+    ) -> "CaseSweep":
+        """
+        从 CSV 加载 case 列表(必须有表头)。
+
+        CSV 第一行 = 列名(将作为 case values 的 key)。
+        后续每行 = 一个 case,所有列值尝试转 float,失败则保留字符串。
+        编码:UTF-8 优先;读取失败时尝试 GBK(Windows 默认)。
+
+        参数:
+            path: CSV 文件路径
+            template: 模板 .inp 路径(必填,因为 CSV 不含模板信息)
+            output_dir: 输出目录
+            naming: naming 模板(可选;默认 "case" 或 "case_{<第一个键>}")
+            manifest_path: manifest.json 路径(可选)
+        """
+        import csv as _csv
+
+        # 编码处理:UTF-8 → GBK fallback
+        try:
+            f = open(path, "r", encoding="utf-8", newline="")
+            sample = f.read(4096)
+            f.seek(0)
+        except UnicodeDecodeError:
+            f = open(path, "r", encoding="gbk", newline="")
+            sample = f.read(4096)
+            f.seek(0)
+
+        try:
+            reader = _csv.DictReader(f)
+            if not reader.fieldnames:
+                raise ValueError(
+                    f"CaseSweep.from_csv: CSV is empty or has no header: {path}"
+                )
+
+            # 第一遍:收集所有行(原始字符串)
+            raw_rows: List[Dict[str, str]] = []
+            for row in reader:
+                raw_rows.append({k: (v or "") for k, v in row.items()})
+
+            if not raw_rows:
+                raise ValueError(
+                    f"CaseSweep.from_csv: no data rows in {path}"
+                )
+
+            # 推断每列类型:全为数字 → float;否则 string
+            # 某列若既有数字又有非数字 → ValueError(列类型不一致)
+            col_types: Dict[str, str] = {}  # col -> "float" | "string"
+            for row in raw_rows:
+                for col, val in row.items():
+                    if val == "":
+                        continue
+                    try:
+                        float(val)
+                        cur = "float"
+                    except ValueError:
+                        cur = "string"
+                    if col not in col_types:
+                        col_types[col] = cur
+                    elif col_types[col] != cur:
+                        raise ValueError(
+                            f"row {raw_rows.index(row) + 2}: "
+                            f"column {col!r} has mixed types "
+                            f"(was {col_types[col]}, got {cur}={val!r})"
+                        )
+
+            # 第二遍:转 typed values
+            specs: List[ExplicitCase] = []
+            for row_idx, row in enumerate(raw_rows, start=2):  # start=2 因 header 占第 1 行
+                values: Dict[str, Any] = {}
+                for col, val in row.items():
+                    if val == "":
+                        continue
+                    if col_types[col] == "float":
+                        values[col] = float(val)
+                    else:
+                        values[col] = val
+                if not values:
+                    continue
+                specs.append(ExplicitCase(values=values))
+
+            if not specs:
+                raise ValueError(
+                    f"CaseSweep.from_csv: no usable data rows in {path}"
+                )
+
+            # 默认 naming:case(若用户未给)
+            if naming is None:
+                first_key = list(specs[0].values.keys())[0] if specs[0].values else "case"
+                naming = f"case_{{{first_key}}}"
+
+            # 用空 SweepSpec 兜底(老 API 兼容);specs 走 ExplicitCase 列表
+            # freestream 默认开启(与其他模式一致);用户可后续修改 cs.freestream
+            return cls(
+                template=template,
+                output_dir=output_dir,
+                sweeps=SweepSpec(values={}),  # CSV 模式无 sweeps
+                naming=naming,
+                overrides={},
+                freestream=FreestreamPreset(),  # 默认开启(与 sweeps 模式一致)
+                manifest_path=manifest_path,
+                naming_ext=".inp",
+                specs=specs,
+            )
+        finally:
+            f.close()
+
+
+# ============================================================
+# PR #1:specs 构造器(从 dict 识别 sweeps / cases / groups)
+# ============================================================
+def _build_specs_from_dict(d: Dict[str, Any]) -> List[Union[CartesianSpec, ExplicitCase]]:
+    """根据 dict 字段决定走哪种 spec 模式。
+
+    规则:
+      - 必须有 sweeps / cases / groups 至少一个
+      - sweeps:   CartesianSpec
+      - cases:    ExplicitCase(每个 dict 转)
+      - groups:   每个 group 的 common 注入到每个 case,得 ExplicitCase + group 名
+      - 三者可以共存(顺序展开)
+    """
+    has_sweeps = "sweeps" in d
+    has_cases = "cases" in d
+    has_groups = "groups" in d
+
+    if not (has_sweeps or has_cases or has_groups):
+        raise KeyError(
+            "CaseSweep config: 'sweeps' / 'cases' / 'groups' 至少需要其中一个"
+        )
+
+    specs: List[Union[CartesianSpec, ExplicitCase]] = []
+
+    if has_sweeps:
+        sweeps_dict = d["sweeps"]
+        if not sweeps_dict:
+            raise ValueError("CaseSweep config: 'sweeps' is empty")
+        specs.append(CartesianSpec(axes=dict(sweeps_dict)))
+
+    if has_cases:
+        cases_list = d["cases"]
+        if not cases_list:
+            raise ValueError("CaseSweep config: 'cases' is empty")
+        for c in cases_list:
+            specs.append(ExplicitCase(values={k: float(v) for k, v in c.items()}))
+
+    if has_groups:
+        groups_list = d["groups"]
+        if not groups_list:
+            raise ValueError("CaseSweep config: 'groups' is empty")
+        for g in groups_list:
+            common = g.get("common", {}) or {}
+            group_name = g.get("name")
+            cases_in_group = g.get("cases", []) or []
+            if not cases_in_group:
+                raise ValueError(
+                    f"CaseSweep config: group {group_name!r} has no cases"
+                )
+            for c in cases_in_group:
+                merged = {**common, **c}
+                specs.append(ExplicitCase(
+                    values={k: float(v) for k, v in merged.items()},
+                    group=group_name,
+                ))
+
+    if not specs:
+        # 三个 key 都在但都是空(已被前面的 ValueError 抓住;此分支兜底)
+        raise KeyError(
+            "CaseSweep config: no cases produced from 'sweeps' / 'cases' / 'groups'"
+        )
+
+    return specs
 
 
 # ============================================================
@@ -429,7 +660,11 @@ def _file_sha256(path: str) -> str:
 
 def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
     """
-    解析模板 -> 笛卡尔积展开 -> 每个 case 应用 preset + overrides -> 写盘 -> 累积报告
+    解析模板 -> 摊平 specs(笛卡尔展开在此) -> 每个 case 应用 preset + overrides ->
+    写盘 -> 累积报告。
+
+    PR #1:不再直接 expand_cartesian(sweep.sweeps),统一走 cs.materialize(),
+    支持 sweeps / cases / groups / 混合模式。
     """
     if not dry_run:
         os.makedirs(sweep.output_dir, exist_ok=True)
@@ -437,16 +672,20 @@ def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
     # 1) 加载模板(只读一次)
     template_inp = parse_file(sweep.template)
 
-    # 2) 展开笛卡尔积
-    cases = expand_cartesian(sweep.sweeps)
+    # 2) 摊平 specs(笛卡尔 / 显式 / 分组 / 混合,统一入口)
+    flat = sweep.materialize()
 
-    # 3) 命名模板预先校验
-    _check_naming_against_sweep(sweep.naming, sweep.sweeps)
+    # 3) 命名模板预先校验(老 sweeps 模式下,检查多值轴是否都在 naming 中)
+    # 显式 / 分组模式不做 strict 校验(每个 case 自带完整 values,
+    # 缺占位符时让 render_case_name 在 format 时报 KeyError)
+    if sweep.sweeps.values:
+        _check_naming_against_sweep(sweep.naming, sweep.sweeps)
 
     report = SweepReport(template=sweep.template)
     used_names: Dict[str, int] = {}
 
-    for params in cases:
+    for case_spec in flat:
+        params = case_spec.values
         # deepcopy 模板(每个 case 独立改)
         inp = copy.deepcopy(template_inp)
 
@@ -459,8 +698,12 @@ def generate(sweep: CaseSweep, dry_run: bool = False) -> SweepReport:
         _apply_overrides(inp, sweep.overrides)
 
         # 命名(可能冲突: 同名 case 追加 _1, _2)
+        # 注入 {group} 占位符(若 case 有 group)
+        render_params = dict(params)
+        if case_spec.group is not None:
+            render_params["group"] = case_spec.group
         base_name = render_case_name(
-            sweep.naming, params, ext=sweep.naming_ext
+            sweep.naming, render_params, ext=sweep.naming_ext
         )
         name = base_name
         if name in used_names:
