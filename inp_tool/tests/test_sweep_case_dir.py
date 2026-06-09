@@ -195,3 +195,233 @@ class TestBackwardCompatFlat:
         })
         assert _resolve_layout(cs) == "per_dir"
         # 实际 generate() 行为 Phase 2+ 实现
+
+
+# ======================================================================
+# Phase 2:per_dir 实际行为(目录复制 + mcfd.inp 覆盖)
+# ======================================================================
+
+
+def _make_base_case(base: "Path") -> None:
+    """建一个最小基础算例目录(模拟 reference/suanli 的子集)"""
+    base.mkdir(parents=True, exist_ok=True)
+    # 配置文件
+    (base / "mcfd.inp").write_text(
+        "guiopts begin\naero_alpha 0.0\nguiopts end\n"
+    )
+    (base / "mcfd.bc").write_text("bc_data\n")
+    (base / "npfopts.inp").write_text("npfopts_data\n")
+    # 模拟网格文件
+    (base / "cellsin.bin").write_bytes(b"BIN" * 100)
+    (base / "nodesin.bin").write_bytes(b"BIN" * 50)
+    # 备份(应被排除)
+    (base / "mcfd.inp.bak").write_text("old\n")
+    (base / "nodesin.bin.bak").write_bytes(b"OLD" * 50)
+    # 求解器输出(应被排除)
+    (base / "nodesout.bin").write_bytes(b"OUT" * 30)
+    # 日志目录(应被排除)
+    mlog = base / "mlog"
+    mlog.mkdir()
+    (mlog / "mcfdgui_c.log").write_text("log\n")
+    # 物性文件
+    (base / "C.dat").write_text("C\n")
+    (base / "O2.dat").write_text("O2\n")
+
+
+class TestPerDirGenerate:
+    def test_per_dir_creates_subdirectory_per_case(self, tmp_path):
+        """per_dir 模式:每个 case 一个子目录(无 .inp 扩展名)"""
+        base = tmp_path / "base"
+        _make_base_case(base)
+        template = base / "mcfd.inp"
+        out = tmp_path / "out"
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "source_dir": str(base),
+            "sweeps": {"alpha": [0, 4]},
+        })
+        from inp_tool.sweep import generate
+        report = generate(cs)
+        # 2 个 case → 2 个子目录
+        assert report.total == 2
+        for c in report.cases:
+            assert os.path.isdir(c.path)  # 是目录不是文件
+            assert not c.path.endswith(".inp")  # 无扩展名
+            assert os.path.dirname(c.path) == str(out)
+
+    def test_per_dir_copies_all_non_excluded_files(self, tmp_path):
+        """per_dir 模式:每个子目录包含 source_dir 全部文件(除 exclude)"""
+        base = tmp_path / "base"
+        _make_base_case(base)
+        template = base / "mcfd.inp"
+        out = tmp_path / "out"
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "source_dir": str(base),
+            "sweeps": {"alpha": [0]},
+        })
+        from inp_tool.sweep import generate
+        report = generate(cs)
+        case_dir = Path(report.cases[0].path)
+        # 应有的文件
+        for f in ["mcfd.inp", "mcfd.bc", "npfopts.inp",
+                  "cellsin.bin", "nodesin.bin",
+                  "C.dat", "O2.dat"]:
+            assert (case_dir / f).is_file(), f"missing {f}"
+        # 应排除的(默认规则)
+        assert not (case_dir / "mcfd.inp.bak").exists()
+        assert not (case_dir / "nodesin.bin.bak").exists()
+        assert not (case_dir / "nodesout.bin").exists()
+        assert not (case_dir / "mlog").exists()
+
+    def test_per_dir_overwrites_mcfd_inp_with_modified(self, tmp_path):
+        """per_dir 模式:复制完后,目标 mcfd.inp 被修改版覆盖"""
+        base = tmp_path / "base"
+        _make_base_case(base)
+        template = base / "mcfd.inp"
+        out = tmp_path / "out"
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "source_dir": str(base),
+            "sweeps": {"alpha": [4.0]},  # 改 alpha
+        })
+        from inp_tool.sweep import generate
+        from inp_tool import parse_file
+        report = generate(cs)
+        case_dir = Path(report.cases[0].path)
+        # 解析子目录里的 mcfd.inp
+        inp = parse_file(str(case_dir / "mcfd.inp"))
+        assert inp.get("guiopts", "aero_alpha") == 4.0  # 已修改
+
+    def test_per_dir_custom_exclude(self, tmp_path):
+        """per_dir 模式:自定义 exclude 规则生效"""
+        base = tmp_path / "base"
+        _make_base_case(base)
+        template = base / "mcfd.inp"
+        out = tmp_path / "out"
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "source_dir": str(base),
+            "exclude": ["*.bin", "mlog", "*.bak", "nodesout.bin"],
+            "sweeps": {"alpha": [0]},
+        })
+        from inp_tool.sweep import generate
+        report = generate(cs)
+        case_dir = Path(report.cases[0].path)
+        # 自定义 exclude 包含 *.bin,所以 .bin 网格都不应被打包
+        assert not (case_dir / "cellsin.bin").exists()
+        assert not (case_dir / "nodesin.bin").exists()
+        # 其他文件正常
+        assert (case_dir / "mcfd.inp").is_file()
+        assert (case_dir / "C.dat").is_file()
+
+    def test_per_dir_target_exists_raises(self, tmp_path):
+        """per_dir 模式:目标子目录已存在时,默认报错(避免静默覆盖)"""
+        base = tmp_path / "base"
+        _make_base_case(base)
+        template = base / "mcfd.inp"
+        out = tmp_path / "out"
+        out.mkdir()
+        # 默认 naming: {alpha: [0]} 单值 → "case";预创建同名目录
+        (out / "case").mkdir()  # 占位
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "source_dir": str(base),
+            "sweeps": {"alpha": [0]},
+        })
+        from inp_tool.sweep import generate
+        with pytest.raises((FileExistsError, OSError)):
+            generate(cs)
+
+    def test_per_dir_dry_run_no_files_written(self, tmp_path):
+        """per_dir 模式:dry-run 时不实际创建子目录"""
+        base = tmp_path / "base"
+        _make_base_case(base)
+        template = base / "mcfd.inp"
+        out = tmp_path / "out"
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "source_dir": str(base),
+            "sweeps": {"alpha": [0, 4]},
+        })
+        from inp_tool.sweep import generate
+        report = generate(cs, dry_run=True)
+        # 报告仍生成
+        assert report.total == 2
+        # 但 output_dir 下不应有 case_0 / case_4 子目录
+        assert not out.exists() or list(out.iterdir()) == []
+
+
+# ======================================================================
+# Phase 4:manifest 扩展(per_dir 模式)
+# ======================================================================
+class TestManifestExtension:
+    def test_flat_manifest_unchanged(self, tmp_path):
+        """flat 模式(老用法):manifest 不含新字段(向后兼容)"""
+        import json
+        template = tmp_path / "t.inp"
+        template.write_text("guiopts begin\naero_alpha 0.0\nguiopts end\n")
+        out = tmp_path / "out"
+        manifest = out / "manifest.json"
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "sweeps": {"alpha": [0]},
+            "manifest": {"path": str(manifest)},
+        })
+        from inp_tool.sweep import generate
+        generate(cs)
+        data = json.loads(manifest.read_text())
+        # 老字段在
+        assert "template" in data
+        assert "total" in data
+        assert "cases" in data
+        # 新字段不在(flat 模式不污染)
+        assert "layout" not in data
+        assert "source_dir" not in data
+        assert "copy_strategy" not in data
+
+    def test_per_dir_manifest_has_new_fields(self, tmp_path):
+        """per_dir 模式:manifest 含 layout/source_dir/copy_strategy/exclude/files"""
+        import json
+        base = tmp_path / "base"
+        _make_base_case(base)
+        template = base / "mcfd.inp"
+        out = tmp_path / "out"
+        manifest = out / "manifest.json"
+        cs = CaseSweep.from_dict({
+            "template": str(template),
+            "output_dir": str(out),
+            "source_dir": str(base),
+            "copy_strategy": "hardlink",
+            "exclude": ["*.bak", "mlog", "nodesout.bin", "*.log"],
+            "sweeps": {"alpha": [0]},
+            "manifest": {"path": str(manifest)},
+        })
+        from inp_tool.sweep import generate
+        generate(cs)
+        data = json.loads(manifest.read_text())
+        # 顶层新字段
+        assert data["layout"] == "per_dir"
+        assert data["source_dir"] == str(base)
+        assert data["copy_strategy"] == "hardlink"
+        assert "*.bak" in data["exclude"]
+        # 每 case 的 files 字段
+        case = data["cases"][0]
+        assert "files" in case
+        assert "mcfd.inp" in case["files"]  # (虽然被覆写,仍记录复制时清单)
+        assert "mcfd.bc" in case["files"]
+        assert "cellsin.bin" in case["files"]
+        # 排除项不在
+        assert "mcfd.inp.bak" not in case["files"]
+        assert "nodesout.bin" not in case["files"]
+
+
+# 放在文件末尾(避免破坏上面的 Path 引用)
+from pathlib import Path  # noqa: E402
