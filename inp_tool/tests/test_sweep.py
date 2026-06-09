@@ -371,3 +371,33 @@ class TestSweepReport:
         assert report.total == 2
         ids = [r.case_id for r in report]
         assert ids == ["c1", "c2"]
+
+
+# ======================================================================
+# naming_ext 可配置(2026-06-09 计划:项 4)
+# ======================================================================
+class TestNamingExtConfig:
+    def test_naming_ext_default_is_inp(self, sample_inp, tmp_path):
+        """naming_ext 缺省时应为 .inp(向后兼容)"""
+        from inp_tool.sweep import CaseSweep
+        cs = CaseSweep.from_dict({
+            "template":   str(sample_inp),
+            "output_dir": str(tmp_path),
+            "sweeps":     {"alpha": [0]},
+        })
+        assert cs.naming_ext == ".inp"
+
+    def test_naming_ext_override_from_dict(self, sample_inp, tmp_path):
+        """naming_ext 应该能从 config 字典覆盖,默认 .inp"""
+        from inp_tool.sweep import CaseSweep, generate
+        out = tmp_path / "out"
+        cs = CaseSweep.from_dict({
+            "template":   str(sample_inp),
+            "output_dir": str(out),
+            "sweeps":     {"alpha": [0, 5]},
+            "naming_ext": ".txt",  # 改后缀
+        })
+        assert cs.naming_ext == ".txt"
+        report = generate(cs)
+        assert all(c.path.endswith(".txt") for c in report.cases), \
+            f"expected .txt, got {[c.path for c in report.cases]}"

@@ -333,6 +333,9 @@ class CaseSweep:
         manifest_cfg = d.get("manifest") or {}
         manifest_path = manifest_cfg.get("path") if isinstance(manifest_cfg, dict) else None
 
+        # naming_ext: 2026-06-09 起可配置,默认 ".inp" 保持向后兼容
+        naming_ext = d.get("naming_ext", ".inp")
+
         return cls(
             template=d["template"],
             output_dir=d["output_dir"],
@@ -341,6 +344,7 @@ class CaseSweep:
             overrides=d.get("overrides", {}) or {},
             freestream=freestream,
             manifest_path=manifest_path,
+            naming_ext=naming_ext,
         )
 
     @classmethod
