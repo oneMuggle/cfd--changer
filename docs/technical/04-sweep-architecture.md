@@ -84,7 +84,41 @@ class CaseSweep:
 
 **命名模板校验规则:** 多值轴必须在 `naming` 中占位,单值轴(常量)可省略。`from_dict` 时校验,缺失抛 `ValueError`。
 
-### 2.4 CaseResult / SweepReport
+### 2.4 CaseSpec 抽象(v0.7.0 新增)
+
+v0.7.0 引入了**统一 case 归一化**抽象,让 `sweeps` / `cases` / `groups` / CSV 走同一处理路径。
+
+```python
+@dataclass
+class CartesianSpec:
+    """笛卡尔轴集合(由 sweeps 字段生成,经 expand_cartesian 展开)"""
+    axes: Dict[str, List[float]]
+
+
+@dataclass
+class ExplicitCase:
+    """单个完整 case(显式 / 分组 / CSV 路径的最终归一化形式)"""
+    values: Dict[str, float]
+    group: Optional[str] = None  # 用于 {group} 命名占位
+```
+
+`CaseSweep` 新增 `specs: List[Union[CartesianSpec, ExplicitCase]]` 字段,`materialize()` 把 specs 摊平为 `List[ExplicitCase]`(笛卡尔展开在内部完成)。`generate()` 不再直接 `expand_cartesian(sweeps)`,改走 `cs.materialize()`。
+
+**完全向后兼容**:`sweeps` 字段保留(老 API 不变);`from_dict` 自动把 `sweeps:` 同步到 `CartesianSpec` 加入 `specs`。现有 55+ 测试零修改通过。
+
+#### 模式识别(`_build_specs_from_dict`)
+
+| 输入字段 | 进入 `specs` 的形式 |
+|----------|---------------------|
+| `sweeps: {axis: [v1, v2, ...]}` | `CartesianSpec(axes=...)` |
+| `cases: [{...}, {...}]` | `ExplicitCase(values=...)`(每个) |
+| `groups: [{name, common, cases}, ...]` | `ExplicitCase(values=merged, group=name)`(每个 case,common 注入 + 显式覆盖) |
+| 三个都缺 | `KeyError: 至少需要其中一个` |
+| `cases: []` / `groups: []` / 空 group.cases | `ValueError: X is empty` |
+
+混合(sweeps + cases + groups)按出现顺序展开,笛卡尔在前,显式在后,分组最后。
+
+### 2.5 CaseResult / SweepReport
 
 ```python
 @dataclass

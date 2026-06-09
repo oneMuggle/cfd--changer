@@ -271,7 +271,127 @@ if report.total > 1000:
 generate(cs)  # 真正写盘
 ```
 
-## 6. 端到端脚本模板(放进自己的项目)
+## 6. 三种 case 模式(笛卡尔 / 显式列表 / 分组继承 / CSV)
+
+> v0.7.0 新增。**完全向后兼容**:老 `sweeps:` YAML 零修改继续可用。
+
+### 6.1 模式对照
+
+| 模式 | YAML 字段 | 适用场景 |
+|------|-----------|----------|
+| 笛卡尔积 | `sweeps: {axis: [v1, v2]}` | 轴正交、维度少、值均匀(传统) |
+| 显式列表 | `cases: [{...}, {...}, ...]` | case 数量少 / 不规则 / 要精确控制 |
+| 分组继承 | `groups: [{name, common, cases}, ...]` | 几组共参 + 组内 case 列表 |
+| CSV 文件 | `cases.csv`(CLI: `--template` + `--naming`) | Excel 维护、几百行 case |
+| 混合 | `sweeps: {...}` + `cases: [...]` | 大部分笛卡尔 + 几个特例 |
+
+### 6.2 显式列表
+
+```yaml
+# cases_demo.yaml
+template: examples/mcfd_v2_modified.inp
+output_dir: examples/sweep_cases
+cases:
+  - {alpha: 10, beta:  5, mach: 0.6, T: 288.15, p: 101325}
+  - {alpha: 10, beta:  8, mach: 0.6, T: 288.15, p: 101325}
+  - {alpha: 20, beta: 10, mach: 0.6, T: 288.15, p: 101325}
+  - {alpha: 20, beta: 15, mach: 0.6, T: 288.15, p: 101325}
+naming: "case_a{alpha:02.0f}_b{beta:02.0f}.inp"
+```
+
+调用与笛卡尔一致(`inp-tool sweep cases_demo.yaml`)。
+
+### 6.3 分组继承(您那个"流场 1"场景)
+
+```yaml
+# groups_demo.yaml
+template: examples/mcfd_v2_modified.inp
+output_dir: examples/sweep_cases
+groups:
+  - name: flow_1
+    common: {T: 288.15, p: 101325, mach: 0.6}  # 三组共参
+    cases:
+      - {alpha: 10, beta:  5}
+      - {alpha: 10, beta:  8}
+      - {alpha: 20, beta: 10}
+      - {alpha: 20, beta: 15}
+naming: "{group}_a{alpha:02.0f}_b{beta:02.0f}.inp"
+```
+
+`common` 自动注入到组内每个 case,`cases` 字段可覆盖 `common`。`{group}` 在 naming 中替换为 `name`。
+
+### 6.4 多组对比
+
+```yaml
+# multi_flow_demo.yaml
+template: examples/mcfd_v2_modified.inp
+output_dir: examples/sweep_cases
+groups:
+  - name: flow_1_sealevel
+    common: {T: 288.15, p: 101325, mach: 0.6}
+    cases: [{alpha: 10, beta: 5}, {alpha: 10, beta: 8}, {alpha: 20, beta: 10}, {alpha: 20, beta: 15}]
+  - name: flow_2_high_alt
+    common: {T: 250.0, p: 35000, mach: 0.85}
+    cases: [{alpha: 5, beta: 0}, {alpha: 15, beta: 0}, {alpha: 25, beta: 0}]
+  - name: flow_3_cruise
+    common: {T: 273.0, p: 75000, mach: 0.78}
+    cases: [{alpha: 2, beta: -3}, {alpha: 2, beta: 0}, {alpha: 2, beta: 3}]
+naming: "{group}_a{alpha:02.0f}_b{beta:+03.0f}.inp"
+```
+
+输出 10 个 case,每个文件名带 `flow_*_` 前缀。
+
+### 6.5 CSV 文件(Excel 友好)
+
+```csv
+# cases.csv
+alpha,beta,mach,T,p
+10,5,0.6,288.15,101325
+10,8,0.6,288.15,101325
+20,10,0.6,288.15,101325
+20,15,0.6,288.15,101325
+```
+
+调用:
+
+```bash
+inp-tool sweep cases.csv \
+    --template examples/mcfd_v2_modified.inp \
+    --naming "case_a{alpha:02.0f}_b{beta:02.0f}.inp" \
+    --out ./sweep_cases
+```
+
+**注意:** CSV 必须有表头;CSV 不含模板 / 输出 / 命名信息,需通过 CLI flag 提供。
+
+### 6.6 混合(笛卡尔 + 特例)
+
+```yaml
+# mixed_demo.yaml
+template: examples/mcfd_v2_modified.inp
+output_dir: examples/sweep_cases
+sweeps:
+  alpha: [0, 5, 10, 15]   # 4 cases
+  beta:  [0]              # 单值
+cases:                     # 特例(有侧滑角)
+  - {alpha: 5,  beta: 3}
+  - {alpha: 10, beta: 5}
+naming: "case_a{alpha:02.0f}_b{beta:02.0f}.inp"
+```
+
+`materialize()` 顺序:笛卡尔(4 个)→ 显式(2 个)= 共 6 个 case。
+
+### 6.7 选型决策
+
+| 你的数据形态 | 推荐模式 |
+|--------------|----------|
+| 5 个轴正交,各扫 3-5 个值 | 笛卡尔积(最简) |
+| 4-10 个不规则 case | 显式列表 |
+| 几组共参,组内几个 case | 分组继承 |
+| Excel 维护,几百行 | CSV |
+| 大部分轴正交 + 几个特例 | 混合 |
+| LHS / Sobol 等智能采样 | 本次不支持(后续计划) |
+
+## 7. 端到端脚本模板(放进自己的项目)
 
 ```python
 #!/usr/bin/env python

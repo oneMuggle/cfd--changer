@@ -39,4 +39,4 @@ __all__ = [
     'render_case_name', 'CaseResult', 'SweepReport',
     'CaseSweep', 'generate',
 ]
-__version__ = '0.6.1'
+__version__ = '0.7.0'
