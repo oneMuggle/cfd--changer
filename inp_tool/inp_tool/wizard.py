@@ -387,9 +387,10 @@ class WizardSweep(WizardBase):
         "step_2_mode",
         "step_3_params",
         "step_4_naming",
-        "step_5_output",
-        "step_6_preview",
-        "step_7_execute",
+        "step_5_source_dir",
+        "step_6_output",
+        "step_7_preview",
+        "step_8_execute",
     ]
 
     def step_1_template(self, data: dict):
@@ -494,7 +495,48 @@ class WizardSweep(WizardBase):
         naming = input_text(prompt, default=default)
         return ("step_5_output", {"naming": naming})
 
-    def step_5_output(self, data: dict):
+    def step_5_source_dir(self, data: dict):
+        """v0.8.0:可选设置 source_dir(基础算例目录)以启用 per_dir 整目录模式。"""
+        is_zh = get_lang() == "zh"
+        if is_zh:
+            prompt = "  基础算例目录(空=只写 mcfd.inp)"
+            help_text = "  设了就走整算例目录模式:每个 case = 完整子目录(网格/配置/物性/脚本全到位)"
+        else:
+            prompt = "  Base case directory (empty=write mcfd.inp only)"
+            help_text = "  If set, enables per_dir mode: each case = full subdir (grids/configs/BCs/scripts)"
+        source_dir = input_text(prompt, default="")
+        if not source_dir:
+            return ("step_6_output", data)
+        from pathlib import Path
+        p = Path(source_dir)
+        if not p.is_dir():
+            _print(f"  目录不存在: {p}")
+            return None
+        # 选复制策略
+        if is_zh:
+            choices = [
+                ("1", "hardlink  零空间,跨 FS 退化(推荐)", "hardlink"),
+                ("2", "copy      慢,占空间", "copy"),
+                ("3", "symlink   零空间,跨 FS,Windows 需 dev mode", "symlink"),
+            ]
+            prompt = "  复制策略:"
+        else:
+            choices = [
+                ("1", "hardlink  zero space, falls back on cross-FS (recommended)", "hardlink"),
+                ("2", "copy      slow, uses disk space", "copy"),
+                ("3", "symlink   zero space, cross-FS, needs dev mode on Windows", "symlink"),
+            ]
+            prompt = "  Copy strategy:"
+        key = menu(prompt, choices, default="1")
+        # menu() 返回 key ("1"/"2"/"3"),转换为实际策略值供 CopyStrategy() 用
+        key_to_strategy = {"1": "hardlink", "2": "copy", "3": "symlink"}
+        return ("step_6_output", {
+            **data,
+            "source_dir": str(p),
+            "copy_strategy": key_to_strategy.get(key, "hardlink"),
+        })
+
+    def step_6_output(self, data: dict):
         is_zh = get_lang() == "zh"
         if is_zh:
             default = "./sweep_cases"
@@ -512,14 +554,16 @@ class WizardSweep(WizardBase):
             from pathlib import Path
             mp = input_text("  manifest 路径", default=str(Path(out_dir) / "manifest.json"))
             manifest_path = mp
-        return ("step_6_preview", {"output_dir": out_dir, "manifest_path": manifest_path})
+        return ("step_7_preview", {"output_dir": out_dir, "manifest_path": manifest_path})
 
-    def step_6_preview(self, data: dict):
+    def step_7_preview(self, data: dict):
         is_zh = get_lang() == "zh"
         if is_zh:
             _print("  预览(简化):")
             _print(f"    模板: {data['template']}")
             _print(f"    模式: {data['mode']}")
+            if data.get("source_dir"):
+                _print(f"    源目录: {data['source_dir']} (策略: {data.get('copy_strategy', 'hardlink')})")
             _print(f"    输出: {data['output_dir']}")
             if data.get("naming"):
                 _print(f"    命名: {data['naming']}")
@@ -527,13 +571,15 @@ class WizardSweep(WizardBase):
             _print("  Preview (simplified):")
             _print(f"    Template: {data['template']}")
             _print(f"    Mode: {data['mode']}")
+            if data.get("source_dir"):
+                _print(f"    Source: {data['source_dir']} (strategy: {data.get('copy_strategy', 'hardlink')})")
             _print(f"    Output: {data['output_dir']}")
         if confirm("  确认生成?", default=True):
-            return ("step_7_execute", {})
+            return ("step_8_execute", {})
         return None
 
-    def step_7_execute(self, data: dict):
-        from .sweep import CaseSweep, generate
+    def step_8_execute(self, data: dict):
+        from .sweep import CaseSweep, generate, CopyStrategy
         cfg: Dict[str, Any] = {
             "template": data["template"],
             "output_dir": data["output_dir"],
@@ -559,13 +605,18 @@ class WizardSweep(WizardBase):
             if data.get("manifest_path"):
                 cfg["manifest"] = {"path": data["manifest_path"]}
             cs = CaseSweep.from_dict(cfg)
+        # v0.8.0:per_dir 模式
+        if data.get("source_dir"):
+            cs.source_dir = data["source_dir"]
+            cs.copy_strategy = CopyStrategy(data.get("copy_strategy", "hardlink"))
         report = generate(cs)
-        _print(f"  生成 {report.total} 个算例 → {data['output_dir']}")
+        layout = "整目录" if data.get("source_dir") else "扁平"
+        _print(f"  生成 {report.total} 个算例 ({layout}) → {data['output_dir']}")
         if data.get("manifest_path"):
             _print(f"  manifest → {data['manifest_path']}")
 
     def execute(self, data: dict) -> None:
-        pass  # step_7 完成
+        pass  # step_8 完成
 
 
 class WizardDiff(WizardBase):

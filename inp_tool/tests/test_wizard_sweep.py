@@ -59,6 +59,7 @@ class TestSweepModeCartesian:
             "1",
             "{alpha: [0, 5], mach: [0.6, 0.8]}",
             "case_a{alpha}_ma{mach}.inp",
+            "",              # v0.8.0 step_5 source_dir (空=flat)
             out_dir,
             "n",
             "y",
@@ -87,6 +88,7 @@ class TestSweepModeCases:
             "2",
             cases_yaml,
             "case_a{alpha:02.0f}_b{beta:02.0f}.inp",
+            "",              # v0.8.0 source_dir
             out_dir,
             "n",
             "y",
@@ -110,6 +112,7 @@ class TestSweepModeCSV:
             "4",
             str(csv),
             "case_a{alpha}.inp",
+            "",              # v0.8.0 source_dir
             out_dir,
             "n",
             "y",
@@ -119,6 +122,41 @@ class TestSweepModeCSV:
         w.run()
         inps = sorted(os.listdir(out_dir))
         assert len(inps) == 2
+
+    def test_wizard_with_source_dir_per_dir_mode(self, monkeypatch, template_inp, tmp_path):
+        """v0.8.0:wizard 加 source_dir 后,生成 per_dir 整目录(不是孤立 mcfd.inp)"""
+        from pathlib import Path
+        # 基础算例目录
+        base = tmp_path / "base"
+        base.mkdir()
+        (base / "mcfd.inp").write_text(TEMPLATE_TEXT)
+        (base / "grid.bin").write_bytes(b"GRID")
+        (base / "config.txt").write_text("cfg")
+        out_dir = str(tmp_path / "out")
+        responses = iter([
+            str(template_inp),
+            "1",                                  # 笛卡尔模式
+            "{alpha: [0, 4]}",                    # 2 cases
+            "case_{alpha}",                       # 命名
+            str(base),                            # v0.8.0 source_dir
+            "1",                                  # hardlink
+            out_dir,                              # 输出目录
+            "n",                                  # 不要 manifest
+            "y",                                  # 预览确认
+        ])
+        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        w = WizardSweep()
+        w.run()
+        # 验证:per_dir 模式 → 2 个子目录,每个含 grid.bin
+        out_path = Path(out_dir)
+        case_dirs = [d for d in out_path.iterdir() if d.is_dir()]
+        assert len(case_dirs) == 2
+        for case_dir in case_dirs:
+            assert (case_dir / "mcfd.inp").is_file()
+            assert (case_dir / "grid.bin").is_file()
+            assert (case_dir / "config.txt").is_file()
+        # 关键:源 mcfd.inp 不能被损坏(回归 C1)
+        assert (base / "mcfd.inp").read_text() == TEMPLATE_TEXT
 
 
 class TestSweepCancel:
