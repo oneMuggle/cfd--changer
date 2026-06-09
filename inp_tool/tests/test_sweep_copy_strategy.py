@@ -49,12 +49,15 @@ class TestCopyOne:
 
     def test_symlink_creates_link(self, tmp_path):
         """SYMLINK:目标是符号链接,指向源"""
+        from pathlib import Path
         src = tmp_path / "src.txt"
         src.write_text("hello")
         dst = tmp_path / "dst.txt"
         _copy_one(str(src), str(dst), CopyStrategy.SYMLINK)
         assert os.path.islink(dst)
-        assert os.readlink(dst) == str(src)
+        # Windows 上 os.readlink 返回 extended path 格式 (\\?\C:\...);
+        # pathlib.Path 会在 == 比较时规范化路径,跨平台安全
+        assert Path(os.readlink(dst)) == src
         # 删源后目标成死链接
         src.unlink()
         assert os.path.islink(dst)
