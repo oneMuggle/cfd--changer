@@ -1,0 +1,7 @@
+{
+  "template":   "/home/fz/project/cfd--changer/inp_tool/tests/data/sample_v1.inp",
+  "output_dir": "/tmp/inp_verify/run_sweep_test",
+  "sweeps":     {"alpha": [0, 5, 10]},
+  "naming":     "case_a{alpha:g}",
+  "manifest":   {"path": "/tmp/inp_verify/run_sweep_test/manifest.json"}
+}
