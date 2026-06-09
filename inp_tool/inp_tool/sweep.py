@@ -6,13 +6,16 @@ mcfd.inp sweep 批量算例生成器 v0.1
 - SweepSpec: 笛卡尔积展开
 - render_case_name: 命名模板
 - CaseResult / SweepReport: 结果聚合
+- CopyStrategy (v0.8.0):整算例目录复制策略
 """
 from __future__ import annotations
 import copy
+import enum
 import hashlib
 import math
 import os
 import re
+import shutil
 import sys
 import itertools
 import json
@@ -26,6 +29,36 @@ from .writer import write as write_inp
 
 # 一个 sweep 轴的值可以是标量或列表
 SweepValue = Union[int, float, str, List[Union[int, float, str]]]
+
+
+# ============================================================
+# v0.8.0:CopyStrategy + 整算例目录生成
+# ============================================================
+class CopyStrategy(str, enum.Enum):
+    """整算例目录复制策略(per_dir 模式)"""
+    COPY = "copy"          # shutil.copy2(慢,占空间)
+    HARDLINK = "hardlink"  # os.link(快,零空间,跨 inode 但同 FS)— 默认
+    SYMLINK = "symlink"    # os.symlink(零空间,跨 FS,Windows 需 dev mode)
+
+
+# 默认排除规则:基础算例目录里"不该被打包进子算例"的文件
+DEFAULT_EXCLUDE: List[str] = [
+    "*.bak",         # 备份
+    "*.BAK",
+    "mlog",          # 上次运行的日志目录
+    "nodesout.bin",  # 求解器输出(下次跑会被覆写)
+    "*.log",         # 通用日志
+]
+
+
+def _resolve_layout(sweep: "CaseSweep") -> str:
+    """根据 source_dir 是否设置决定输出布局。
+
+    Returns:
+        "flat"    — source_dir 未设,每个 case = 1 个 .inp 文件(v0.7.x 行为)
+        "per_dir" — source_dir 有值,每个 case = 1 个子目录(完整算例)
+    """
+    return "per_dir" if sweep.source_dir else "flat"
 
 
 @dataclass
@@ -325,6 +358,10 @@ class CaseSweep:
     naming_ext: str = ".inp"
     # PR #1 新增:统一 spec 列表(老 sweeps 字段保留,向后兼容)
     specs: List[Union[CartesianSpec, ExplicitCase]] = field(default_factory=list)
+    # v0.8.0 新增:整算例目录模式
+    source_dir: Optional[str] = None
+    copy_strategy: CopyStrategy = CopyStrategy.HARDLINK
+    exclude: List[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE))
 
     # --------------------- 构造 ---------------------
     @classmethod
@@ -373,6 +410,21 @@ class CaseSweep:
         # naming_ext: 2026-06-09 起可配置,默认 ".inp" 保持向后兼容
         naming_ext = d.get("naming_ext", ".inp")
 
+        # v0.8.0:整算例目录模式字段
+        source_dir = d.get("source_dir")  # 缺省/None → flat 模式
+        # copy_strategy:接受字符串("copy"/"hardlink"/"symlink")或枚举实例
+        cs_raw = d.get("copy_strategy", CopyStrategy.HARDLINK)
+        try:
+            copy_strategy = cs_raw if isinstance(cs_raw, CopyStrategy) else CopyStrategy(cs_raw)
+        except ValueError as e:
+            raise ValueError(
+                f"CaseSweep config: invalid copy_strategy {cs_raw!r}; "
+                f"expected one of {[s.value for s in CopyStrategy]}"
+            ) from e
+        # exclude:None 或缺省 → 用 DEFAULT_EXCLUDE 的副本(避免共享 mutable)
+        exclude_raw = d.get("exclude")
+        exclude = list(exclude_raw) if exclude_raw else list(DEFAULT_EXCLUDE)
+
         return cls(
             template=d["template"],
             output_dir=d["output_dir"],
@@ -383,6 +435,9 @@ class CaseSweep:
             manifest_path=manifest_path,
             naming_ext=naming_ext,
             specs=specs,
+            source_dir=source_dir,
+            copy_strategy=copy_strategy,
+            exclude=exclude,
         )
 
     def materialize(self) -> List[ExplicitCase]:
