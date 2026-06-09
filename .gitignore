@@ -30,3 +30,10 @@ htmlcov/
 
 # inp_tool sweep demo 输出(可由 examples/sweep_demo.py 重新生成)
 inp_tool/examples/sweep_cases/
+# 本地二进制归档(v0.4.2 / v0.5.0 / v0.6.0 / v0.6.1) — 不进 git
+# 从 GitHub release 下载或本地 build 后的归档,只在本机用
+/dist-archive/
+
+# reference/ 目录是用户工作模板的副本(攻角/来流参数已调整)
+# 不属于 inp_tool 包,只是开发时的对照参考
+/reference/
