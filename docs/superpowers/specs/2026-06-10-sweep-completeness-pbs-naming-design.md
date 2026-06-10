@@ -2,7 +2,7 @@
 
 **日期**: 2026-06-10
 **作者**: brainstorming with user
-**状态**: 已批准,待实现
+**Status:** ✅ 已实现 v0.9.0 (commit 4e45428)
 **目标版本**: inp-tool v0.9.0
 **前置**: v0.8.2(wizard sweep 整目录模式必填)
 

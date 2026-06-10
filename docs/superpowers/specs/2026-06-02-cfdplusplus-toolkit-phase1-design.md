@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |---|---|
 | **Spec 作者** | brainstorming session, 2026-06-02 |
-| **状态** | 设计稿，待人工 review |
+| **Status** | 待实施 (resid_tool 后处理工具,未启动) |
 | **目标读者** | 后续 writing-plans 阶段（实现工程师） |
 | **范围** | Phase 1 — `resid_tool` 新包 + 顶层目录重命名 |
 | **不在范围** | 2D 截面 / 3D 体绘制（后续 Phase）、参数化扫描、几何/网格对接、HTML 报告 |
