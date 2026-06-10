@@ -144,3 +144,47 @@ def test_shell_via_subprocess(tmp_path):
     assert cp.returncode == 0, f'shell exited with {cp.returncode}: stderr={cp.stderr}'
     # 's' is the stem of s.inp — should appear in the files listing
     assert 's' in cp.stdout
+
+
+# =============================================================================
+# v0.8.2:CLI deprecation warning(不传 --source-dir 时)
+# =============================================================================
+def test_cli_sweep_no_source_dir_emits_deprecation(capsys, sample_inp, tmp_path):
+    """v0.8.2:CLI 不传 --source-dir 时,stderr 应包含 [DEPRECATION] 提示。
+
+    行为不变:仍然生成扁平 .inp(wizard 已强制 per_dir,CLI 仅引导)。
+    """
+    out_dir = tmp_path / "flat_out"
+    rc = cli.main([
+        "sweep", str(sample_inp),
+        "--alpha", "0,4",
+        "--out", str(out_dir),
+    ])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "[DEPRECATION]" in err
+    assert "--source-dir" in err
+    inps = list(out_dir.glob("*.inp"))
+    assert len(inps) == 2
+
+
+def test_cli_sweep_with_source_dir_no_deprecation(capsys, sample_inp, tmp_path):
+    """v0.8.2:CLI 传 --source-dir 时,stderr 不应有 [DEPRECATION]。"""
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "mcfd.inp").write_text(sample_inp.read_text())
+    (base / "grid.bin").write_bytes(b"G")
+    rc = cli.main([
+        "sweep", str(sample_inp),
+        "--alpha", "0,4",
+        "--source-dir", str(base),
+        "--out", str(tmp_path / "per_dir_out"),
+    ])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "[DEPRECATION]" not in err
+    case_dirs = sorted(d for d in (tmp_path / "per_dir_out").iterdir() if d.is_dir())
+    assert len(case_dirs) == 2
+    for d in case_dirs:
+        assert (d / "mcfd.inp").is_file()
+        assert (d / "grid.bin").is_file()

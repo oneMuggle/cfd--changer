@@ -312,30 +312,33 @@ def build_sweep_config_interactive():
     走一遍 prompt 序列,返回 CaseSweep config dict。
     全部字段有 default,一路回车可走完。
     用户在 confirm 选 n 时返回 None(取消)。
+
+    v0.8.2 起:source_dir 必填(template 自动取 source_dir/mcfd.inp)。
     """
     print("=== sweep 交互式配置(回车=接受默认值)===\n")
+    print("  v0.8.2 起:扁平模式已从交互式 prompt 移除,必须指定基础算例目录(整目录生成)。\n")
 
-    template = _prompt("模板 .inp 路径", default="")
-    while not template or not os.path.isfile(template):
-        if not template:
-            print("  模板路径必填。")
+    # v0.8.2:先问 source_dir(template 自动取其下 mcfd.inp)
+    source_dir = _prompt("基础算例目录 source_dir (必填,完整算例根目录)", default="")
+    while not source_dir or not os.path.isdir(source_dir):
+        if not source_dir:
+            print("  错误:基础算例目录为必填项。")
         else:
-            print(f"  文件不存在: {template}")
-        template = _prompt("模板 .inp 路径", default="")
-        if not template:
+            print(f"  目录不存在: {source_dir}")
+        source_dir = _prompt("基础算例目录 source_dir (必填)", default="")
+        if not source_dir:
             return None
+    template = os.path.join(source_dir, "mcfd.inp")
+    if not os.path.isfile(template):
+        print(f"  错误:目录下找不到 mcfd.inp: {template}")
+        return None
+
+    copy_strategy = _prompt(
+        "复制策略 copy/hardlink/symlink (默认 hardlink)",
+        default="hardlink",
+    )
 
     output_dir = _prompt("输出目录", default="./sweep_cases")
-    source_dir = _prompt(
-        "基础算例目录 source_dir (空=只写 mcfd.inp)",
-        default="",
-    )
-    copy_strategy = "hardlink"
-    if source_dir:
-        copy_strategy = _prompt(
-            "复制策略 copy/hardlink/symlink (默认 hardlink)",
-            default="hardlink",
-        )
     alpha_s = _prompt("攻角 alpha 扫描 (deg,逗号分隔)", default="0,4,8")
     beta_s = _prompt("侧滑角 beta 扫描 (deg,逗号分隔)", default="0")
     mach_s = _prompt("马赫 mach 扫描 (逗号分隔)", default="0.6,0.8")
@@ -359,11 +362,10 @@ def build_sweep_config_interactive():
             "T_inf": _parse_csv_floats(T_inf_s),
             "p_inf": _parse_csv_floats(p_inf_s),
         },
+        "source_dir": source_dir,
+        "copy_strategy": copy_strategy,
         "dry_run": dry,
     }
-    if source_dir:
-        cfg["source_dir"] = source_dir
-        cfg["copy_strategy"] = copy_strategy
     if naming:
         cfg["naming"] = naming
     if manifest:
@@ -518,6 +520,14 @@ def cmd_sweep(args):
 
     # v0.8.0:应用 CLI 覆盖到 cs(整算例目录模式)
     _apply_v080_overrides(cs, args)
+
+    # v0.8.2:wizard 已强制 per_dir,CLI 不传 --source-dir 视为遗留用法,打 deprecation 提示
+    if not getattr(args, "source_dir", None) and not cs.source_dir:
+        print(
+            "[DEPRECATION] 不传 --source-dir 将只生成 mcfd.inp,跑不动。"
+            "推荐使用 --source-dir <基础算例目录>(wizard v0.8.2+ 已强制要求)。",
+            file=sys.stderr,
+        )
 
     if args.dry_run:
         print("[sweep] DRY RUN: no files will be written")
