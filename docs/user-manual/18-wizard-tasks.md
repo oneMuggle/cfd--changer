@@ -67,14 +67,14 @@ inp> wizard modify-file
 
 **用途:** 从 1 个模板出发,扫一组参数,生成 N 个 .inp 文件。
 
-**8 步(v0.8.0 起 + 源目录提示):**
-1. 模板 .inp 路径
-2. 选择 sweep 模式:**笛卡尔** / **显式列表** / **分组继承** / **CSV 文件**
-3. 填参(根据所选模式)
-4. 命名模板(`{alpha}` `{beta}` `{mach}` `{T}` `{p}` `{group}` 占位符)
-5. 输出目录 + manifest 选项
-6. 预览
-7. 执行 → 调用 PR #1 的 `sweep.generate()`
+**7 步(v0.8.4 + v0.9.0):**
+1. 源算例目录(必填,基础算例根)
+2. 输出目录 + manifest 选项
+3. 选择 sweep 模式:**笛卡尔** / **显式列表** / **分组继承** / **CSV 文件**
+4. 填参(根据所选模式)
+5. 命名模板(`{alpha}` `{beta}` `{mach}` `{T}` `{p}` `{group}` 占位符)
+6. **v0.9.0 新增 pbs 步骤**:是否生成 pbs 脚本 + 任务名模板
+7. 预览 + 执行
 
 ### 4 种模式选型
 
@@ -94,56 +94,61 @@ inp> wizard sweep
 ═══════════════════════════════════════════════════════════
   向导:批量生成算例
 ═══════════════════════════════════════════════════════════
-适用:从 1 个模板出发,扫一组参数,生成 N 个 .inp。
+适用:从 1 个完整基础算例目录出发,扫一组参数,生成 N 个完整算例子目录。
 
-──── 步骤 1/7: template ────
-模板 .inp 路径: examples/mcfd_v2_modified.inp
+──── 步骤 1/7: source_dir ────
+  基础算例目录(必填,完整算例根目录,例:/home/.../reference/suanli):
+  reference/suanli
+  ✓ pbs 模板: reference/suanli/run_cfdpp.pbs
+  [validate] warning: MISSING_BLOCK:chemkin ...
 
-──── 步骤 2/7: mode ────
-选择 sweep 模式:
-  [1] 笛卡尔积 sweeps: {axis: [v1, v2]}
-  [2] 显式列表 cases: [{...}, ...]
-  [3] 分组继承 groups: [{name, common, cases}, ...]
-  [4] CSV 文件 cases.csv
-  [Q] 取消
-> 2
-
-──── 步骤 3/7: params ────
-  显式列表:每行一个 case,如 {alpha: 10, beta: 5}
-  cases(YAML 列表):
-- {alpha: 10, beta: 5,  mach: 0.6, T: 288.15, p: 101325}
-- {alpha: 10, beta: 8,  mach: 0.6, T: 288.15, p: 101325}
-- {alpha: 20, beta: 10, mach: 0.6, T: 288.15, p: 101325}
-- {alpha: 20, beta: 15, mach: 0.6, T: 288.15, p: 101325}
-
-──── 步骤 4/7: naming ────
-  命名模板(可用 {alpha} {beta} {mach} {T} {p} {group}):
-  [case_{alpha}]: case_a{alpha:02.0f}_b{beta:02.0f}.inp
-
-──── 步骤 5/7: output ────
+──── 步骤 2/7: output ────
   输出目录 [./sweep_cases]: /tmp/my_sweep
   生成 manifest.json? [Y/n]: n
 
+──── 步骤 3/7: mode ────
+选择 sweep 模式:
+  [1] 笛卡尔积 sweeps: {axis: [v1, v2]}
+  ...
+
+──── 步骤 4/7: params ────
+  ...
+
+──── 步骤 5/7: naming ────
+  命名模板(可用 {alpha} {beta} {mach} ...):
+  case_a{alpha:02.0f}_b{beta:02.0f}
+
+──── 步骤 5a/7: pbs (v0.9.0 新增) ────
+  是否生成 pbs 脚本? [Y/n]: y
+  pbs 任务名建议(可改): Marspath_a10_b05
+  任务名模板(空=接受建议,例 Mars-{alpha}-{beta}):
+
 ──── 步骤 6/7: preview ────
   预览(简化):
-    模板: examples/mcfd_v2_modified.inp
-    模式: 2
+    源目录: reference/suanli (策略: hardlink)
+    模板: reference/suanli/mcfd.inp
+    模式: 1
     输出: /tmp/my_sweep
-    命名: case_a{alpha:02.0f}_b{beta:02.0f}.inp
+    命名: case_a{alpha:02.0f}_b{beta:02.0f}
+    pbs 任务名建议: Marspath_a10_b05
   确认生成? [Y/n]: y
+  目标子目录已存在时覆盖? [y/N]: n
 
-──── 步骤 7/7: execute ────
-  生成 4 个算例 → /tmp/my_sweep
+──── 步骤 7/7: preview ────
+  生成 4 个算例 (整目录) → /tmp/my_sweep
 
 ✓ 向导完成。
 ```
 
 输出:
 ```
-case_a10_b05.inp
-case_a10_b08.inp
-case_a20_b10.inp
-case_a20_b15.inp
+case_a10_b05/  ← 完整算例
+  ├── mcfd.inp           (修改后)
+  ├── cellsin.bin        (硬链接,0 空间)
+  └── run_cfdpp.pbs      (任务名: Marspath_a10_b05)
+case_a10_b08/  ...
+case_a20_b10/  ...
+case_a20_b15/  ...
 ```
 
 ### 整算例目录模式(v0.8.0+)
@@ -154,8 +159,25 @@ CLI 等价命令(同样效果):
 ```bash
 inp-tool sweep config.yaml \
   --source-dir /path/to/reference/suanli \
-  --copy-strategy hardlink
+  --copy-strategy hardlink \
+  --pbs-naming 'Mars-{alpha}-{mach}'
 ```
+
+### pbs 脚本可选生成(v0.9.0 新增)
+
+v0.8.x 整目录模式会复制 `run_*.pbs` 到每个子算例,但任务名是源模板里硬编码的(如 `Marspathfinder-Ini`),批量提交时无法区分 case。v0.9.0 起,wizard / CLI 可选生成 pbs,按 sweep 参数自动重新填 `#PBS -N`。
+
+wizard 新增 `step 5a/7: pbs`(默认 yes),CLI 加 `--pbs/--no-pbs` + `--pbs-naming` 模板 flag。
+
+任务名建议默认按"变动多值轴"生成短名:
+- `Marspathfinder-Ini` (8 字符) → `Marspath`(base)
+- `sweeps: {alpha: [0, 4, 8]}` → `Marspath_a00`, `Marspath_a04`, `Marspath_a08`
+
+用户可输入模板覆盖:
+- `Mars-{alpha}-{mach}` → `Mars-0-0.6`, `Mars-4-0.6`, `Mars-4-0.8`(每个 case 不同)
+- `MyRun`(具体名) → 所有 case 共享 `MyRun`
+
+如果源目录缺 `run_*.pbs` 模板,wizard 自动关闭 pbs 生成并打印 warning。
 
 输出示例(`/tmp/my_sweep/`):
 ```
@@ -166,13 +188,24 @@ case_a10_b05/   ← 完整算例
   ├── mcfd.bc / mcfd.grp
   ├── npfopts.inp / pltopts.inp
   ├── C.dat / O2.dat / ...
-  └── run_cfdpp.pbs
+  └── run_cfdpp.pbs      (任务名: #PBS -N Marspath_a10_b05)
 case_a10_b08/
-  ...
-manifest.json   ← 含 layout/source_dir/copy_strategy/files
+  └── run_cfdpp.pbs      (任务名: #PBS -N Marspath_a10_b08)
+...
+manifest.json   ← 含 layout/source_dir/copy_strategy/files/pbs_enabled/pbs_name
 ```
 
 **复制策略选 `hardlink`(默认)** 最经济:100 个 case × 544MB = 0 额外磁盘。改 `mcfd.inp` 时只影响自身,网格是只读共享。
+
+### 完整性检查(v0.9.0 新增)
+
+选中 source_dir 后,wizard 自动跑完整性检查(只 warn,不阻断):
+- `mcfd.inp` 必须存在
+- `tsteps` / `physics` block 建议存在(标准 mcfd 用 `xxx begin/end` 格式)
+- `chemkin` / `restart` block 软提示(部分算例类型需要)
+- 网格/物性/配置/ pbs 模板缺失软提示
+
+完整性 error 抛 `SweepValidationError`(当前默认不抛,严格模式留给 v0.9.x 后期)。
 
 ### CSV 模式示例
 

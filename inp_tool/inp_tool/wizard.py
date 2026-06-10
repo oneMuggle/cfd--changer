@@ -394,6 +394,7 @@ class WizardSweep(WizardBase):
         "step_3_mode",
         "step_4_params",
         "step_5_naming",
+        "step_5a_pbs",
         "step_6_preview",
     ]
 
@@ -553,7 +554,47 @@ class WizardSweep(WizardBase):
                   if is_zh else
                   "  Naming template (placeholders: {alpha} {beta} {mach} {T} {p} {group})")
         naming = input_text(prompt, default=default)
-        return ("step_6_preview", {"naming": naming})
+        return ("step_5a_pbs", {"naming": naming})
+
+    def step_5a_pbs(self, data: dict):
+        """v0.9.0 新增:询问 pbs 生成 + 任务名模板。"""
+        from .pbs import extract_pbs_basename, render_pbs_name
+        is_zh = get_lang() == "zh"
+        pbs_enabled = confirm(
+            "  是否生成 pbs 脚本?" if is_zh else "  Generate pbs script?",
+            default=True,
+        )
+        pbs_naming = ""
+        if pbs_enabled:
+            detected = data.get("detected_pbs")
+            base_basename = "case"
+            if detected:
+                base_basename = extract_pbs_basename(detected, max_len=8)
+            multi_value: List[str] = []
+            sweeps = data.get("sweeps") or {}
+            for ax, vs in sweeps.items():
+                if isinstance(vs, list) and len(vs) > 1:
+                    multi_value.append(ax)
+            first_params = {ax: vs[0] for ax, vs in sweeps.items() if isinstance(vs, list) and vs}
+            suggested = render_pbs_name(
+                params=first_params,
+                multi_value_axes=multi_value,
+                base_basename=base_basename,
+            )
+            if is_zh:
+                _print(f"  pbs 任务名建议(可改): {suggested}")
+            else:
+                _print(f"  Suggested pbs job name: {suggested}")
+            pbs_naming = input_text(
+                "  任务名模板(空=接受建议,例 Mars-{alpha})" if is_zh else
+                "  Naming template (empty=accept, e.g. Mars-{alpha})",
+                default="",
+            )
+        return ("step_6_preview", {
+            **data,
+            "pbs_enabled": pbs_enabled,
+            "pbs_naming": pbs_naming,
+        })
 
     def step_6_preview(self, data: dict):
         """v0.8.2 起:预览 + 覆盖确认 + 执行合一(原 step_7 + step_8)。"""
@@ -609,6 +650,13 @@ class WizardSweep(WizardBase):
         # v0.8.2:source_dir 必填,直接注入 per_dir 模式
         cs.source_dir = data["source_dir"]
         cs.copy_strategy = CopyStrategy(data.get("copy_strategy", "hardlink"))
+        # v0.9.0:pbs 注入(若 step_5a_pbs 设了)
+        if data.get("pbs_enabled", False):
+            from .pbs import PbsConfig
+            cs.pbs = PbsConfig(
+                enabled=True,
+                naming=data.get("pbs_naming", ""),
+            )
         report = generate(cs, force=force)
         _print(f"  生成 {report.total} 个算例 (整目录) → {data['output_dir']}")
         if data.get("manifest_path"):

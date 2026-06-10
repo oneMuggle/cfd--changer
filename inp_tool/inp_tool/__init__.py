@@ -30,6 +30,15 @@ from .sweep import (
     CopyStrategy,        # v0.8.0
     DEFAULT_EXCLUDE,     # v0.8.0
 )
+from .pbs import (       # v0.9.0
+    PbsConfig,
+    PbsIssue,
+    detect_pbs_template,
+    validate_base_case_dir,
+    render_pbs_name,
+    write_pbs,
+    extract_pbs_basename,
+)
 
 __all__ = [
     'InpFile', 'Block', 'Stmt', 'Value', 'infer_type',
@@ -42,5 +51,9 @@ __all__ = [
     'CaseSweep', 'generate',
     # v0.8.0 整算例目录模式
     'CopyStrategy', 'DEFAULT_EXCLUDE',
+    # v0.9.0 pbs 模块
+    'PbsConfig', 'PbsIssue',
+    'detect_pbs_template', 'validate_base_case_dir',
+    'render_pbs_name', 'write_pbs', 'extract_pbs_basename',
 ]
-__version__ = '0.8.3'
+__version__ = '0.9.0'
