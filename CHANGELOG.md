@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.8.2] - 2026-06-09
+
+### Fixed
+- **Standalone binary 缺 PyYAML 模块**:`inp_tool.spec` 的 `hiddenimports` 缺 `'yaml'`(PyYAML 是 `[yaml]` extras,静态分析看不见),导致:
+  - REPL `wizard sweep` step_3 输入 YAML 时崩 (`ModuleNotFoundError: No module named 'yaml'`)
+  - CLI `--config sweep.yaml/.yml` 不能用(.json/.csv 仍可用)
+  - 修复:在 `inp_tool.spec` 的 `hiddenimports` 加 `'yaml'` → 下次 release workflow 自动重新打包
+
 ## [v0.8.1] - 2026-06-09
 
 ### Fixed
