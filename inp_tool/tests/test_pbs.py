@@ -1,4 +1,4 @@
-"""pbs 模块单测 - Task 2: dataclass + from_dict"""
+"""pbs 模块单测 - Task 2: dataclass + from_dict + Task 3: detect + Task 4: render_pbs_name"""
 import pytest
 from inp_tool.pbs import PbsConfig, PbsIssue
 
@@ -87,3 +87,63 @@ class TestDetectPbsTemplate:
         from inp_tool.pbs import detect_pbs_template
         result = detect_pbs_template(str(tmp_path), explicit_template=str(explicit))
         assert result == str(explicit)
+
+
+class TestRenderPbsName:
+    def test_default_shortname_basic(self):
+        from inp_tool.pbs import render_pbs_name
+        name = render_pbs_name(
+            params={"alpha": 4, "beta": 0, "mach": 0.6},
+            multi_value_axes=["alpha", "mach"],
+            base_basename="Marspath",
+        )
+        assert name == "Marspath_a04_m0.60"
+
+    def test_single_value_axis_excluded(self):
+        from inp_tool.pbs import render_pbs_name
+        name = render_pbs_name(
+            params={"alpha": 4, "beta": 0, "mach": 0.6},
+            multi_value_axes=["alpha"],  # beta 和 mach 是单值
+            base_basename="Base",
+        )
+        assert name == "Base_a04"
+
+    def test_empty_multi_value_axes(self):
+        from inp_tool.pbs import render_pbs_name
+        name = render_pbs_name(
+            params={"alpha": 4, "mach": 0.6},
+            multi_value_axes=[],
+            base_basename="Case",
+        )
+        assert name == "Case"
+
+    def test_axis_short_format_floats(self):
+        from inp_tool.pbs import render_pbs_name
+        # alpha=4.5 → a04.5(整数部分补零到 2 位)
+        # mach=0.85 → m0.85(原样保留)
+        name = render_pbs_name(
+            params={"alpha": 4.5, "mach": 0.85},
+            multi_value_axes=["alpha", "mach"],
+            base_basename="B",
+        )
+        assert name == "B_a04.5_m0.85"
+
+    def test_axis_short_int_truncates_decimal(self):
+        from inp_tool.pbs import render_pbs_name
+        # T_inf=288.15 → T288(整数优先,小数点后 2 位;纯整数去小数)
+        name = render_pbs_name(
+            params={"T_inf": 288.15},
+            multi_value_axes=["T_inf"],
+            base_basename="B",
+        )
+        assert name == "B_T288"
+
+    def test_axis_short_negative(self):
+        from inp_tool.pbs import render_pbs_name
+        # 负值不补零,原样输出
+        name = render_pbs_name(
+            params={"alpha": -2.0},
+            multi_value_axes=["alpha"],
+            base_basename="B",
+        )
+        assert name == "B_a-2.0"
