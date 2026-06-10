@@ -1,12 +1,7 @@
 """
-mcfd.inp sweep 交互式 CLI — Phase B RED
+mcfd.inp sweep 交互式 CLI — v0.8.2
 
-测试目标:
-- inp-tool sweep -i 走 prompt 序列
-- 全部字段有 default
-- 回车=接受 default
-- 错输入有友好重试
-- 最后 confirm 跑/不跑
+v0.8.2 起:`build_sweep_config_interactive` 必填 source_dir(template 自动取 source_dir/mcfd.inp)。
 """
 from __future__ import annotations
 import pytest
@@ -54,45 +49,46 @@ class TestConfirm:
 
 
 class TestBuildInteractiveConfig:
-    def test_minimal_run(self, monkeypatch, tmp_path):
-        tpl = tmp_path / "t.inp"
-        tpl.write_text("guiopts begin\naero_alpha 0\nguiopts end\n")
+    @pytest.fixture
+    def base_case_dir(self, tmp_path):
+        """v0.8.2:source_dir 是目录,内含 mcfd.inp"""
+        base = tmp_path / "base"
+        base.mkdir()
+        (base / "mcfd.inp").write_text("guiopts begin\naero_alpha 0\nguiopts end\n")
+        return base
 
-        # v0.8.0:source_dir 空时,copy_strategy prompt 跳过(只在 source_dir 非空时问)
-        # 所以 12 个 prompt
+    def test_minimal_run(self, monkeypatch, base_case_dir, tmp_path):
+        """v0.8.2:新顺序 — source_dir 必填第一位,template 自动取其下 mcfd.inp。"""
         answers = iter([
-            str(tpl),         # 1. template
-            str(tmp_path / "out"),  # 2. output_dir
-            "",               # 3. source_dir (v0.8.0 新加,空=flat 模式)
-            "0,4,8",          # 4. alpha
-            "0",              # 5. beta
-            "0.6,0.8",        # 6. mach
-            "",               # 7. T_inf
-            "",               # 8. p_inf
-            "",               # 9. naming
-            "",               # 10. manifest
-            "n",              # 11. dry_run confirm
-            "y",              # 12. final confirm
+            str(base_case_dir),
+            "hardlink",
+            str(tmp_path / "out"),
+            "0,4,8",
+            "0",
+            "0.6,0.8",
+            "",
+            "",
+            "",
+            "",
+            "n",
+            "y",
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(answers))
-
         cfg = build_sweep_config_interactive()
-        assert cfg["template"] == str(tpl)
+        assert cfg["template"] == str(base_case_dir / "mcfd.inp")
         assert cfg["sweeps"]["alpha"] == [0.0, 4.0, 8.0]
         assert cfg["sweeps"]["mach"] == [0.6, 0.8]
         assert cfg["sweeps"]["T_inf"] == [288.15]
         assert cfg["sweeps"]["p_inf"] == [101325.0]
         assert cfg.get("dry_run") is False
-        # v0.8.0:source_dir 空时 cfg 不含 source_dir(走 flat 模式)
-        assert "source_dir" not in cfg
+        assert cfg["source_dir"] == str(base_case_dir)
+        assert cfg["copy_strategy"] == "hardlink"
 
-    def test_dry_run_yes(self, monkeypatch, tmp_path):
-        tpl = tmp_path / "t.inp"
-        tpl.write_text("x")
+    def test_dry_run_yes(self, monkeypatch, base_case_dir, tmp_path):
         answers = iter([
-            str(tpl),
+            str(base_case_dir),
+            "hardlink",
             str(tmp_path / "out"),
-            "",               # source_dir
             "0",
             "0",
             "0.6",
@@ -106,14 +102,13 @@ class TestBuildInteractiveConfig:
         monkeypatch.setattr("builtins.input", lambda _: next(answers))
         cfg = build_sweep_config_interactive()
         assert cfg["dry_run"] is True
+        assert cfg["source_dir"] == str(base_case_dir)
 
-    def test_cancelled(self, monkeypatch, tmp_path):
-        tpl = tmp_path / "t.inp"
-        tpl.write_text("x")
+    def test_cancelled(self, monkeypatch, base_case_dir, tmp_path):
         answers = iter([
-            str(tpl),
+            str(base_case_dir),
+            "hardlink",
             str(tmp_path / "out"),
-            "",               # source_dir
             "0",
             "0",
             "0.6",
@@ -128,17 +123,12 @@ class TestBuildInteractiveConfig:
         cfg = build_sweep_config_interactive()
         assert cfg is None
 
-    def test_with_source_dir(self, monkeypatch, tmp_path):
-        """v0.8.0:用户输入 source_dir 时,cfg 含 source_dir + copy_strategy"""
-        tpl = tmp_path / "t.inp"
-        tpl.write_text("x")
-        base = tmp_path / "base"
-        base.mkdir()
+    def test_with_source_dir(self, monkeypatch, base_case_dir, tmp_path):
+        """v0.8.2:用户输入 source_dir 时,cfg 含 source_dir + copy_strategy(template 自动取)。"""
         answers = iter([
-            str(tpl),
+            str(base_case_dir),
+            "copy",
             str(tmp_path / "out"),
-            str(base),        # source_dir(非空)
-            "copy",           # copy_strategy
             "0,4",
             "0",
             "0.6",
@@ -151,5 +141,6 @@ class TestBuildInteractiveConfig:
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(answers))
         cfg = build_sweep_config_interactive()
-        assert cfg["source_dir"] == str(base)
+        assert cfg["source_dir"] == str(base_case_dir)
         assert cfg["copy_strategy"] == "copy"
+        assert cfg["template"] == str(base_case_dir / "mcfd.inp")
