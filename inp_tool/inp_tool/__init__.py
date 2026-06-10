@@ -43,4 +43,4 @@ __all__ = [
     # v0.8.0 整算例目录模式
     'CopyStrategy', 'DEFAULT_EXCLUDE',
 ]
-__version__ = '0.8.2'
+__version__ = '0.8.3'

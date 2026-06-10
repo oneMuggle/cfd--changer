@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.8.3] - 2026-06-09
+
+### Fixed
+- **Standalone binary 缺 [api]+[yaml]+setuptools._vendor.backports** (3 重原因):
+ 1. **release.yml build job 装少了 deps**:只装 `.[build]`,没装 `.[api,yaml]`,PyInstaller Analysis 找不到 yaml/fastapi → 不打包。修复:build job 装 `.[api,yaml,build]`
+ 2. **setuptools 75+ 的 `pyi_rth_pkgres` hook 触发 jaraco.context 内部 `from . import backports`**:backports 是 setuptools 内置的 vendor 子模块(顶层不可见),PyInstaller 默认不打包。修复:hiddenimports 加 `setuptools._vendor.backports` + `setuptools._vendor.backports.tarfile`
+
 ## [v0.8.2] - 2026-06-09
 
 ### Fixed
