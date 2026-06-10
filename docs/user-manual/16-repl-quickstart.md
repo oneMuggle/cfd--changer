@@ -82,7 +82,7 @@ inp[mcfd_v2_modified]> wizard sweep
 > 2
 ```
 
-详细见 [03-tasks.md](03-tasks.md)。
+详细见 [18-wizard-tasks.md](18-wizard-tasks.md)。
 
 ## 不进入 REPL,直接命令行
 
@@ -108,5 +108,5 @@ inp-tool sweep cases.csv \
 
 ## 下一步
 
-- [02-repl-tour.md](02-repl-tour.md) — REPL 全部命令
-- [03-tasks.md](03-tasks.md) — 3 个任务向导详细
+- [17-repl-tour.md](17-repl-tour.md) — REPL 全部命令
+- [18-wizard-tasks.md](18-wizard-tasks.md) — 3 个任务向导详细
