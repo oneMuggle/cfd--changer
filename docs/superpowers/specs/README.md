@@ -9,7 +9,7 @@
 | [2026-06-02 cfdplusplus-toolkit-phase1](2026-06-02-cfdplusplus-toolkit-phase1-design.md) | resid_tool 后处理工具（Phase 1） | 待实施 |
 | [2026-06-08 inp-tool-repl](2026-06-08-inp-tool-repl-design.md) | inp-tool 交互式 REPL | ✅ 已实现 v0.7.1 (commit 40dbdbf) |
 | [2026-06-10 sweep-completeness-pbs-naming](2026-06-10-sweep-completeness-pbs-naming-design.md) | sweep 完整性 + PBS 可选 + 任务名建议 | ✅ 已实现 v0.9.0 (commit 4e45428) |
-| [2026-06-10 docs-cleanup](2026-06-10-docs-cleanup-design.md) | docs/ 目录整理 | ✅ 已批准,实施中（本次） |
+| [2026-06-10 docs-cleanup](2026-06-10-docs-cleanup-design.md) | docs/ 目录整理 | ✅ 已完成 (PR #15, commit 45c9845) |
 
 ## Status 取值规范
 
