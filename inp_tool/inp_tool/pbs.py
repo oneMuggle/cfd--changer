@@ -217,4 +217,34 @@ def validate_base_case_dir(
             message="基础算例目录里没有 run_*.pbs 模板,生成 pbs 将自动关闭",
         ))
 
+    # === block 级检查(Task 7) ===
+    from .parser import parse_file
+    try:
+        inp = parse_file(str(mcfd_path))
+    except Exception as e:
+        issues.append(PbsIssue(
+            code="MCFD_PARSE_ERROR",
+            severity="error",
+            path=str(mcfd_path),
+            message=f"mcfd.inp 解析失败: {e}",
+        ))
+        return issues
+
+    for blk in ["tsteps", "physics"]:
+        if inp.get_block(blk) is None:
+            issues.append(PbsIssue(
+                code=f"MISSING_BLOCK:{blk}",
+                severity="error",
+                path=f"{mcfd_path}#{blk}",
+                message=f"mcfd.inp 缺必备 block '{blk}'",
+            ))
+    for blk in ["chemkin", "restart"]:
+        if inp.get_block(blk) is None:
+            issues.append(PbsIssue(
+                code=f"MISSING_BLOCK:{blk}",
+                severity="warning",
+                path=f"{mcfd_path}#{blk}",
+                message=f"mcfd.inp 缺可选 block '{blk}'(部分算例类型需要)",
+            ))
+
     return issues

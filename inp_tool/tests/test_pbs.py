@@ -217,12 +217,12 @@ class TestValidateBaseCaseFiles:
         """构造一个最小可用的 source_dir(含 mcfd.inp + tsteps + physics blocks + grid 文件)"""
         mcfd = tmp_path / "mcfd.inp"
         mcfd.write_text(
-            "tsteps\n  ntstep = 100\nend\n"
-            "physics\n  eqnset = euler\nend\n"
+            "tsteps begin\n  ntstep = 100\ntsteps end\n"
+            "physics begin\n  eqnset = euler\nphysics end\n"
         )
         (tmp_path / "cellsin.bin").write_bytes(b"\x00" * 100)
         (tmp_path / "nodesin.bin").write_bytes(b"\x00" * 100)
-        (tmp_path / "cgrpsin.bin.1").write_bytes(b"\x00" * 100)  # glob cgrpsin.bin* 命中
+        (tmp_path / "cgrpsin.bin.1").write_bytes(b"\x00" * 100)
         (tmp_path / "C.dat").write_text("C data")
         (tmp_path / "mcfd.bc").write_text("boundary")
         (tmp_path / "mcfd.grp").write_text("groups")
@@ -241,8 +241,9 @@ class TestValidateBaseCaseFiles:
         self._make_minimal_source(tmp_path)
         from inp_tool.pbs import validate_base_case_dir
         issues = validate_base_case_dir(str(tmp_path))
-        # 全通过,只可能 0 个 issue
-        assert issues == []
+        # 0 个 error;允许 chemkin/restart 软提示
+        errors = [i for i in issues if i.severity == "error"]
+        assert errors == []
 
     def test_missing_grid_warns(self, tmp_path):
         self._make_minimal_source(tmp_path)
@@ -278,3 +279,41 @@ class TestValidateBaseCaseFiles:
         issues = validate_base_case_dir(str(tmp_path), pbs_enabled=False)
         pbs_issues = [i for i in issues if "PBS" in i.code]
         assert pbs_issues == []
+
+
+class TestValidateBaseCaseBlocks:
+    def _make_minimal_source_with_blocks(self, tmp_path, blocks=("tsteps", "physics", "chemkin", "restart")):
+        """构造含指定 blocks 的 mcfd.inp(用 mcfd 真实格式: 'block begin' / 'block end')"""
+        mcfd = tmp_path / "mcfd.inp"
+        text = ""
+        for b in blocks:
+            text += f"{b} begin\n  key = 1\n{b} end\n"
+        mcfd.write_text(text)
+        return tmp_path
+
+    def test_missing_required_block_is_error(self, tmp_path):
+        self._make_minimal_source_with_blocks(tmp_path, blocks=("tsteps",))  # 缺 physics
+        from inp_tool.pbs import validate_base_case_dir
+        issues = validate_base_case_dir(str(tmp_path))
+        block_issues = [i for i in issues if i.code.startswith("MISSING_BLOCK:")]
+        # 缺 physics
+        assert any("physics" in i.code for i in block_issues)
+        # 必填 block 是 error
+        assert all(i.severity == "error" for i in block_issues if "physics" in i.code)
+
+    def test_missing_warn_block_is_warning(self, tmp_path):
+        self._make_minimal_source_with_blocks(tmp_path, blocks=("tsteps", "physics"))  # 缺 chemkin/restart
+        from inp_tool.pbs import validate_base_case_dir
+        issues = validate_base_case_dir(str(tmp_path))
+        chemkin = [i for i in issues if "chemkin" in i.code]
+        assert len(chemkin) == 1
+        assert chemkin[0].severity == "warning"
+
+    def test_all_blocks_present_no_block_issues(self, tmp_path):
+        self._make_minimal_source_with_blocks(
+            tmp_path, blocks=("tsteps", "physics", "chemkin", "restart")
+        )
+        from inp_tool.pbs import validate_base_case_dir
+        issues = validate_base_case_dir(str(tmp_path))
+        block_issues = [i for i in issues if i.code.startswith("MISSING_BLOCK:")]
+        assert block_issues == []
