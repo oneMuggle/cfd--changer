@@ -147,3 +147,66 @@ class TestRenderPbsName:
             base_basename="B",
         )
         assert name == "B_a-2.0"
+
+
+class TestRenderPbsNameUserTemplate:
+    def test_user_template_overrides_default(self):
+        from inp_tool.pbs import render_pbs_name
+        name = render_pbs_name(
+            params={"alpha": 4, "mach": 0.6},
+            multi_value_axes=["alpha", "mach"],
+            base_basename="Marspath",
+            user_template="Mars-{alpha}-{mach}",
+        )
+        assert name == "Mars-4-0.6"
+
+    def test_user_template_with_unknown_placeholder_raises(self):
+        from inp_tool.pbs import render_pbs_name
+        with pytest.raises(KeyError):
+            render_pbs_name(
+                params={"alpha": 4},
+                multi_value_axes=["alpha"],
+                base_basename="B",
+                user_template="Case-{nonexistent}",
+            )
+
+
+class TestRenderPbsNameTruncation:
+    def test_truncates_over_max_len(self):
+        from inp_tool.pbs import render_pbs_name
+        # 显式传 max_len=15(plan Task 5)
+        name = render_pbs_name(
+            params={"alpha": 4, "beta": 0, "mach": 0.6},
+            multi_value_axes=["alpha", "beta", "mach"],
+            base_basename="VeryLongBaseName",  # 16 字符
+            max_len=15,
+        )
+        assert len(name) <= 15
+        assert name.endswith(".")
+
+    def test_custom_max_len(self):
+        from inp_tool.pbs import render_pbs_name
+        # "Base_a04" = 8 字符, max_len=7 时会截断到 "Base_a." (7 字符)
+        name = render_pbs_name(
+            params={"alpha": 4},
+            multi_value_axes=["alpha"],
+            base_basename="Base",
+            max_len=7,
+        )
+        assert name == "Base_a."
+
+
+class TestRenderPbsNameSanitization:
+    def test_sanitize_special_chars(self):
+        from inp_tool.pbs import render_pbs_name
+        # 注入特殊字符:用 user_template 直接传
+        name = render_pbs_name(
+            params={"x": 1},
+            multi_value_axes=["x"],
+            base_basename="Base",
+            user_template="Hello World!",
+        )
+        # 空格和 ! 都不是合法 PBS 字符,被替换
+        assert " " not in name
+        assert "!" not in name
+        assert name == "Hello_World_"
