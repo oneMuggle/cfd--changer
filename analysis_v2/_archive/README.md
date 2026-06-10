@@ -1,6 +1,6 @@
 # analysis_v2/_archive/
 
-Archived 2026-06-02 — see `docs/cleanup-plan.md#step-1` for rationale.
+Archived 2026-06-02 as part of root-level project cleanup (Step 1: archive 31 superseded analyzer scripts; only `analyzer11.py` + `gen_report2.py` remain at the parent level).
 
 31 superseded scripts from the CFD++ GUI call-graph analysis working session
 (2026-06-01). Two canonical scripts remain at the parent level:
