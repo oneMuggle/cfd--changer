@@ -19,10 +19,8 @@
 | `analysis_v2/_archive/` | 31 个 v1–v10 旧版分析器 + 一次性调试脚本(详见 `_archive/README.md`) |
 | `docs/` | 项目文档(2026-06-02 整理计划) |
 | `scripts/.state/translate_v2_progress.json` | `translate_html.py` 的翻译进度缓存(支持断点续传) |
-| `docs/translation/translation_check_report.md` | 翻译覆盖率与缺漏检查报告 |
 | `docs/cfd-gui/CFD_GUI_Engineering_Handbook.md` | CFD++ GUI 工程手册(41 KB) |
 | `docs/cfd-gui/CFD_GUI_CallGraph_v2.md` | CFD++ GUI 调用关系分析详细版(102 KB) |
-| `docs/cfd-gui/CFD_GUI_CallGraph.md` | CFD++ GUI 调用关系分析早期版(14 KB,被 v2 取代) |
 
 ---
 
@@ -95,7 +93,6 @@ python gen_report2.py     # 读 JSON 生成报告
 - [`inp_tool/README.md`](inp_tool/README.md) — inp_tool 完整文档(install / Python API / CLI / 数据模型 / 测试)
 - [`docs/cfd-gui/CFD_GUI_Engineering_Handbook.md`](docs/cfd-gui/CFD_GUI_Engineering_Handbook.md) — CFD++ GUI 工程手册
 - [`docs/cfd-gui/CFD_GUI_CallGraph_v2.md`](docs/cfd-gui/CFD_GUI_CallGraph_v2.md) — GUI 调用关系详细分析
-- [`docs/translation/translation_check_report.md`](docs/translation/translation_check_report.md) — 翻译覆盖率与缺漏
 - [`docs/technical/`](docs/technical/) — 开发者技术手册(架构 / 核心模块 / sweep / REPL / 打包 / CI)
 - [`docs/user-manual/`](docs/user-manual/) — 终端用户手册(快速开始 / 配置 / wizard / FAQ)
 

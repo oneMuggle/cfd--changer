@@ -75,7 +75,7 @@
 ### 3.5 我要规划新功能
 
 → [09-sweep-risks-roadmap §2](09-sweep-risks-roadmap.md) 已有 roadmap
-→ 新功能应先写 `docs/plans/YYYY-MM-DD_<name>.md`,完成后归档到此处,删 plan
+→ 新功能应先写 `docs/plans/YYYY-MM-DD_<name>.md`,完成后**直接删除**(git log 是历史;设计意图保留在 [`../superpowers/specs/`](../superpowers/specs/))
 
 ---
 
@@ -85,7 +85,8 @@
 - **新功能模块** — 同步创建对应章节(从下一个可用编号开始)
 - **大章节拆分** — 单一文件超 200 行时按主题拆成多个
 - **代码改动** — 同步更新相关章节(架构、API、测试);如改 API,更新[05-sweep-usage](05-sweep-usage.md)和示例
-- **历史/进行中的设计文档** — 放 [`../plans/`](../plans/);完成后归档到此处,plans 中的文件随之删除
+- **进行中的设计文档** — 通用 plan 放 [`../plans/`](../plans/);PRP/brainstorming 工作流的 plan 放 [`../superpowers/plans/`](../superpowers/plans/);完成后均直接删除
+- **设计意图保留** — brainstorming 产生的设计文档保留在 [`../superpowers/specs/`](../superpowers/specs/)(含 STATUS 头)
 
 ---
 

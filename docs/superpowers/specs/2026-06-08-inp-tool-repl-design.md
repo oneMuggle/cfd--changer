@@ -2,7 +2,7 @@
 
 **日期**: 2026-06-08
 **作者**: brainstorming with user
-**状态**: 已批准,待实现
+**Status:** ✅ 已实现 v0.7.1 (commit 40dbdbf)
 **目标版本**: inp-tool v0.5.0
 
 ---

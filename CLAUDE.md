@@ -87,11 +87,14 @@ cfd--changer/
 ├── scripts/              # 翻译/批处理脚本(Windows 路径硬编码)
 ├── analysis_v2/          # CFD++ GUI 调用关系分析
 ├── docs/
-│   ├── plans/            # 进行中的计划(完成后删除)
-│   ├── technical/        # 已归档技术手册(总览+分章)
-│   ├── cfd-gui/          # CFD++ GUI 手册与 call graph
-│   ├── translation/      # 翻译检查报告
-│   └── superpowers/      # 内部 spec
+│   ├── README.md         # 顶层文档索引
+│   ├── plans/            # 进行中的通用计划(完成后删除)
+│   ├── user-manual/      # 终端用户手册(总览+分章)
+│   ├── technical/        # 开发者技术手册(总览+分章)
+│   ├── cfd-gui/          # CFD++ GUI 手册与 call graph(老项目静态)
+│   └── superpowers/      # brainstorming/PRP 工作流产物
+│       ├── specs/        # 设计文档(保留, 含 STATUS 头)
+│       └── plans/        # 工作流生成的 implementation plan(完成后删除)
 └── README.md
 ```
 
@@ -109,6 +112,8 @@ cfd--changer/
 - 风险评估
 
 完成后归档至 `docs/technical/`,**删除** `docs/plans/` 中的原文件(不保留历史)。
+
+> 特殊地,使用 brainstorming/PRP 工作流(superpowers skill)时, plan 可放在 `docs/superpowers/plans/`(完成后同样删除); 对应设计文档保留在 `docs/superpowers/specs/` 并更新 `**Status:**` 行。
 
 ### 3.2 TDD
 
