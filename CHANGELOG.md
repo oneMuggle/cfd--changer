@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.8.4] - 2026-06-10
+
+### Added
+- **WizardSweep 整目录模式为默认**:`wizard sweep` 从 8 步缩为 6 步,`source_dir` 必填(基础算例目录),模板路径自动取 `source_dir/mcfd.inp`。扁平模式(只写 mcfd.inp)从 wizard 中完全移除,与"完整算例目录扫一组参数"的主流场景对齐
+- **新 step 顺序**:`source_dir` → `copy_strategy` → `output` → `mode` → `params` → `naming` → `preview+execute`(原 step_7/step_8 合并为 step_6)
+- **`build_sweep_config_interactive` 同步必填**:source_dir 提到第一位,`copy_strategy` 必填(因 source_dir 必填),cfg 始终含 source_dir/copy_strategy
+- **CLI `[DEPRECATION]` 提示**:`inp-tool sweep` 不传 `--source-dir` 时,stderr 打印 `[DEPRECATION]` 引导用户改用 `--source-dir`,行为不变(扁平仍可走,向后兼容)
+- **新增 `force` 选项**:wizard step_6 新增"目标子目录已存在时覆盖?"确认,沿用 `CaseSweep.generate(force=...)` API
+- **测试覆盖**:7 个 wizard_sweep test + 4 个 sweep_interactive test + 2 个 menu test + 2 个 CLI deprecation test = 共 15 个新/重写测试,全部 404 passed
+
+### Migration
+- **wizard 用户**:现在必须先指定 source_dir(基础算例目录),template 自动取其下 mcfd.inp
+- **CLI 用户**:不传 `--source-dir` 仍可走扁平(老用法兼容),但 stderr 会打 deprecation 提示
+- **API 用户**:`CaseSweep.source_dir` 字段、`CopyStrategy` 枚举、`generate()` 签名均未变,无 breaking change
+
 ## [v0.8.3] - 2026-06-09
 
 ### Fixed
