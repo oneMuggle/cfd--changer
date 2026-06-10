@@ -72,7 +72,7 @@
 | `inp_tool/tests/test_sweep_backward.py` | 加断言:`source_dir=None` 时输出仍是扁平 .inp 文件 | +20 |
 | `docs/technical/04-sweep-architecture.md` | 加 §9 整算例目录模式 + 流程图 | +60 |
 | `docs/technical/05-sweep-usage.md` | 加 §7 实战案例(基于 `reference/suanli`) | +100 |
-| `docs/user-manual/03-tasks.md` | wizard 章节加源目录步骤 | +30 |
+| `docs/user-manual/18-wizard-tasks.md` | wizard 章节加源目录步骤 | +30 |
 | `CHANGELOG.md` | v0.8.0 段 | +15 |
 | **本计划文档** | 实施完成后归档到 `docs/technical/17-sweep-case-dir.md`,**删除** plans 版 | +300 |
 
@@ -296,7 +296,7 @@ def _match_any(name: str, patterns: List[str]) -> bool:
 ### 阶段 8 — 文档与收尾
 - [ ] 8.1 `04-sweep-architecture.md` 加 §9
 - [ ] 8.2 `05-sweep-usage.md` 加 §7 实战
-- [ ] 8.3 `user-manual/03-tasks.md` wizard 步骤
+- [ ] 8.3 `user-manual/18-wizard-tasks.md` wizard 步骤
 - [ ] 8.4 `CHANGELOG.md` v0.8.0 段
 - [ ] 8.5 覆盖率 ≥ 80%
 - [ ] 8.6 `simplify` + `code-review` agent

@@ -36,6 +36,9 @@
 | [13-cli-api-reference](13-cli-api-reference.md) | CLI / FastAPI / Python 速查 | 7 子命令 + 12 端点 + 24 符号 | 10 分钟 |
 | [14-software-tutorial](14-software-tutorial.md) | 端到端教程 | 5 个真实工作流 (alpha-Mach / Web GUI / CI / 单文件 / SLURM) | 30 分钟 |
 | [15-glossary](15-glossary.md) | 术语表 | A-Z 80+ 词条 | 边用边查 |
+| [16-repl-quickstart](16-repl-quickstart.md) | REPL 快速开始 (v0.7.x+) | 5 个最常用 REPL 命令 + 直接命令行模式 | 5 分钟 |
+| [17-repl-tour](17-repl-tour.md) | REPL 全功能指南 | 全部命令分组 + 会话变量 + Tab 补全 + 历史 + i18n | 20 分钟 |
+| [18-wizard-tasks](18-wizard-tasks.md) | 任务向导 (3 个 wizard) | `wizard modify-file` / `wizard sweep` / `wizard diff` 步骤详解 | 15 分钟 |
 
 ## 3. 选读指南
 
@@ -71,6 +74,12 @@
 → [12-mcfd-inp-field-reference](12-mcfd-inp-field-reference.md) 完整字段表(10 块 × 全部字段)
 → §4 节专列 sweep 关注的字段(对应 sweep 轴)
 
+### 3.7 我想用交互式 REPL / wizard(不爱记命令)
+
+→ [16-repl-quickstart](16-repl-quickstart.md) 5 个最常用 REPL 命令
+→ [17-repl-tour](17-repl-tour.md) REPL 全功能
+→ [18-wizard-tasks](18-wizard-tasks.md) 3 个任务向导(modify-file / sweep / diff)
+
 ## 4. 与其他文档的关系
 
 | 文档 | 视角 | 适合 |
@@ -84,7 +93,7 @@
 ## 5. 文档维护规则
 
 - **不保留历史版本** — 过期内容直接覆盖
-- **新功能加章节** — 从 `11-` 继续编号
+- **新功能加章节** — 从下一个可用编号继续(当前已用到 `18-`)
 - **示例代码必须能跑** — 用户复制粘贴就跑不通会很挫败
 - **截图 / 录屏** — 当前无(待加);如有 v0.4 之后的 GUI 更新,加 `screenshots/` 子目录
 - **英文版** — 当前仅中文;如有需求,起 `docs/user-manual-en/`
@@ -92,7 +101,8 @@
 ## 6. 快速跳转
 
 - **安装:** [02-安装](02-installation.md)
-- **5 分钟上手:** [03-快速开始](03-quickstart.md)
+- **5 分钟上手:** [03-快速开始](03-quickstart.md) 或 [16-REPL-快速开始](16-repl-quickstart.md)
+- **用 REPL / wizard:** [17-repl-tour](17-repl-tour.md) + [18-wizard-tasks](18-wizard-tasks.md)
 - **看示例:** [09-完整示例](09-examples.md)
 - **查 .inp 字段:** [12-mcfd-inp-field-reference](12-mcfd-inp-field-reference.md)
 - **用 CLI / API:** [13-cli-api-reference](13-cli-api-reference.md)

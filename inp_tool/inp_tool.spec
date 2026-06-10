@@ -42,6 +42,11 @@ a = Analysis(
         # v0.8.2:yaml 是 [yaml] extras,PyInstaller 静态分析看不到;
         # wizard/sweep 在函数内 import yaml,会导致运行时 ModuleNotFoundError
         'yaml',
+        # v0.8.3:setuptools 75+ 的 pyi_rth_pkgres hook 触发
+        # setuptools._vendor.jaraco.context 内部 \`from . import backports\`,
+        # 但 backports 是 vendor 子模块(顶层不可见),PyInstaller 默认不打包
+        'setuptools._vendor.backports',
+        'setuptools._vendor.backports.tarfile',
     ],
     hookspath=[],
     hooksconfig={},

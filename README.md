@@ -84,7 +84,8 @@ python gen_report2.py     # 读 JSON 生成报告
 - [`docs/cfd-gui/CFD_GUI_Engineering_Handbook.md`](docs/cfd-gui/CFD_GUI_Engineering_Handbook.md) — CFD++ GUI 工程手册
 - [`docs/cfd-gui/CFD_GUI_CallGraph_v2.md`](docs/cfd-gui/CFD_GUI_CallGraph_v2.md) — GUI 调用关系详细分析
 - [`docs/translation/translation_check_report.md`](docs/translation/translation_check_report.md) — 翻译覆盖率与缺漏
-- [`docs/cleanup-plan.md`](docs/cleanup-plan.md) — 2026-06-02 项目整理 4 步计划(归档 / 合并 / 工程化 / 根 README)
+- [`docs/technical/`](docs/technical/) — 开发者技术手册(架构 / 核心模块 / sweep / REPL / 打包 / CI)
+- [`docs/user-manual/`](docs/user-manual/) — 终端用户手册(快速开始 / 配置 / wizard / FAQ)
 
 ---
 
@@ -103,4 +104,4 @@ python gen_report2.py     # 读 JSON 生成报告
 
 - 首次提交:`55f4f79` (2026-05-14)
 - 2026-06-02 整理:Step 1 归档 31 个废弃脚本到 `analysis_v2/_archive/`;Step 2 合并根目录 4 个 `translate_*.py` 到 `scripts/`(含 LLM flag 统一);Step 3 给 `inp_tool/` 加 `pyproject.toml` / `__main__.py` / 5 个 pytest 模块 / 80% 覆盖率;Step 4 写本 README。
-- 详见 [`docs/cleanup-plan.md`](docs/cleanup-plan.md)。
+- 2026-06-10 文档结构整理:删除已完成的 `docs/cleanup-plan.md` 与 `docs/superpowers/plans/2026-06-08-inp-tool-repl.md`;`user-manual/` REPL/wizard 章节重新编号为 16-/17-/18-。
