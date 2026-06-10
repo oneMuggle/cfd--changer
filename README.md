@@ -40,6 +40,18 @@ inp-tool set file.inp tsteps cflbot 0.005 -o new.inp    # 改值写新文件
 inp-tool diff a.inp b.inp -u          # unified diff
 ```
 
+**v0.9.0 整算例目录批量 sweep**(新模块 `inp_tool.pbs` 零依赖):
+
+```bash
+# 从 reference/suanli 完整算例出发,扫 alpha+mach,生成 4 个完整子算例
+inp-tool sweep config.json --source-dir reference/suanli \
+  --pbs-naming 'Mars-{alpha}-{mach}' --force
+# → case_aoa0_m0.6/  case_aoa0_m0.8/  case_aoa4_m0.6/  case_aoa4_m0.8/
+#   每个子目录含 mcfd.inp (修改后) + 网格/物性/pbs 模板
+#   pbs 任务名: #PBS -N Marspath_a00_m0.60 / ... 等 4 个不同
+#   manifest.json 含 pbs_enabled + 每 case pbs_name
+```
+
 Web GUI(含 FastAPI 后端):
 ```bash
 cd inp_tool
@@ -105,3 +117,11 @@ python gen_report2.py     # 读 JSON 生成报告
 - 首次提交:`55f4f79` (2026-05-14)
 - 2026-06-02 整理:Step 1 归档 31 个废弃脚本到 `analysis_v2/_archive/`;Step 2 合并根目录 4 个 `translate_*.py` 到 `scripts/`(含 LLM flag 统一);Step 3 给 `inp_tool/` 加 `pyproject.toml` / `__main__.py` / 5 个 pytest 模块 / 80% 覆盖率;Step 4 写本 README。
 - 2026-06-10 文档结构整理:删除已完成的 `docs/cleanup-plan.md` 与 `docs/superpowers/plans/2026-06-08-inp-tool-repl.md`;`user-manual/` REPL/wizard 章节重新编号为 16-/17-/18-。
+- 2026-06-10 **inp_tool v0.9.0**(PR #14,tag `v0.9.0`,[Release](https://github.com/oneMuggle/cfd--changer/releases/tag/v0.9.0)):
+  - **新模块** `inp_tool.pbs`(~250 行,零运行时依赖):`PbsConfig` / `PbsIssue` / `detect_pbs_template` / `validate_base_case_dir` / `render_pbs_name` / `write_pbs` / `extract_pbs_basename`
+  - **sweep 集成**:`CaseSweep.pbs` 字段 + `generate()` 完整性检查 + per_case 写 pbs + manifest `pbs_enabled` / `pbs_name`
+  - **CLI**:`inp-tool sweep --pbs/--no-pbs` + `--pbs-naming` 模板
+  - **Wizard**:6 步 → 7 步,新增 `step 5a pbs` 询问 + 建议名展示
+  - **测试**:33 pbs 单测 + 12 集成 = 45 新测;**449 passed, 0 回归**;pbs.py 85% 覆盖
+  - **CI**:3 平台(Ubuntu / macOS / Windows)× Python 3.8-3.12 矩阵全过
+  - **smoke**:`reference/suanli` 544MB 真实算例 2-case sweep 端到端通过
