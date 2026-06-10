@@ -39,6 +39,9 @@ a = Analysis(
         'inp_tool.writer',
         'inp_tool.diff',
         'inp_tool.model',
+        # v0.8.2:yaml 是 [yaml] extras,PyInstaller 静态分析看不到;
+        # wizard/sweep 在函数内 import yaml,会导致运行时 ModuleNotFoundError
+        'yaml',
     ],
     hookspath=[],
     hooksconfig={},
