@@ -54,8 +54,10 @@ class TestRunMenu:
             "1",                  # 5. mode cartesian
             "{alpha: [0]}",       # 6. sweeps
             "case_{alpha}",       # 7. naming
-            "y",                  # 8. confirm
-            "n",                  # 9. 不覆盖
+            "y",                  # 8. pbs confirm
+            "",                   # 9. pbs naming (空=接受建议)
+            "y",                  # 10. preview confirm
+            "n",                  # 11. 不覆盖
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         run_menu()
@@ -103,8 +105,10 @@ class TestModuleExports:
             "1",                  # 5. mode menu=cartesian
             "{alpha: [0]}",       # 6. sweeps
             "case_{alpha}",       # 7. naming
-            "y",                  # 8. confirm continue
-            "n",                  # 9. 不覆盖
+            "y",                  # 8. pbs confirm
+            "",                   # 9. pbs naming
+            "y",                  # 10. confirm continue
+            "n",                  # 11. 不覆盖
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         from inp_tool.wizard import run_sweep

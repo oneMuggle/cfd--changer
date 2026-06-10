@@ -74,6 +74,8 @@ class TestSweepModeCartesian:
             "case_{alpha}_ma{mach}",
             "y",
             "n",
+            "",
+            "",
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         w = WizardSweep()
@@ -108,6 +110,8 @@ class TestSweepModeCases:
             "case_a{alpha:02.0f}_b{beta:02.0f}",
             "y",
             "n",
+            "",
+            "",
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         w = WizardSweep()
@@ -137,6 +141,8 @@ class TestSweepModeCSV:
             "case_a{alpha}",
             "y",
             "n",
+            "",
+            "",
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         w = WizardSweep()
@@ -161,6 +167,8 @@ class TestSweepModeCSV:
             "case_{alpha}",
             "y",
             "n",
+            "",
+            "",
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         w = WizardSweep()
@@ -200,6 +208,8 @@ class TestSweepSourceDirRequired:
             "case_{alpha}",
             "y",
             "n",
+            "",
+            "",
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         w = WizardSweep()
@@ -221,6 +231,8 @@ class TestSweepSourceDirRequired:
             "case_{alpha}",
             "y",
             "n",
+            "",
+            "",
         ])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         w = WizardSweep()

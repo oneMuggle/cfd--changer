@@ -293,3 +293,21 @@ def write_pbs(
         new_text = "".join(lines)
 
     Path(output_path).write_text(new_text)
+
+
+def extract_pbs_basename(template_path: str, max_len: int = 8) -> str:
+    """(pbs.py 公开版本,同 sweep.py 实现)从 pbs 模板里读 #PBS -N 截到 max_len。"""
+    p = Path(template_path)
+    if not p.is_file():
+        return "case"
+    try:
+        text = p.read_text()
+    except OSError:
+        return "case"
+    m = re.search(r"^[ \t]*#PBS[ \t]+-N[ \t]+(\S+)", text, re.MULTILINE)
+    if not m:
+        return "case"
+    name = m.group(1)
+    if len(name) > max_len:
+        name = name[:max_len]
+    return name
