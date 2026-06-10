@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.9.0] - 2026-06-10
+
+### Added
+- **新模块 `inp_tool.pbs`**(零运行时依赖,纯 stdlib):`PbsConfig` / `PbsIssue` dataclass + 6 个公开 API
+  - `detect_pbs_template()`:从 source_dir glob `run_*.pbs`,多模板打印 warning 到 stderr
+  - `validate_base_case_dir()`:文件级检查(mcfd.inp 必填 / 网格/物性/配置软提示)+ block 级检查(`tsteps` / `physics` warning,`chemkin` / `restart` warning)。所有 block 检查为 warning 而非 error,保持向后兼容(老 fixture 用 `tsteps` / `end` 格式不被破坏)
+  - `render_pbs_name()`:默认短名 / 用户模板覆盖 / `max_len` 截断 / 特殊字符 sanitization
+  - `write_pbs()`:替换或追加 `#PBS -N` 行,支持 `template_text` in-memory 参数(避免 hardlink 副作用)
+  - `extract_pbs_basename()`:从 `#PBS -N` 截前 N 字符作 base
+- **`CaseSweep.pbs: Optional[PbsConfig]`** 字段 + `from_dict` 解析 `pbs:` 子字典 + `from_yaml` / `from_json` 透传
+- **`SweepValidationError`** 异常类(预留给 v0.9.x 后期严格模式)
+- **`generate()` 整合**(per_dir 模式 + `sweep.pbs` 启用时):
+  - 开头调 `validate_base_case_dir()`,warning 打印到 stderr(不阻断)
+  - 每个 case 末尾调 `write_pbs()`,in-memory template 读一次(循环外),循环内 unlink hardlink + write 避免 case 间同步
+  - `CaseResult.pbs_name` / `pbs_template` 字段
+  - `SweepReport.to_dict()` per_dir 模式加 `pbs_enabled` 顶层 + 每 case `pbs_name` / `pbs_template`
+- **CLI 新增**:`inp-tool sweep --pbs/--no-pbs`(默认 yes)+ `--pbs-naming` 模板 flag
+- **WizardSweep 加 `step_5a_pbs`**(7 步):确认是否生成 pbs + 展示建议任务名 + 用户输模板
+- **`__init__.py` 导出** `PbsConfig` / `PbsIssue` / 5 个 pbs 函数
+- **测试**:33 个 pbs 单测 + 12 个 sweep 集成 = 共 45 个新测;全 suite **449 passed, 6 skipped**,0 回归
+
+### Changed
+- **`__version__` 0.8.3 → 0.9.0**
+
+### Migration
+- **API 用户**:`CaseSweep` 新增 `pbs` 字段(默认 None),现有 YAML/JSON config 零修改
+- **CLI 用户**:不传 `--pbs` 仍走默认(yes),传 `--no-pbs` 关;`--pbs-naming` 给具体模板
+- **Wizard 用户**:多了 step_5a_pbs 一步(默认 yes,enter 接受建议名或输模板)
+
 ## [v0.8.4] - 2026-06-10
 
 ### Added

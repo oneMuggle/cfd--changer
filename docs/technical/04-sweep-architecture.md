@@ -388,3 +388,87 @@ def _resolve_layout(sweep: CaseSweep) -> str:
 用户可用 `--exclude` 多次传覆盖默认。
 | `dry_run` 单独参数 | CI 验证用,无需占位文件 |
 | 不用 `eval()` / `exec()` | 任何用户输入的 str 都不参与代码求值,安全 |
+
+---
+
+## 10. v0.9.0:完整性检查 + PBS 脚本可选生成
+
+### 10.1 新增模块 `inp_tool.pbs`
+
+```
+pbs.py (~250 行,零运行时依赖)
+├── PbsConfig                # dataclass,from_dict 解析
+├── PbsIssue                 # dataclass,完整性检查产物
+├── detect_pbs_template()    # glob run_*.pbs + 多模板 warning → stderr
+├── validate_base_case_dir() # 文件级 + block 级
+├── render_pbs_name()        # 默认短名 / 用户模板 / 截断 / sanitization
+├── write_pbs()              # 替换或追加 #PBS -N
+└── extract_pbs_basename()   # 从 #PBS -N 截前 8 字符
+```
+
+### 10.2 完整性检查规则
+
+| 类别 | error 必填 | warning 软提示 |
+|------|------------|----------------|
+| mcfd.inp | 存在 | — |
+| mcfd.inp blocks | — | tsteps, physics(用 `xxx begin/end` 格式) |
+| mcfd.inp blocks | — | chemkin, restart(部分算例类型需要) |
+| 网格 | — | cellsin.bin, nodesin.bin, cgrpsin.bin* |
+| 物性 | — | *.dat (≥1) |
+| 配置 | — | mcfd.bc, mcfd.grp |
+| pbs 模板 | — | run_*.pbs(pbs_enabled=True 时) |
+
+> v0.9.0 注:**所有 block 检查都是 warning(不阻断)**,严格 error 模式留给 v0.9.x 后期或 v0.10(避免破坏老 fixture)。
+
+### 10.3 任务名生成规则
+
+默认短名格式:
+- 抽取原 `#PBS -N` base 名,截前 8 字符(`Marspathfinder-Ini` → `Marspath`)
+- 追加多值轴短 token:`a04` (alpha=4), `m0.60` (mach=0.6), `T288` (T_inf=288.15), `a-2.0` (alpha=-2.0 原样)
+- 单值轴不进
+- 整体 ≤ 200 字符(默认不截断,Task 5 测 `max_len` 显式传小值时截断)
+- 特殊字符 (`[^A-Za-z0-9_.-]`) → `_` 兜底
+
+用户模板覆盖:在 wizard step_5a_pbs 输 `Mars-{alpha}-{mach}`,走 `str.format()` 路径。
+
+### 10.4 数据流(per_dir 模式 + pbs 启用)
+
+```
+generate(caseSweep) with sweep.pbs.enabled=True:
+  ├─ 开头: validate_base_case_dir → warning 打印到 stderr(不阻断)
+  ├─ 循环外:读 pbs 模板内容到 in-memory 字符串
+  ├─ per_case 循环:
+  │    ├─ _copy_case_files(源目录 → 子目录,hardlink)
+  │    ├─ write_preserve(修改后的 mcfd.inp)
+  │    ├─ os.unlink(case_pbs_path) 解除 hardlink
+  │    └─ pbs.write_pbs(template_path, case_pbs_path, job_name,
+  │                      template_text=in_memory_content)
+  └─ 写 manifest.json,加 pbs_enabled 顶层 + 每 case pbs_name
+```
+
+### 10.5 manifest 扩展
+
+per_dir 模式 manifest 增字段(向下兼容,flat 模式 / pbs.enabled=False 时不写):
+
+```json
+{
+  "template": "reference/suanli/mcfd.inp",
+  "layout": "per_dir",
+  "pbs_enabled": true,
+  "cases": [
+    {"case_id": "case_aoa04_ma0.80", "pbs_name": "Marspath_a04_m0.80", ...}
+  ]
+}
+```
+
+### 10.6 设计决策
+
+| 决策 | 理由 |
+|------|------|
+| 独立 `pbs.py` 模块 | 关注点分离,不动 sweep.py 核心;零依赖符合 inp_tool 核心约束 |
+| block 检查全 warning | 向后兼容老 fixture(`tsteps` / `end` 格式) |
+| 写 pbs 前 unlink hardlink | 避免 case 间因 inode 共享写串 |
+| 循环外预读 pbs 模板内容 | 减少 IO;用 `template_text` 参数传 in-memory 内容 |
+| base 短名截 8 字符 | PBS 任务名 15 字符上限,留出 7 字符给 axis tokens |
+| sanitization 在写盘前 | 防止特殊字符触发 PBS 拒绝 |
+| `SweepValidationError` 预留 | 当前不抛,留给 v0.9.x 后期严格模式 |
