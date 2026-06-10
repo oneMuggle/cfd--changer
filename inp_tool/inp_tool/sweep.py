@@ -20,6 +20,7 @@ import sys
 import itertools
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from .model import InpFile
@@ -49,6 +50,40 @@ DEFAULT_EXCLUDE: List[str] = [
     "nodesout.bin",  # 求解器输出(下次跑会被覆写)
     "*.log",         # 通用日志
 ]
+
+
+# ============================================================
+# v0.9.0 新增:pbs 完整性错误
+# ============================================================
+class SweepValidationError(Exception):
+    """sweep 完整性检查失败时抛的异常。"""
+    def __init__(self, issues):
+        self.issues = issues
+        super().__init__(
+            f"基础算例完整性检查失败,{len([i for i in issues if i.severity == 'error'])} 个 error:\n"
+            + "\n".join(f"  [{i.code}] {i.message}" for i in issues if i.severity == "error")
+        )
+
+
+def extract_pbs_basename(template_path: str, max_len: int = 8) -> str:
+    """从 pbs 模板里读 #PBS -N 提取 base basename,截到 max_len 字符。
+    若模板无 #PBS -N 或文件读不到,返回 "case" 作为 fallback。
+    """
+    import re
+    p = Path(template_path)
+    if not p.is_file():
+        return "case"
+    try:
+        text = p.read_text()
+    except OSError:
+        return "case"
+    m = re.search(r"^[ \t]*#PBS[ \t]+-N[ \t]+(\S+)", text, re.MULTILINE)
+    if not m:
+        return "case"
+    name = m.group(1)
+    if len(name) > max_len:
+        name = name[:max_len]
+    return name
 
 
 def _resolve_layout(sweep: "CaseSweep") -> str:
@@ -279,6 +314,9 @@ class CaseResult:
     # v0.8.0:per_dir 模式时记录实际复制/链接的文件列表(供 manifest 用)
     # flat 模式时为 None
     files_copied: Optional[List[str]] = None
+    # v0.9.0:pbs 任务名(per_dir + pbs enabled 时填充,否则 None)
+    pbs_name: Optional[str] = None
+    pbs_template: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -289,6 +327,10 @@ class CaseResult:
         }
         if self.files_copied is not None:
             d["files"] = list(self.files_copied)
+        if self.pbs_name is not None:
+            d["pbs_name"] = self.pbs_name
+        if self.pbs_template is not None:
+            d["pbs_template"] = self.pbs_template
         return d
 
 
@@ -325,6 +367,9 @@ class SweepReport:
                 else self.copy_strategy
             )
             d["exclude"] = list(self.exclude or [])
+            # v0.9.0:pbs 启用时顶层加 pbs_enabled 字段
+            if any(c.pbs_name for c in self.cases):
+                d["pbs_enabled"] = True
         return d
 
     def to_json(self, indent: int = 2) -> str:
@@ -384,6 +429,8 @@ class CaseSweep:
     source_dir: Optional[str] = None
     copy_strategy: CopyStrategy = CopyStrategy.HARDLINK
     exclude: List[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE))
+    # v0.9.0 新增:pbs 脚本可选生成
+    pbs: Optional[Any] = None  # 实际类型:Optional["PbsConfig"]
 
     # --------------------- 构造 ---------------------
     @classmethod
@@ -447,6 +494,13 @@ class CaseSweep:
         exclude_raw = d.get("exclude")
         exclude = list(exclude_raw) if exclude_raw else list(DEFAULT_EXCLUDE)
 
+        # v0.9.0:pbs 字段解析
+        pbs_cfg = None
+        pbs_d = d.get("pbs")
+        if isinstance(pbs_d, dict):
+            from .pbs import PbsConfig  # 局部 import 避免循环
+            pbs_cfg = PbsConfig.from_dict(pbs_d)
+
         return cls(
             template=d["template"],
             output_dir=d["output_dir"],
@@ -460,6 +514,7 @@ class CaseSweep:
             source_dir=source_dir,
             copy_strategy=copy_strategy,
             exclude=exclude,
+            pbs=pbs_cfg,
         )
 
     def materialize(self) -> List[ExplicitCase]:
@@ -850,9 +905,25 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
     支持 sweeps / cases / groups / 混合模式。
 
     v0.8.0:支持 source_dir → per_dir 模式(整算例目录生成)。
+
+    v0.9.0:per_dir 模式开头跑完整性检查(error 抛 SweepValidationError);
+    per_case 末尾可选生成 pbs(替换 #PBS -N)。
     """
     if not dry_run:
         os.makedirs(sweep.output_dir, exist_ok=True)
+
+    # v0.9.0:完整性检查(仅 per_dir 模式)
+    if sweep.source_dir is not None and not dry_run:
+        from .pbs import validate_base_case_dir
+        pbs_enabled = sweep.pbs is not None and sweep.pbs.enabled
+        issues = validate_base_case_dir(sweep.source_dir, pbs_enabled=pbs_enabled)
+        errors = [i for i in issues if i.severity == "error"]
+        if errors:
+            raise SweepValidationError(issues)
+        # 警告打到 stderr
+        import sys as _sys
+        for w in [i for i in issues if i.severity == "warning"]:
+            print(f"[validate] {w.severity}: {w.code} - {w.message}", file=_sys.stderr)
 
     # 1) 加载模板(只读一次)
     template_inp = parse_file(sweep.template)
@@ -884,6 +955,22 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
         exclude=list(sweep.exclude) if layout == "per_dir" else None,
     )
     used_names: Dict[str, int] = {}
+
+    # v0.9.0:per_dir + pbs 模式时,循环外预读 pbs 模板内容(in-memory,避免 hardlink 副作用)
+    pbs_template_text: Optional[str] = None
+    pbs_template_path: Optional[str] = None
+    if (
+        layout == "per_dir"
+        and not dry_run
+        and sweep.pbs is not None
+        and sweep.pbs.enabled
+    ):
+        from .pbs import detect_pbs_template
+        pbs_template_path = sweep.pbs.template
+        if not pbs_template_path:
+            pbs_template_path = detect_pbs_template(sweep.source_dir)
+        if pbs_template_path and os.path.isfile(pbs_template_path):
+            pbs_template_text = Path(pbs_template_path).read_text()
 
     for case_spec in flat:
         params = case_spec.values
@@ -935,6 +1022,43 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
             else:
                 write_preserve(inp, path)
 
+        # v0.9.0:per_dir 模式末尾写 pbs(可选项)
+        pbs_name_for_case: Optional[str] = None
+        pbs_template_for_case: Optional[str] = None
+        if (
+            layout == "per_dir"
+            and not dry_run
+            and pbs_template_path is not None
+            and pbs_template_text is not None
+        ):
+            from .pbs import write_pbs as pbs_write, render_pbs_name
+            base_basename = extract_pbs_basename(
+                pbs_template_path, max_len=sweep.pbs.basename_max_len
+            )
+            # 多值轴
+            multi_value: List[str] = []
+            if hasattr(sweep.sweeps, "values") and isinstance(sweep.sweeps.values, dict):
+                for ax, vs in sweep.sweeps.values.items():
+                    if isinstance(vs, list) and len(vs) > 1:
+                        multi_value.append(ax)
+            job_name = render_pbs_name(
+                params=params,
+                multi_value_axes=multi_value,
+                base_basename=base_basename,
+                user_template=sweep.pbs.naming,
+            )
+            # 写出到 case 子目录。in-memory template 避免每次 read 源文件;
+            # 先 unlink 解除源 hardlink,write 时新建独立 inode,避免 case_0 写影响 case_4。
+            case_pbs_path = os.path.join(path, os.path.basename(pbs_template_path))
+            if os.path.isfile(case_pbs_path):
+                os.unlink(case_pbs_path)
+            pbs_write(
+                pbs_template_path, case_pbs_path, job_name,
+                template_text=pbs_template_text,
+            )
+            pbs_name_for_case = job_name
+            pbs_template_for_case = case_pbs_path
+
         # 记录
         case = CaseResult(
             case_id=name,
@@ -942,6 +1066,8 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
             params=dict(params),
             applied=applied,
             files_copied=files_copied,
+            pbs_name=pbs_name_for_case,
+            pbs_template=pbs_template_for_case,
         )
         report.cases.append(case)
 

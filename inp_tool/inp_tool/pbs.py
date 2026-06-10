@@ -232,11 +232,13 @@ def validate_base_case_dir(
 
     for blk in ["tsteps", "physics"]:
         if inp.get_block(blk) is None:
+            # v0.9.0 注:tsteps/physics 降为 warning(向后兼容老 fixture 用
+            # tsteps/end 格式的 .inp);严格 error 模式留给 v0.9.x 后期或 v0.10
             issues.append(PbsIssue(
                 code=f"MISSING_BLOCK:{blk}",
-                severity="error",
+                severity="warning",
                 path=f"{mcfd_path}#{blk}",
-                message=f"mcfd.inp 缺必备 block '{blk}'",
+                message=f"mcfd.inp 缺 '{blk}' block(标准 mcfd 用 '{blk} begin/end' 格式)",
             ))
     for blk in ["chemkin", "restart"]:
         if inp.get_block(blk) is None:
@@ -257,6 +259,7 @@ def write_pbs(
     template_path: str,
     output_path: str,
     job_name: str,
+    template_text: Optional[str] = None,
 ) -> None:
     """从 template_path 读取 pbs 脚本,把 #PBS -N 替换为 job_name,写出到 output_path。
 
@@ -264,11 +267,15 @@ def write_pbs(
     - 若模板含 #PBS -N → 原地替换(保留缩进/格式)
     - 若模板不含 → 在 shebang 之后追加一行 #PBS -N job_name
     - job_name 会先过 sanitization
+    - 若传 template_text(已读好的 in-memory 内容)→ 优先用,避免 hardlink 副作用下重复读源
     """
-    tp = Path(template_path)
-    if not tp.is_file():
-        raise FileNotFoundError(f"pbs 模板不存在: {template_path}")
-    text = tp.read_text()
+    if template_text is not None:
+        text = template_text
+    else:
+        tp = Path(template_path)
+        if not tp.is_file():
+            raise FileNotFoundError(f"pbs 模板不存在: {template_path}")
+        text = tp.read_text()
     # 字符兜底
     safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", job_name)
 
