@@ -210,3 +210,71 @@ class TestRenderPbsNameSanitization:
         assert " " not in name
         assert "!" not in name
         assert name == "Hello_World_"
+
+
+class TestValidateBaseCaseFiles:
+    def _make_minimal_source(self, tmp_path):
+        """构造一个最小可用的 source_dir(含 mcfd.inp + tsteps + physics blocks + grid 文件)"""
+        mcfd = tmp_path / "mcfd.inp"
+        mcfd.write_text(
+            "tsteps\n  ntstep = 100\nend\n"
+            "physics\n  eqnset = euler\nend\n"
+        )
+        (tmp_path / "cellsin.bin").write_bytes(b"\x00" * 100)
+        (tmp_path / "nodesin.bin").write_bytes(b"\x00" * 100)
+        (tmp_path / "cgrpsin.bin.1").write_bytes(b"\x00" * 100)  # glob cgrpsin.bin* 命中
+        (tmp_path / "C.dat").write_text("C data")
+        (tmp_path / "mcfd.bc").write_text("boundary")
+        (tmp_path / "mcfd.grp").write_text("groups")
+        (tmp_path / "run_cfdpp.pbs").write_text("#!/bin/bash\n#PBS -N test\n")
+        return tmp_path
+
+    def test_missing_mcfd_inp_is_error(self, tmp_path):
+        # 空目录
+        from inp_tool.pbs import validate_base_case_dir
+        issues = validate_base_case_dir(str(tmp_path))
+        codes = {i.code for i in issues}
+        assert "MISSING_MCFD_INP" in codes
+        assert any(i.severity == "error" for i in issues if i.code == "MISSING_MCFD_INP")
+
+    def test_complete_dir_no_issues(self, tmp_path):
+        self._make_minimal_source(tmp_path)
+        from inp_tool.pbs import validate_base_case_dir
+        issues = validate_base_case_dir(str(tmp_path))
+        # 全通过,只可能 0 个 issue
+        assert issues == []
+
+    def test_missing_grid_warns(self, tmp_path):
+        self._make_minimal_source(tmp_path)
+        (tmp_path / "cellsin.bin").unlink()
+        from inp_tool.pbs import validate_base_case_dir
+        issues = validate_base_case_dir(str(tmp_path))
+        grid_issues = [i for i in issues if "GRID" in i.code]
+        assert len(grid_issues) >= 1
+        assert all(i.severity == "warning" for i in grid_issues)
+
+    def test_missing_property_warns(self, tmp_path):
+        self._make_minimal_source(tmp_path)
+        (tmp_path / "C.dat").unlink()
+        from inp_tool.pbs import validate_base_case_dir
+        issues = validate_base_case_dir(str(tmp_path))
+        prop_issues = [i for i in issues if "PROP" in i.code or "DAT" in i.code]
+        assert len(prop_issues) >= 1
+        assert all(i.severity == "warning" for i in prop_issues)
+
+    def test_missing_pbs_warns(self, tmp_path):
+        self._make_minimal_source(tmp_path)
+        (tmp_path / "run_cfdpp.pbs").unlink()
+        from inp_tool.pbs import validate_base_case_dir
+        issues = validate_base_case_dir(str(tmp_path), pbs_enabled=True)
+        pbs_issues = [i for i in issues if "PBS" in i.code or "PBS_TEMPLATE" in i.code]
+        assert len(pbs_issues) >= 1
+        assert all(i.severity == "warning" for i in pbs_issues)
+
+    def test_pbs_enabled_false_skips_pbs_check(self, tmp_path):
+        self._make_minimal_source(tmp_path)
+        (tmp_path / "run_cfdpp.pbs").unlink()
+        from inp_tool.pbs import validate_base_case_dir
+        issues = validate_base_case_dir(str(tmp_path), pbs_enabled=False)
+        pbs_issues = [i for i in issues if "PBS" in i.code]
+        assert pbs_issues == []

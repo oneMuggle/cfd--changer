@@ -140,3 +140,81 @@ def render_pbs_name(
     # 字符兜底(非 [A-Za-z0-9_-])
     name = re.sub(r"[^A-Za-z0-9_.-]", "_", name)
     return name
+
+
+def validate_base_case_dir(
+    source_dir: str,
+    pbs_enabled: bool = True,
+) -> List["PbsIssue"]:
+    """检查基础算例目录的完整性。返回 issues 列表(error + warning)。
+
+    文件级检查(本任务):
+    - mcfd.inp 存在(若缺失,先返回)
+    - cellsin.bin / nodesin.bin / cgrpsin.bin* 网格文件(警告)
+    - *.dat 物性文件 ≥ 1(警告)
+    - mcfd.bc / mcfd.grp 配置(警告)
+    - run_*.pbs 模板(pbs_enabled=True 时检查,警告)
+
+    注:Task 7 会追加 block 级检查
+    """
+    issues: List[PbsIssue] = []
+    p = Path(source_dir)
+
+    # mcfd.inp 必须存在
+    mcfd_path = p / "mcfd.inp"
+    if not mcfd_path.is_file():
+        issues.append(PbsIssue(
+            code="MISSING_MCFD_INP",
+            severity="error",
+            path=str(mcfd_path),
+            message=f"找不到 mcfd.inp: {mcfd_path}",
+        ))
+        return issues  # 后续检查无意义
+
+    # 网格文件(软提示)
+    for gf in ["cellsin.bin", "nodesin.bin"]:
+        if not (p / gf).exists():
+            issues.append(PbsIssue(
+                code=f"MISSING_GRID:{gf}",
+                severity="warning",
+                path=str(p / gf),
+                message=f"缺失网格文件 {gf}",
+            ))
+    # cgrpsin.bin* glob
+    if not list(p.glob("cgrpsin.bin*")):
+        issues.append(PbsIssue(
+            code="MISSING_GRID:cgrpsin.bin*",
+            severity="warning",
+            path=str(p / "cgrpsin.bin*"),
+            message="缺失网格族文件 cgrpsin.bin*",
+        ))
+
+    # 物性 *.dat(至少 1 个)
+    if not list(p.glob("*.dat")):
+        issues.append(PbsIssue(
+            code="MISSING_PROPERTY:*.dat",
+            severity="warning",
+            path=str(p / "*.dat"),
+            message="缺失物性文件(*.dat)",
+        ))
+
+    # mcfd.bc / mcfd.grp
+    for cfg in ["mcfd.bc", "mcfd.grp"]:
+        if not (p / cfg).exists():
+            issues.append(PbsIssue(
+                code=f"MISSING_CONFIG:{cfg}",
+                severity="warning",
+                path=str(p / cfg),
+                message=f"缺失配置文件 {cfg}",
+            ))
+
+    # pbs 模板(仅当 pbs_enabled=True)
+    if pbs_enabled and not list(p.glob("run_*.pbs")):
+        issues.append(PbsIssue(
+            code="MISSING_PBS_TEMPLATE",
+            severity="warning",
+            path=str(p / "run_*.pbs"),
+            message="基础算例目录里没有 run_*.pbs 模板,生成 pbs 将自动关闭",
+        ))
+
+    return issues
