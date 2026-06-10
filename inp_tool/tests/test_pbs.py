@@ -291,15 +291,16 @@ class TestValidateBaseCaseBlocks:
         mcfd.write_text(text)
         return tmp_path
 
-    def test_missing_required_block_is_error(self, tmp_path):
+    def test_missing_required_block_warns(self, tmp_path):
+        # v0.9.0:tsteps/physics 降为 warning(向后兼容老 fixture)
         self._make_minimal_source_with_blocks(tmp_path, blocks=("tsteps",))  # 缺 physics
         from inp_tool.pbs import validate_base_case_dir
         issues = validate_base_case_dir(str(tmp_path))
         block_issues = [i for i in issues if i.code.startswith("MISSING_BLOCK:")]
         # 缺 physics
         assert any("physics" in i.code for i in block_issues)
-        # 必填 block 是 error
-        assert all(i.severity == "error" for i in block_issues if "physics" in i.code)
+        # v0.9.0:warning(不阻断),为向后兼容
+        assert all(i.severity == "warning" for i in block_issues if "physics" in i.code)
 
     def test_missing_warn_block_is_warning(self, tmp_path):
         self._make_minimal_source_with_blocks(tmp_path, blocks=("tsteps", "physics"))  # 缺 chemkin/restart
