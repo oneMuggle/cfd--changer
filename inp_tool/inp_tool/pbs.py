@@ -248,3 +248,41 @@ def validate_base_case_dir(
             ))
 
     return issues
+
+
+_PBS_N_PATTERN = re.compile(r"^[ \t]*#PBS[ \t]+-N[ \t]+\S+", re.MULTILINE)
+
+
+def write_pbs(
+    template_path: str,
+    output_path: str,
+    job_name: str,
+) -> None:
+    """从 template_path 读取 pbs 脚本,把 #PBS -N 替换为 job_name,写出到 output_path。
+
+    规则:
+    - 若模板含 #PBS -N → 原地替换(保留缩进/格式)
+    - 若模板不含 → 在 shebang 之后追加一行 #PBS -N job_name
+    - job_name 会先过 sanitization
+    """
+    tp = Path(template_path)
+    if not tp.is_file():
+        raise FileNotFoundError(f"pbs 模板不存在: {template_path}")
+    text = tp.read_text()
+    # 字符兜底
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", job_name)
+
+    if _PBS_N_PATTERN.search(text):
+        new_text = _PBS_N_PATTERN.sub(f"#PBS -N {safe_name}", text, count=1)
+    else:
+        # 在 shebang 之后插入(若没有 shebang 则在文件开头)
+        lines = text.splitlines(keepends=True)
+        insert_idx = 0
+        for i, ln in enumerate(lines):
+            if ln.startswith("#!"):
+                insert_idx = i + 1
+                break
+        lines.insert(insert_idx, f"#PBS -N {safe_name}\n")
+        new_text = "".join(lines)
+
+    Path(output_path).write_text(new_text)

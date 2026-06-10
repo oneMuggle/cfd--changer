@@ -317,3 +317,51 @@ class TestValidateBaseCaseBlocks:
         issues = validate_base_case_dir(str(tmp_path))
         block_issues = [i for i in issues if i.code.startswith("MISSING_BLOCK:")]
         assert block_issues == []
+
+
+class TestWritePbs:
+    def test_replaces_pbs_n_line(self, tmp_path):
+        template = tmp_path / "template.pbs"
+        template.write_text(
+            "#!/bin/bash\n"
+            "#PBS -N OldName\n"
+            "#PBS -l nodes=1:ppn=48\n"
+            "#PBS -q q02\n"
+            "echo hello\n"
+        )
+        from inp_tool.pbs import write_pbs
+        out = tmp_path / "out.pbs"
+        write_pbs(str(template), str(out), job_name="NewName")
+        content = out.read_text()
+        assert "#PBS -N NewName" in content
+        assert "#PBS -l nodes=1:ppn=48" in content  # 其他行保留
+        assert "#PBS -q q02" in content
+        assert "echo hello" in content
+        assert "OldName" not in content
+
+    def test_appends_n_line_when_missing(self, tmp_path):
+        template = tmp_path / "template.pbs"
+        template.write_text(
+            "#!/bin/bash\n"
+            "#PBS -l nodes=1:ppn=48\n"
+            "echo hi\n"
+        )
+        from inp_tool.pbs import write_pbs
+        out = tmp_path / "out.pbs"
+        write_pbs(str(template), str(out), job_name="NewName")
+        content = out.read_text()
+        assert "#PBS -N NewName" in content
+        assert "#PBS -l nodes=1:ppn=48" in content
+
+    def test_preserves_when_no_change(self, tmp_path):
+        template = tmp_path / "template.pbs"
+        template.write_text("#PBS -N SameName\n")
+        from inp_tool.pbs import write_pbs
+        out = tmp_path / "out.pbs"
+        write_pbs(str(template), str(out), job_name="SameName")
+        assert "#PBS -N SameName" in out.read_text()
+
+    def test_template_not_found_raises(self, tmp_path):
+        from inp_tool.pbs import write_pbs
+        with pytest.raises(FileNotFoundError):
+            write_pbs(str(tmp_path / "nope.pbs"), str(tmp_path / "out.pbs"), job_name="X")
