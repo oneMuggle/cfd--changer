@@ -2,7 +2,7 @@
 
 **日期**: 2026-06-10
 **作者**: brainstorming with user
-**Status**: ✅ 已批准,待实施
+**Status:** ✅ 已批准,待实施
 
 ---
 
