@@ -1,4 +1,4 @@
-# inp_tool — mcfd.inp 解析 / 修改 / diff / **批量算例生成** / **standalone CLI** v0.4
+# inp_tool — mcfd.inp 解析 / 修改 / diff / **批量算例生成** / **standalone CLI** v0.9.0
 
 [![CI](https://github.com/oneMuggle/cfd--changer/workflows/ci/badge.svg)](https://github.com/oneMuggle/cfd--changer/actions/workflows/ci.yml)
 [![Release](https://github.com/oneMuggle/cfd--changer/workflows/release/badge.svg)](https://github.com/oneMuggle/cfd--changer/actions/workflows/release.yml)
@@ -9,6 +9,8 @@ mcfd.inp 是 CFD++ 求解器的输入文件格式。本工具提供:
 - **round-trip**  → 写回时保留行尾注释
 - **diff**  → 两个文件的语义差异报告
 - **sweep (v0.4 新增)**  → 批量算例生成器:基于样例扫描 (alpha, beta, Ma, ...) 生成 N 个 .inp + manifest.json
+- **整算例目录模式 (v0.8.0 新增)**  → 从完整基础算例目录(含网格/物性/配置/pbs)出发,扫参数生成 N 个完整算例子目录(hardlink 默认,0 空间浪费)
+- **完整性检查 + pbs 可选生成 + 任务名建议 (v0.9.0 新增)**  → 选中 source_dir 自动检查 `.inp` 必备 block + 软提示网格/物性/pbs;pbs 脚本按变动多值轴自动生成短任务名(如 `Marspath_a00`),用户可输入模板覆盖
 - **FastAPI 后端**  → REST API + 浏览器 GUI(`inp_tool.api`)
 - **standalone CLI (v0.4 新增)**  → PyInstaller 打包,无需 Python 环境
 
@@ -317,6 +319,112 @@ refvel = sqrt(U² + V² + W²)        # 模长 = Ma·a
 pytest tests/test_sweep.py tests/test_sweep_generate.py tests/test_sweep_cli.py tests/test_sweep_api.py -v
 ```
 
+## v0.8.0 新增:整算例目录模式 (per_dir)
+
+真实算例是**完整目录**(网格/物性/配置/pbs),不是孤立 `mcfd.inp`。v0.8.0 起,设 `source_dir` 后 sweep 把基础算例整目录复制到每个子算例,只覆盖 `mcfd.inp`。
+
+```bash
+inp-tool sweep config.json --source-dir reference/suanli
+```
+
+输出:
+```
+case_aoa04/  ← 完整算例
+  ├── mcfd.inp           (修改后)
+  ├── cellsin.bin        (硬链接,0 空间)
+  ├── nodesin.bin
+  ├── mcfd.bc / mcfd.grp
+  ├── npfopts.inp / pltopts.inp
+  ├── C.dat / O2.dat / ...
+  └── run_cfdpp.pbs
+case_aoa08/
+  ...
+```
+
+**复制策略 3 选 1**(`--copy-strategy`):
+
+| 策略 | IO | 磁盘 | 适用 |
+|------|----|------|------|
+| `hardlink` (默认) | 0 inode 操作 | 0 额外 | 跨平台推荐,100 cases × 544MB = 0 |
+| `symlink` | 0 inode 操作 | 0 额外 | 跨 FS 友好,Windows 需 dev mode |
+| `copy` | 读 × N | 100 × 544MB | 真要物理独立 |
+
+## v0.9.0 新增:完整性检查 + pbs 可选 + 任务名建议
+
+v0.8.0 整目录模式会复制 `run_*.pbs` 到每个子算例,但任务名是源模板里硬编码的(例 `Marspathfinder-Ini`),批量提交时无法区分 case。v0.9.0 起:
+
+- **完整性检查**:选中 source_dir 后自动检查 `.inp` 必备 block(`tsteps` / `physics` 软提示)+ 网格/物性/pbs 软提示
+- **pbs 可选生成**:wizard / CLI 询问是否生成,默认 yes;按变动多值轴自动重填 `#PBS -N`
+- **任务名建议**:默认短名(base 短名 + 多值轴 token),用户可输模板覆盖
+
+### 任务名生成规则
+
+| 输入 | 建议任务名 |
+|------|-----------|
+| `Marspathfinder-Ini` + `sweeps={alpha:[0,4,8]}` | `Marspath_a00` / `Marspath_a04` / `Marspath_a08` |
+| `Marspathfinder-Ini` + `sweeps={alpha:[0,4],mach:[0.6,0.8]}` | `Marspath_a00_m0.60` / ... / `Marspath_a04_m0.80` |
+| `--pbs-naming 'Mars-{alpha}-{mach}'` | `Mars-0-0.6` / `Mars-4-0.6` / `Mars-4-0.8` |
+
+### CLI
+
+```bash
+inp-tool sweep config.json \
+  --source-dir reference/suanli \
+  --pbs/--no-pbs           # 默认 yes \
+  --pbs-naming 'Mars-{alpha}-{mach}'
+```
+
+### Wizard
+
+`wizard sweep` 现在 7 步(原 6 + 新增 `step 5a pbs`):
+
+```
+──── 步骤 5a/7: pbs (v0.9.0 新增) ────
+  是否生成 pbs 脚本? [Y/n]: y
+  pbs 任务名建议(可改): Marspath_a10_b05
+  任务名模板(空=接受建议,例 Mars-{alpha}-{beta}):
+```
+
+### API / YAML
+
+```yaml
+# sweep config v0.9.0
+template: reference/suanli/mcfd.inp
+output_dir: /tmp/my_sweep
+source_dir: reference/suanli   # 整目录模式
+sweeps:
+  alpha: [0, 4]
+  mach: [0.6, 0.8]
+pbs:
+  enabled: true
+  naming: "Mars-{alpha}-{mach}"  # 可选,空 = 自动短名
+```
+
+### manifest.json 扩展
+
+```json
+{
+  "layout": "per_dir",
+  "pbs_enabled": true,
+  "cases": [
+    {
+      "case_id": "case_aoa04_ma0.80",
+      "pbs_name": "Marspath_a04_m0.80",
+      ...
+    }
+  ]
+}
+```
+
+详见 [`docs/technical/04-sweep-architecture.md`](../technical/04-sweep-architecture.md) §10 + [`docs/user-manual/18-wizard-tasks.md`](../user-manual/18-wizard-tasks.md) §2。
+
+### v0.9.0 测试覆盖
+
+- `tests/test_pbs.py`(33 单测,pbs.py 85% 覆盖)
+- `tests/test_sweep_pbs_integration.py`(12 集成)
+- 全 suite: **449 passed, 6 skipped, 0 回归**
+- CI:3 平台(Ubuntu / macOS / Windows)× Python 3.8-3.12 全过
+
 ## REPL 模式(交互式 shell)
 
 `inp-tool shell` 进入交互式 shell,适合多文件来回切换、反复 get/set 调参。
@@ -392,6 +500,11 @@ inp> sweep --alpha $alpha
 
 ## 路线图
 
-- v0.3: JSON/YAML 互转(便于跨工具协作)
+- v0.3: JSON/YAML 互转(便于跨工具协作)✅ **已完成**
 - v0.4: 批量算例生成器(sweep)✅ **已完成**
 - v0.5: 集成到现代 GUI(后续项目)
+- v0.6: 完整算例目录 + 整目录 sweep(v0.7 起)✅ **已完成**(v0.8.0)
+- v0.7: 多种 sweep 模式(cases / groups / CSV)✅ **已完成**
+- v0.8: 整算例目录模式整目录 sweep(基础算例必备)✅ **已完成**(v0.8.0)
+- v0.9: 完整性检查 + pbs 可选生成 + 任务名建议 ✅ **已完成**(v0.9.0)
+- v0.10: 增量更新(下次跑只改 mcfd.inp,不动其他文件)+ 跨算例 dedup(reflink/btrfs)
