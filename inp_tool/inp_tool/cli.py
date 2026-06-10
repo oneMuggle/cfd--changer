@@ -559,6 +559,12 @@ def _apply_v080_overrides(cs, args):
     if excl:
         # 累加到现有规则(保留默认),避免用户写 --exclude foo 时静默丢 *.bak 等
         cs.exclude = list(cs.exclude) + list(excl)
+    # v0.9.0:pbs 注入
+    from .pbs import PbsConfig
+    pbs_enabled = getattr(args, "pbs", True)
+    pbs_naming = getattr(args, "pbs_naming", "") or ""
+    if pbs_enabled or pbs_naming:
+        cs.pbs = PbsConfig(enabled=pbs_enabled, naming=pbs_naming)
 
 
 def main(argv=None):
@@ -656,6 +662,15 @@ def main(argv=None):
     sw.add_argument(
         '--force', action='store_true',
         help='per_dir 模式时覆盖已存在的子目录(默认报错)',
+    )
+    # v0.9.0:pbs 脚本生成相关 flag
+    sw.add_argument(
+        '--pbs/--no-pbs', dest='pbs', default=True,
+        help='per_dir 模式时是否生成 pbs 脚本(默认 yes)',
+    )
+    sw.add_argument(
+        '--pbs-naming', dest='pbs_naming', default='',
+        help='pbs 任务名模板(空 = 自动短名,例: Mars-{alpha}-{mach})',
     )
     sw.set_defaults(func=cmd_sweep)
 
