@@ -368,7 +368,7 @@ class TestSuanliDetection:
 class TestCompareFolderDetection:
     """6 个 compare/ 算例端到端测试(实测 → 期望映射)"""
 
-    COMPARE = Path("/home/fz/project/cfd--changer/reference/inp_example/compare")
+    COMPARE = Path(__file__).parent / "fixtures" / "compare"
 
     def test_layered_ideal_gas(self):
         """理想气体 + 层流 → LAMINAR + PERFECT_GAS"""

@@ -12,9 +12,7 @@ from inp_tool.equations import (
 )
 
 
-COMPARE_DIR = Path(
-    "/home/fz/project/cfd--changer/reference/inp_example/compare"
-)
+COMPARE_DIR = Path(__file__).parent / "fixtures" / "compare"
 SST_FILE = COMPARE_DIR / "可压缩理想气体+2方程SST mcfd.inp"
 TWOT_FILE = COMPARE_DIR / "双温模型+层流mcfd.inp"
 LAMINAR_FILE = COMPARE_DIR / "可压缩理想气体+层流mcfd.inp"

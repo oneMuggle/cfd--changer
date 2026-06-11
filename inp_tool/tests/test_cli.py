@@ -205,13 +205,15 @@ def test_info_detect_two_temperature(tmp_path):
     """info --detect 对双温文件输出 energy=2T / gas=multi-temp / gas_code=11"""
     import subprocess
     import sys
-    target = "/home/fz/project/cfd--changer/reference/inp_example/compare/双温模型+层流mcfd.inp"
-    import os
-    if not os.path.exists(target):
+    from pathlib import Path
+    target = (
+        Path(__file__).parent / "fixtures" / "compare" / "双温模型+层流mcfd.inp"
+    )
+    if not target.exists():
         import pytest
         pytest.skip("compare 样本不存在")
     r = subprocess.run(
-        [sys.executable, "-m", "inp_tool.cli", "info", target, "--detect"],
+        [sys.executable, "-m", "inp_tool.cli", "info", str(target), "--detect"],
         capture_output=True, text=True, timeout=30,
         cwd=str(tmp_path),
     )
