@@ -223,3 +223,29 @@ class TestSetGasType:
         assert pb.get("tnoneq_numeqns") == 1
         eqnset = _find_eqnset_define(inp)
         assert eqnset.children[1].values_raw[0] == "11"
+
+    def test_warns_when_perfect_gas_with_2t(self):
+        """tnoneq=1 + 设 v6=0(PERFECT_GAS)→ applied 含 gas_inconsistent_with_energy 警告。"""
+        from inp_tool.equations import set_gas_type, GasModel
+        inp = self._build_inp(tnoneq=1)
+        applied = set_gas_type(inp, GasModel.PERFECT_GAS)
+        assert "eqnset_define.issue" in applied
+        assert "gas_inconsistent_with_energy" in applied["eqnset_define.issue"]
+
+    def test_warns_when_real_gas_with_2t(self):
+        """tnoneq=1 + 设 v6=1(REAL_GAS)→ applied 含 gas_real_with_2t 警告。"""
+        from inp_tool.equations import set_gas_type, GasModel
+        inp = self._build_inp(tnoneq=1)
+        applied = set_gas_type(inp, GasModel.REAL_GAS)
+        assert "eqnset_define.issue" in applied
+        assert "gas_real_with_2t" in applied["eqnset_define.issue"]
+
+    def test_unsupported_model_raises(self):
+        """MIXTURE / UNKNOWN 抛 EquationRewriteError(v0.10.0 不支持)。"""
+        from inp_tool.equations import (
+            set_gas_type, GasModel, EquationRewriteError,
+        )
+        for unsupported in (GasModel.MIXTURE, GasModel.UNKNOWN):
+            inp = self._build_inp(tnoneq=0)
+            with pytest.raises(EquationRewriteError, match="unsupported gas model"):
+                set_gas_type(inp, unsupported)

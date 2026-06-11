@@ -546,7 +546,7 @@ def set_gas_type(
     pb = inp.get_block("physics")
     applied: Dict[str, Any] = {}
 
-    if v6_target == 11:
+    if model == GasModel.MULTI_TEMP:
         # MULTI_TEMP 强制要求 tnoneq_numeqns=1
         if pb is None:
             raise EquationRewriteError(
@@ -559,13 +559,13 @@ def set_gas_type(
             applied["physics.tnoneq_numeqns"] = 1
     else:
         # 非 multi-temp:warning if tnoneq=1(标到 applied,不抛)
-        if pb is not None and pb.get("tnoneq_numeqns") == 1 and v6_target == 0:
+        if pb is not None and pb.get("tnoneq_numeqns") == 1 and model == GasModel.PERFECT_GAS:
             applied["eqnset_define.issue"] = (
                 "gas_inconsistent_with_energy: "
                 "tnoneq_numeqns=1 but gas=perfect-gas (v6=0); "
                 "may be inconsistent"
             )
-        if pb is not None and pb.get("tnoneq_numeqns") == 1 and v6_target == 1:
+        if pb is not None and pb.get("tnoneq_numeqns") == 1 and model == GasModel.REAL_GAS:
             applied["eqnset_define.issue"] = (
                 "gas_real_with_2t: "
                 "v6=1 (real-gas) + tnoneq_numeqns>0; "
