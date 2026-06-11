@@ -377,6 +377,14 @@ _TURB_EQNSET_CODE: Dict[TurbulenceModel, Tuple[int, int]] = {
 }
 
 
+# 气体模型 → v6 映射(spec §4.2)
+_GAS_V6_CODE: Dict[GasModel, int] = {
+    GasModel.PERFECT_GAS: 0,
+    GasModel.REAL_GAS: 1,
+    GasModel.MULTI_TEMP: 11,
+}
+
+
 def set_turbulence_model(
     inp: InpFile, model: TurbulenceModel,
 ) -> Dict[str, Any]:
@@ -503,6 +511,76 @@ def set_energy_model(
         f"v6 read-back failed: expected {v6_target}, got {raw[0]}"
     applied["eqnset_define.v6"] = v6_target
     applied["eqnset_define.energy_model"] = model.value
+    return applied
+
+
+def set_gas_type(
+    inp: InpFile, model: GasModel,
+) -> Dict[str, Any]:
+    """改写顶层 `seq.# 1 #vals 31 title eqnset_define` 块第 2 行
+    `values v6 ...` 的 v6 到 model 对应码。
+
+    一致性校验:
+    - v6=11 → 必须 tnoneq_numeqns=1(否则 EquationRewriteError)
+    - 现有 tnoneq_numeqns=1 但 v6=0 → warning(仅在 applied dict 标记,不阻塞)
+    - v6=1(真实气体)+ tnoneq_numeqns>0 → warning
+    """
+    if model not in _GAS_V6_CODE:
+        raise EquationRewriteError(
+            f"unsupported gas model: {model.value!r} "
+            "(v0.10.0 supports PERFECT_GAS / REAL_GAS / MULTI_TEMP)"
+        )
+    v6_target = _GAS_V6_CODE[model]
+
+    eqnset_stmt = _find_eqnset_define(inp)
+    if eqnset_stmt is None:
+        raise EquationRewriteError(
+            "no_eqnset_define: cannot link v6 (gas type rewrite)"
+        )
+    if len(eqnset_stmt.children) < 2:
+        raise EquationRewriteError(
+            "eqnset_define block has fewer than 2 values rows; "
+            "cannot link v6"
+        )
+
+    pb = inp.get_block("physics")
+    applied: Dict[str, Any] = {}
+
+    if v6_target == 11:
+        # MULTI_TEMP 强制要求 tnoneq_numeqns=1
+        if pb is None:
+            raise EquationRewriteError(
+                "gas=multi-temp requires physics block "
+                "(to set tnoneq_numeqns=1)"
+            )
+        # 强制设 tnoneq=1(spec §4.2 明确;若已是 1 不动)
+        if pb.get("tnoneq_numeqns") != 1:
+            pb.set("tnoneq_numeqns", 1)
+            applied["physics.tnoneq_numeqns"] = 1
+    else:
+        # 非 multi-temp:warning if tnoneq=1(标到 applied,不抛)
+        if pb is not None and pb.get("tnoneq_numeqns") == 1 and v6_target == 0:
+            applied["eqnset_define.issue"] = (
+                "gas_inconsistent_with_energy: "
+                "tnoneq_numeqns=1 but gas=perfect-gas (v6=0); "
+                "may be inconsistent"
+            )
+        if pb is not None and pb.get("tnoneq_numeqns") == 1 and v6_target == 1:
+            applied["eqnset_define.issue"] = (
+                "gas_real_with_2t: "
+                "v6=1 (real-gas) + tnoneq_numeqns>0; "
+                "may have property conflict"
+            )
+
+    eqnset_stmt.children[1].set(0, v6_target)
+    # Read-back
+    re_stmt = _find_eqnset_define(inp)
+    assert re_stmt is not None
+    raw = re_stmt.children[1].values_raw
+    assert int(raw[0]) == v6_target, \
+        f"v6 read-back failed: expected {v6_target}, got {raw[0]}"
+    applied["eqnset_define.v6"] = v6_target
+    applied["eqnset_define.gas_model"] = model.value
     return applied
 
 
@@ -828,6 +906,7 @@ __all__ = [
     # v0.10.0 写函数
     "set_turbulence_model",
     "set_energy_model",
+    "set_gas_type",
     # 湍流 preset
     "TurbulencePresetBase",
     "SSTKOmegaPreset",

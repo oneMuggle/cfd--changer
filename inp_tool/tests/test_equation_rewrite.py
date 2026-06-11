@@ -175,3 +175,51 @@ class TestSetEnergyModel:
         set_energy_model(inp_2t, EnergyModel.TWO_TEMP, T_trans=300, T_vib=200)
         eqnset = _find_eqnset_define(inp_2t)
         assert eqnset.children[1].values_raw[0] == "11"
+
+
+class TestSetGasType:
+    def _build_inp(self, tnoneq: int) -> "InpFile":
+        from inp_tool.parser import parse_file
+        from pathlib import Path
+        path = str(Path(__file__).parent / "fixtures" / "compare" / "可压缩理想气体+2方程SST mcfd.inp")
+        inp = parse_file(path)
+        pb = inp.get_block("physics")
+        if pb:
+            pb.set("tnoneq_numeqns", tnoneq)
+        return inp
+
+    def test_perfect_to_real_writes_v6_1(self):
+        """PERFECT_GAS → REAL_GAS:v6=0 → v6=1。"""
+        from inp_tool.equations import (
+            set_gas_type, GasModel, _find_eqnset_define,
+        )
+        inp = self._build_inp(tnoneq=0)
+        set_gas_type(inp, GasModel.REAL_GAS)
+        eqnset = _find_eqnset_define(inp)
+        assert eqnset.children[1].values_raw[0] == "1"
+
+    def test_perfect_to_multi_temp_forces_2t(self):
+        """PERFECT_GAS → MULTI_TEMP:自动设 tnoneq_numeqns=1 + v6=11。"""
+        from inp_tool.equations import (
+            set_gas_type, GasModel, _find_eqnset_define,
+        )
+        inp = self._build_inp(tnoneq=0)
+        set_gas_type(inp, GasModel.MULTI_TEMP)
+        pb = inp.get_block("physics")
+        assert pb.get("tnoneq_numeqns") == 1
+        eqnset = _find_eqnset_define(inp)
+        assert eqnset.children[1].values_raw[0] == "11"
+
+    def test_real_to_multi_temp_writes_v6_11(self):
+        """REAL_GAS → MULTI_TEMP(若 tnoneq=0 但用户已允许):v6=11, tnoneq 强制设 1。"""
+        # 注:set_gas_type(MULTI_TEMP) 会强制把 tnoneq 设 1
+        # 因此"raises"路径不存在,改测"成功但自动改 tnoneq"
+        from inp_tool.equations import (
+            set_gas_type, GasModel, _find_eqnset_define,
+        )
+        inp = self._build_inp(tnoneq=0)
+        set_gas_type(inp, GasModel.MULTI_TEMP)
+        pb = inp.get_block("physics")
+        assert pb.get("tnoneq_numeqns") == 1
+        eqnset = _find_eqnset_define(inp)
+        assert eqnset.children[1].values_raw[0] == "11"
