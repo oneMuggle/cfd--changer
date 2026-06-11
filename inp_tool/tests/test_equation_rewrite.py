@@ -156,9 +156,9 @@ class TestSetEnergyModel:
             set_energy_model, EnergyModel, TwoTemperatureError,
         )
         inp = self._build_inp(tnoneq=0)
-        with pytest.raises(TwoTemperatureError, match="both T_trans and T_vib"):
+        with pytest.raises(TwoTemperatureError, match="BOTH T_trans and T_vib"):
             set_energy_model(inp, EnergyModel.TWO_TEMP, T_trans=300.0)
-        with pytest.raises(TwoTemperatureError, match="both T_trans and T_vib"):
+        with pytest.raises(TwoTemperatureError, match="BOTH T_trans and T_vib"):
             set_energy_model(inp, EnergyModel.TWO_TEMP, T_vib=200.0)
 
     def test_v6_linked_correctly(self):

@@ -449,7 +449,7 @@ def set_energy_model(
     if model == EnergyModel.TWO_TEMP:
         if T_trans is None or T_vib is None:
             raise TwoTemperatureError(
-                "2T model requires both T_trans and T_vib. "
+                "2T model requires BOTH T_trans and T_vib. "
                 f"got T_trans={T_trans!r}, T_vib={T_vib!r}"
             )
         if T_trans <= 0 or T_vib <= 0:
