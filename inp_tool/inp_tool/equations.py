@@ -83,7 +83,8 @@ class GasModel(str, Enum):
     PERFECT_GAS = "perfect-gas"
     REAL_GAS = "real-gas"
     MULTI_TEMP = "multi-temp"          # v0.9.1 新增(对应 v6=11 + tnoneq_numeqns=1)
-    MIXTURE = "mixture"                # 顶层 species_*.Mwt1_* 显式声明的多组分(v0.10+ 细化)
+    MIXTURE = "mixture"                # **v0.10+ 占位** — 当前 detect_equations 不会返回
+                                       # (顶层 species_*.Mwt1_* 解析未实现)
     UNKNOWN = "unknown"
 
 
@@ -176,19 +177,16 @@ _MAP_GAS: Dict[int, GasModel] = {
 # ============================================================
 
 
-def _find_top_stmt_by_title(inp: InpFile, title_substr: str) -> Optional[Stmt]:
-    """找顶层 stmt 的 `title` 子串(seq.# N #vals K title XXX)。
+def _find_eqnset_define(inp: InpFile) -> Optional[Stmt]:
+    """找顶层 `seq.# 1 #vals 31 title eqnset_define` 复合头。
 
-    parser 把 `seq.# 1 #vals 31 title eqnset_define` 解析为:
+    parser 把该行解析为:
       stmt.keyword = "seq.#"
-      stmt.values_raw = ["1"]        ← #vals 31 title 之后的部分被丢(已知 parser 行为)
+      stmt.values_raw = ["1"]        ← #vals/title 之后的部分被丢(已知 parser 行为)
       stmt.children   = [values 行, ...]   ← 后续 values 行作为 children
 
-    所以 title_substr 应该到 children 的 values_raw 里去找(原始 title 在 children[0] 之前丢失)。
-    但 children[0] 的 keyword == "values" 而非 title — title 在原始 line 里已丢。
-
-    替代方案:依赖 child seq.# 后跟着 7 个 values 行的结构,扫所有 "seq.#" 的 children,
-    看 children[0] 是不是 "values 101 1 1 ..." 模式(eqnset_define 标识)。
+    parser 丢失了 title,无法用 title_substr 定位。本函数靠 children[0] 的
+    "values 101 1 1 ..." 前缀匹配 eqnset_define(实测 reference 算例的固定模式)。
     """
     for s in inp.top_stmts:
         if not s.keyword.startswith("seq"):
@@ -201,26 +199,6 @@ def _find_top_stmt_by_title(inp: InpFile, title_substr: str) -> Optional[Stmt]:
 def _get_values_lines(eqnset_stmt: Stmt) -> List[Stmt]:
     """从 seq.# 复合头拿后续 values 行(已在 parser 里存为 children)。"""
     return [c for c in eqnset_stmt.children if c.keyword == "values"]
-
-
-def _collect_following_values(start_stmt: Stmt, inp: InpFile, max_count: int = 7) -> List[Stmt]:
-    """兼容老 API:从 start_stmt 之后 1 个顶层 stmt 开始,找连续 values 行直到非 values。
-
-    start_stmt 是 seq.# 头(不含 children);后续 values 行才是真正的值。
-    """
-    try:
-        start_idx = inp.top_stmts.index(start_stmt)
-    except ValueError:
-        return []
-    collected: List[Stmt] = []
-    for stmt in inp.top_stmts[start_idx + 1:]:
-        if stmt.keyword == "values":
-            collected.append(stmt)
-            if len(collected) >= max_count:
-                break
-        else:
-            break
-    return collected
 
 
 # ============================================================
@@ -266,7 +244,7 @@ def detect_equations(inp: InpFile) -> EquationSystemReport:
             rep.gasnam = str(gasnam_v)
 
     # 2 + 3) 湍流模型 + 气体类型:扫顶层 seq.# eqnset_define 块
-    eqnset_define_stmt = _find_top_stmt_by_title(inp, "eqnset_define")
+    eqnset_define_stmt = _find_eqnset_define(inp)
     if eqnset_define_stmt is not None:
         values_lines = _get_values_lines(eqnset_define_stmt)
         # 2) 湍流(第 1 行 values 101 1 1 v4 v5)
@@ -588,6 +566,15 @@ class TwoTemperaturePreset:
 @dataclass
 class SpeciesPreset:
     """多组分物性 preset。
+
+    ⚠️ **v0.10+ scope — 当前 v0.9.1 不可达**:
+    `detect_equations` 不会把 `gas` 升级为 `GasModel.MIXTURE`(顶层
+    `species_*.Mwt1_*` 解析未实现,详见 `EquationSystemReport.species` 字段
+    docstring)。因此 `SpeciesPreset.apply` 在任何真实 .inp 上都会抛
+    `GasModelError`。
+
+    本类的 mass↔mole 换算逻辑(`convert`)已实现并经过单元测试覆盖,
+    可在 v0.10 加入物种枚举后直接复用。
 
     给定 {species_name: fraction},mode ∈ {"mass","mole"},自动:
     1) mass ↔ mole 互转(用每个 species 的 Mwt)
