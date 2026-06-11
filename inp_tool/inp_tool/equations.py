@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from .model import InpFile, Stmt
+from .model import Block, InpFile, Stmt
 
 
 # ============================================================
@@ -601,6 +601,11 @@ class TurbulencePresetBase(ABC):
     - I ∈ [0, 1]
     - L > 0
     - U_ref > 0
+
+    v0.10.0 新增:
+    - clear_incompatible_fields: bool — 是否在切模型时清理不兼容的 turbi_* 字段
+    - apply(inp, model=...) — model 提供时按目标模型决定清理哪些字段;
+      model=None 时(默认)走 v0.9.1 路径,不清多余字段
     """
     I: float = 0.01                          # 湍流强度(0.01 = 1%)
     L: float = 0.01                          # 特征长度 [m]
@@ -611,6 +616,8 @@ class TurbulencePresetBase(ABC):
     turbi_len_key: str = "turbi_len"          # 写"长度尺度"
     turbi_tlev_key: str = "turbi_tlev"        # 写"特征量"无量纲比例(2-方程用)
     turbi_tlen_key: str = "turbi_tlen"        # 写"长度"或 ε(Realizable k-ε)
+    # v0.10.0 新增
+    clear_incompatible_fields: bool = True
 
     def _validate(self) -> None:
         if not (0 <= self.I <= 1):
@@ -631,14 +638,61 @@ class TurbulencePresetBase(ABC):
         """算湍流参数。返回 dict {guiopts_field_name: float}。"""
         raise NotImplementedError
 
-    def apply(self, inp: InpFile) -> Dict[str, Any]:
-        """写入 guiopts 块;返回 applied 字典供 undo / manifest。"""
+    def _clear_incompatible(
+        self, gb: Block, new_model: TurbulenceModel,
+    ) -> List[str]:
+        """按 new_model 决定清掉哪些 turbi_* 字段。
+
+        规则(v0.10.0 spec §4.4):
+        - LAMINAR:清 turbi_lev, turbi_len, turbi_tlev, turbi_tlen(全部)
+        - SST_KW / REALIZABLE_KEPSILON(2-方程):保留全部
+        - SPALART_ALLMARAS / GOLDBERG_RT(1-方程):清 turbi_tlev, turbi_tlen
+
+        返回被清字段名列表(供 manifest/调试)。
+        """
+        cleared: List[str] = []
+        if new_model == TurbulenceModel.LAMINAR:
+            targets = [
+                "turbi_lev", "turbi_len", "turbi_tlev", "turbi_tlen",
+            ]
+        elif new_model in (
+            TurbulenceModel.SST_KW,
+            TurbulenceModel.REALIZABLE_KEPSILON,
+        ):
+            return cleared  # 2-方程:保留全部 turbi_*
+        else:  # 1-方程:SA / Goldberg
+            targets = ["turbi_tlev", "turbi_tlen"]
+        for f in targets:
+            if gb.get(f) is not None:
+                gb.remove_field(f)
+                cleared.append(f)
+        return cleared
+
+    def apply(
+        self, inp: InpFile, model: Optional[TurbulenceModel] = None,
+        clear_incompatible_fields: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """写入 guiopts 块;返回 applied 字典供 undo / manifest。
+
+        v0.10.0 新增参数:
+        - model: 若提供,在写之前按 model 清不兼容 turbi_* 字段
+        - clear_incompatible_fields: 显式覆盖 self.clear_incompatible_fields
+                 (None = 沿用 self 上的默认)
+        """
         self._validate()
         gb = inp.get_block("guiopts")
         if gb is None:
             raise ValueError(
                 "template has no `guiopts` block; cannot apply turbulence preset"
             )
+        # 切模型时清理不兼容字段
+        do_clear = (
+            self.clear_incompatible_fields
+            if clear_incompatible_fields is None
+            else clear_incompatible_fields
+        )
+        if model is not None and do_clear:
+            self._clear_incompatible(gb, model)
         values = self.compute()
         applied: Dict[str, Any] = {}
         for field_key, value in values.items():

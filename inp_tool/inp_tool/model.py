@@ -151,6 +151,18 @@ class Block:
         self.statements = [s for s in self.statements if s.keyword != keyword]
         return before - len(self.statements)
 
+    def remove_field(self, keyword: str) -> bool:
+        """删除 keyword == 给定值的第一个匹配 statement。返回是否真删了。
+
+        与 `remove(keyword)`(删除全部匹配)不同:本方法只删第一个,且返回 bool
+        供 `TurbulencePresetBase._clear_incompatible` 等"按字段清一个"场景使用。
+        """
+        for i, s in enumerate(self.statements):
+            if s.keyword == keyword:
+                del self.statements[i]
+                return True
+        return False
+
     def __repr__(self):
         return f'Block({self.name!r}, {len(self.statements)} stmts, L{self.begin_line}-{self.end_line})'
 
