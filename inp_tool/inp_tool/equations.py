@@ -420,6 +420,92 @@ def set_turbulence_model(
     }
 
 
+def set_energy_model(
+    inp: InpFile, model: EnergyModel,
+    *, T_trans: Optional[float] = None,
+    T_vib: Optional[float] = None,
+    set_numeqns: bool = True,
+) -> Dict[str, Any]:
+    """改写 physics.tnoneq_numeqns + 联动 eqnset_define v6。
+
+    NONE:
+      - 设 physics.tnoneq_numeqns = 0
+      - 联动 eqnset_define v6 → 0
+      - 不动 reftem / vibtem
+
+    TWO_TEMP:
+      - 强校验 T_trans/T_vib 都给(同 v0.9.1 TwoTemperaturePreset)
+      - 设 physics.tnoneq_numeqns = 1(若 set_numeqns=True)
+      - 写 physics.reftem = T_trans、physics.vibtem = T_vib
+      - 联动 eqnset_define v6 → 11
+    """
+    applied: Dict[str, Any] = {}
+    pb = inp.get_block("physics")
+    if pb is None:
+        raise EquationRewriteError(
+            "template has no `physics` block; cannot set energy model"
+        )
+
+    if model == EnergyModel.TWO_TEMP:
+        if T_trans is None or T_vib is None:
+            raise TwoTemperatureError(
+                "2T model requires both T_trans and T_vib. "
+                f"got T_trans={T_trans!r}, T_vib={T_vib!r}"
+            )
+        if T_trans <= 0 or T_vib <= 0:
+            raise ValueError(
+                f"temperatures must be > 0 K "
+                f"(got T_trans={T_trans}, T_vib={T_vib})"
+            )
+        if set_numeqns:
+            pb.set("tnoneq_numeqns", 1)
+            applied["physics.tnoneq_numeqns"] = 1
+        # reftem / vibtem:若 template 中已存在则 set,否则 append
+        if pb.set("reftem", T_trans):
+            applied["physics.reftem"] = T_trans
+        else:
+            pb.append("reftem", T_trans)
+            applied["physics.reftem"] = T_trans
+        if pb.set("vibtem", T_vib):
+            applied["physics.vibtem"] = T_vib
+        else:
+            pb.append("vibtem", T_vib)
+            applied["physics.vibtem"] = T_vib
+        v6_target = 11
+    elif model == EnergyModel.NONE:
+        if set_numeqns:
+            pb.set("tnoneq_numeqns", 0)
+            applied["physics.tnoneq_numeqns"] = 0
+        v6_target = 0
+    else:
+        raise EquationRewriteError(
+            f"unsupported energy model: {model.value!r} "
+            "(v0.10.0 supports NONE / TWO_TEMP)"
+        )
+
+    # 联动 eqnset_define v6(用 children[1],同 Task 2 经验用 .set(i, int))
+    eqnset_stmt = _find_eqnset_define(inp)
+    if eqnset_stmt is None:
+        raise EquationRewriteError(
+            "no_eqnset_define: cannot link v6 (energy model rewrite)"
+        )
+    if len(eqnset_stmt.children) < 2:
+        raise EquationRewriteError(
+            "eqnset_define block has fewer than 2 values rows; "
+            "cannot link v6"
+        )
+    eqnset_stmt.children[1].set(0, v6_target)
+    # Read-back
+    re_stmt = _find_eqnset_define(inp)
+    assert re_stmt is not None
+    raw = re_stmt.children[1].values_raw
+    assert int(raw[0]) == v6_target, \
+        f"v6 read-back failed: expected {v6_target}, got {raw[0]}"
+    applied["eqnset_define.v6"] = v6_target
+    applied["eqnset_define.energy_model"] = model.value
+    return applied
+
+
 # ============================================================
 # 湍流初始化 preset 基类 + 4 子类
 # ============================================================
@@ -741,6 +827,7 @@ __all__ = [
     "detect_equations",
     # v0.10.0 写函数
     "set_turbulence_model",
+    "set_energy_model",
     # 湍流 preset
     "TurbulencePresetBase",
     "SSTKOmegaPreset",
