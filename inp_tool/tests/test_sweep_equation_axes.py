@@ -51,3 +51,22 @@ class TestCartesianWithEnumAxes:
         assert len(cases) == 4
         turbs = {c["turbulence"] for c in cases}
         assert turbs == {TurbulenceModel.SST_KW, TurbulenceModel.SPALART_ALLMARAS}
+
+
+class TestEnumAliasTable:
+    """v0.10.0:Pin _ENUM_ALIASES 表面,防止未来 enum 扩展静默改语义。"""
+
+    def test_turbulence_aliases_stable(self):
+        from inp_tool.sweep import _ENUM_ALIASES
+        expected = {"sst", "sa", "ke", "keps", "goldberg", "laminar"}
+        assert set(_ENUM_ALIASES[TurbulenceModel].keys()) == expected
+
+    def test_energy_aliases_stable(self):
+        from inp_tool.sweep import _ENUM_ALIASES
+        expected = {"2t", "3t", "none"}
+        assert set(_ENUM_ALIASES[EnergyModel].keys()) == expected
+
+    def test_gas_aliases_stable(self):
+        from inp_tool.sweep import _ENUM_ALIASES
+        expected = {"perfect", "real", "multi", "mixture"}
+        assert set(_ENUM_ALIASES[GasModel].keys()) == expected
