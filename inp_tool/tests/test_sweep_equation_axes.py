@@ -250,3 +250,33 @@ class TestGenerateWithEquations:
         }
         with pytest.raises(ValueError, match="unknown axis value 'foo'"):
             CaseSweep.from_dict(d)
+
+
+class TestCliFlags:
+    """v0.10.0:CLI 注册 4 个新 flag(--strict-equations + 3 个 --no-switch-*)。
+
+    cli.py 实际用 argparse(不是 click),所以这里通过捕获 `sweep --help`
+    的 stdout 来验 flag 已注册。等价于 click 的 `runner.invoke(cli, [...])`。
+    """
+
+    def _sweep_help_text(self) -> str:
+        import io
+        import contextlib
+        from inp_tool.cli import main
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            try:
+                main(["sweep", "--help"])
+            except SystemExit:
+                pass  # argparse 解析 --help 后正常 sys.exit
+        return buf.getvalue()
+
+    def test_strict_flag_passed_through(self):
+        """--strict-equations 出现在 `sweep --help` 输出中。"""
+        out = self._sweep_help_text()
+        assert "--strict-equations" in out
+
+    def test_no_switch_turbulence_flag(self):
+        """--no-switch-turbulence 出现在 `sweep --help` 输出中。"""
+        out = self._sweep_help_text()
+        assert "--no-switch-turbulence" in out

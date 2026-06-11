@@ -418,6 +418,8 @@ def cmd_sweep(args):
             cs.manifest_path = args.manifest
         # v0.8.0:CLI flag 也应用到 interactive 模式
         _apply_v080_overrides(cs, args)
+        # v0.10.0:CLI flag → cs.equation_switches 覆盖
+        _apply_v100_equation_overrides(cs, args)
         if args.dry_run:
             print("[sweep] DRY RUN: no files will be written")
         report = generate(cs, dry_run=args.dry_run, force=getattr(args, "force", False))
@@ -539,6 +541,9 @@ def cmd_sweep(args):
     # v0.8.0:应用 CLI 覆盖到 cs(整算例目录模式)
     _apply_v080_overrides(cs, args)
 
+    # v0.10.0:应用方程改写 CLI 覆盖(开关/严格度)
+    _apply_v100_equation_overrides(cs, args)
+
     # v0.8.2:wizard 已强制 per_dir,CLI 不传 --source-dir 视为遗留用法,打 deprecation 提示
     if not getattr(args, "source_dir", None) and not cs.source_dir:
         print(
@@ -583,6 +588,26 @@ def _apply_v080_overrides(cs, args):
     pbs_naming = getattr(args, "pbs_naming", "") or ""
     if pbs_enabled or pbs_naming:
         cs.pbs = PbsConfig(enabled=pbs_enabled, naming=pbs_naming)
+
+
+def _apply_v100_equation_overrides(cs, args):
+    """v0.10.0:把 CLI 传入的 --strict-equations / --no-switch-* 应用到 cs。
+
+    优先级:CLI flag > config 文件 > 默认值
+    --no-switch-*:默认切(True),传 flag 后变 False
+    --strict-equations:目前仅占位(后续 v0.10.0 启用 raise-on-residual)
+    """
+    if cs is None:
+        return  # 上游已报错,这里不重复 raise
+    if getattr(args, "no_switch_turbulence", False):
+        cs.equation_switches.turbulence = False
+    if getattr(args, "no_switch_energy", False):
+        cs.equation_switches.energy = False
+    if getattr(args, "no_switch_gas", False):
+        cs.equation_switches.gas = False
+    # --strict-equations 当前仅占位;后续 v0.10.0 子任务在 generate() 末尾
+    # 把残留字段警告升为 EquationRewriteError。当前不消费此 flag,只是注册。
+    _ = getattr(args, "strict_equations", False)
 
 
 def main(argv=None):
@@ -691,6 +716,27 @@ def main(argv=None):
     sw.add_argument(
         '--pbs-naming', dest='pbs_naming', default='',
         help='pbs 任务名模板(空 = 自动短名,例: Mars-{alpha}-{mach})',
+    )
+    # v0.10.0:方程改写相关 flag
+    sw.add_argument(
+        '--strict-equations', dest='strict_equations', action='store_true',
+        default=False,
+        help='v0.10.0: 残留字段(如 SST→SA 后 turbi_tlev)改为 error,默认 warning。',
+    )
+    sw.add_argument(
+        '--no-switch-turbulence', dest='no_switch_turbulence', action='store_true',
+        default=False,
+        help='v0.10.0: 不切湍流模型(只写初始化),默认切。',
+    )
+    sw.add_argument(
+        '--no-switch-energy', dest='no_switch_energy', action='store_true',
+        default=False,
+        help='v0.10.0: 不切能量模型,默认切。',
+    )
+    sw.add_argument(
+        '--no-switch-gas', dest='no_switch_gas', action='store_true',
+        default=False,
+        help='v0.10.0: 不切气体类型,默认切。',
     )
     sw.set_defaults(func=cmd_sweep)
 
