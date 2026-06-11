@@ -363,6 +363,64 @@ class EquationRewriteIssue:
 
 
 # ============================================================
+# v0.10.0 新增:set_*_model 写函数(spec §4.2)
+# ============================================================
+
+
+# 湍流模型 → (X, Y) 映射
+_TURB_EQNSET_CODE: Dict[TurbulenceModel, Tuple[int, int]] = {
+    TurbulenceModel.LAMINAR: (0, 1),
+    TurbulenceModel.GOLDBERG_RT: (1, 2),
+    TurbulenceModel.SPALART_ALLMARAS: (1, 4),
+    TurbulenceModel.REALIZABLE_KEPSILON: (2, 2),
+    TurbulenceModel.SST_KW: (2, 3),
+}
+
+
+def set_turbulence_model(
+    inp: InpFile, model: TurbulenceModel,
+) -> Dict[str, Any]:
+    """改写顶层 `seq.# 1 #vals 31 title eqnset_define` 块第 1 行
+    `values 101 1 1 v4 v5` 的 v4/v5 到 model 对应的 (X, Y)。
+
+    校验:
+    - model != UNKNOWN,否则 EquationRewriteError
+    - template 必须有 eqnset_define 块,否则 EquationRewriteError
+    - 写完 read-back 校验
+
+    Returns:
+        {"eqnset_define.v4_v5": (X, Y), "eqnset_define.turbulence_model": "..."}
+    """
+    if model == TurbulenceModel.UNKNOWN:
+        raise EquationRewriteError(
+            "cannot switch to UNKNOWN turbulence model"
+        )
+    if model not in _TURB_EQNSET_CODE:
+        raise EquationRewriteError(
+            f"no (X, Y) mapping for turbulence model {model.value!r}"
+        )
+    eqnset_stmt = _find_eqnset_define(inp)
+    if eqnset_stmt is None:
+        raise EquationRewriteError(
+            "no_eqnset_define: template has no `seq.# 1 #vals 31 "
+            "title eqnset_define` block; cannot switch turbulence"
+        )
+    x, y = _TURB_EQNSET_CODE[model]
+    eqnset_stmt.children[0].set(3, x)
+    eqnset_stmt.children[0].set(4, y)
+    # Read-back 校验
+    re_stmt = _find_eqnset_define(inp)
+    assert re_stmt is not None
+    raw = re_stmt.children[0].values_raw
+    assert int(raw[3]) == x and int(raw[4]) == y, \
+        f"read-back failed: expected ({x},{y}), got ({raw[3]},{raw[4]})"
+    return {
+        "eqnset_define.v4_v5": (x, y),
+        "eqnset_define.turbulence_model": model.value,
+    }
+
+
+# ============================================================
 # 湍流初始化 preset 基类 + 4 子类
 # ============================================================
 
@@ -681,6 +739,8 @@ __all__ = [
     "EquationRewriteIssue",
     # 检测器
     "detect_equations",
+    # v0.10.0 写函数
+    "set_turbulence_model",
     # 湍流 preset
     "TurbulencePresetBase",
     "SSTKOmegaPreset",
