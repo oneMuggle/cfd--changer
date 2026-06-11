@@ -21,7 +21,8 @@ import itertools
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from enum import Enum
+from typing import Any, Dict, List, Optional, Type, Union
 
 from .model import InpFile
 from .parser import parse_file
@@ -298,7 +299,7 @@ def _normalize_axis_value(key: str, v: Any) -> List[Any]:
     return _normalize_axis(v)
 
 
-def _coerce_enum_axis_value(key: str, s: str, enum_cls: type) -> List[Any]:
+def _coerce_enum_axis_value(key: str, s: str, enum_cls: Type[Enum]) -> List[Any]:
     """把一个字符串值转成 [enum];失败抛 ValueError,错误信息含 'unknown axis value'。"""
     aliases = _ENUM_ALIASES.get(enum_cls, {})
     canonical = aliases.get(s, s)

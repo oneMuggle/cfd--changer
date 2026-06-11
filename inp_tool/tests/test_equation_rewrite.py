@@ -4,9 +4,9 @@ v0.10.0:方程感知扩展的写函数单元测试
 from __future__ import annotations
 import pytest
 from inp_tool.equations import (
-    EquationRewriteError,
     EquationRewriteIssue,
 )
+from inp_tool.model import InpFile
 
 
 class TestEquationRewriteIssue:
@@ -128,7 +128,7 @@ class TestSetEnergyModel:
             set_energy_model, EnergyModel, _find_eqnset_define,
         )
         inp = self._build_inp(tnoneq=0)
-        applied = set_energy_model(
+        set_energy_model(
             inp, EnergyModel.TWO_TEMP, T_trans=300.0, T_vib=200.0,
         )
         pb = inp.get_block("physics")

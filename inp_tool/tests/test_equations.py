@@ -612,7 +612,6 @@ class TestSpeciesPreset:
 
     def test_apply_on_non_mixture_raises(self):
         """非 MIXTURE inp 用 SpeciesPreset → GasModelError"""
-        from inp_tool.equations import EquationSystemReport
         inp = _make_inp(["gasnam Air"])  # PERFECT_GAS
         p = SpeciesPreset(fractions={"CO": 0.5}, mode="mole")
         with pytest.raises(GasModelError):

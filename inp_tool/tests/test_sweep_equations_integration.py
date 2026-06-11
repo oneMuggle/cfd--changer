@@ -1,5 +1,4 @@
 """v0.9.1: sweep + equations preset 集成测试"""
-import json
 from pathlib import Path
 
 import pytest
@@ -7,7 +6,6 @@ import pytest
 from inp_tool.sweep import CaseSweep, generate, TurbulenceInit
 from inp_tool.parser import parse_file
 from inp_tool.equations import (
-    detect_equations, EnergyModel, GasModel, TurbulenceModel,
     SSTKOmegaPreset, TwoTemperaturePreset,
 )
 

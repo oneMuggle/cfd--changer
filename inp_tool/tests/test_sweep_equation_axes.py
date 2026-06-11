@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 from inp_tool.sweep import (
     CaseSweep, SweepSpec, _normalize_axis_value,
-    _ENUM_AXES,  # v0.10.0 新增导出
 )
 from inp_tool.equations import (
     TurbulenceModel, EnergyModel, GasModel,
