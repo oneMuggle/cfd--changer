@@ -10,7 +10,7 @@
 | [2026-06-08 inp-tool-repl](2026-06-08-inp-tool-repl-design.md) | inp-tool 交互式 REPL | ✅ 已实现 v0.7.1 (commit 40dbdbf) |
 | [2026-06-10 sweep-completeness-pbs-naming](2026-06-10-sweep-completeness-pbs-naming-design.md) | sweep 完整性 + PBS 可选 + 任务名建议 | ✅ 已实现 v0.9.0 (commit 4e45428) |
 | [2026-06-10 docs-cleanup](2026-06-10-docs-cleanup-design.md) | docs/ 目录整理 | ✅ 已完成 (PR #15, commit 45c9845) |
-| [2026-06-11 equation-sweep-extend](2026-06-11-equation-sweep-extend-design.md) | sweep 按 case 切方程/湍流/气体(枚举轴 + per-case 覆盖) | ✅ 已实施, 待 PR (v0.10.0) |
+| [2026-06-11 equation-sweep-extend](2026-06-11-equation-sweep-extend-design.md) | sweep 按 case 切方程/湍流/气体(枚举轴 + per-case 覆盖) | ✅ 已实现 v0.10.0 (commit 065cdb9) |
 
 ## Status 取值规范
 
