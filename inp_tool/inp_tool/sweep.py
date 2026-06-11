@@ -21,11 +21,15 @@ import itertools
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from enum import Enum
+from typing import Any, Dict, List, Optional, Type, Union
 
 from .model import InpFile
 from .parser import parse_file
 from .writer import write as write_inp
+from .equations import (
+    TurbulenceModel, EnergyModel, GasModel,
+)
 
 
 # 一个 sweep 轴的值可以是标量或列表
@@ -105,6 +109,107 @@ class SweepSpec:
         return list(self.values.keys())
 
 
+@dataclass
+class EquationSwitches:
+    """v0.10.0 新增:方程改写开关(默认全 True,切)。"""
+    turbulence: bool = True
+    energy: bool = True
+    gas: bool = True
+
+    @classmethod
+    def from_dict(cls, d: Optional[Dict[str, bool]]) -> "EquationSwitches":
+        if d is None:
+            return cls()
+        return cls(
+            turbulence=bool(d.get("turbulence", True)),
+            energy=bool(d.get("energy", True)),
+            gas=bool(d.get("gas", True)),
+        )
+
+
+@dataclass
+class TurbulenceInit:
+    """v0.10.0:湍流初始化参数 + per-case 覆盖。
+
+    顶层默认: I, L, U_ref(同 v0.9.1)
+    overrides: {model_value: TurbulenceInit}
+    """
+    I: float
+    L: float
+    U_ref: float = 1.0
+    overrides: Dict[str, "TurbulenceInit"] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "TurbulenceInit":
+        """Parse YAML/JSON dict into TurbulenceInit.
+
+        I and L are REQUIRED (same as v0.9.1 behavior per spec §4.6).
+        U_ref defaults to 1.0 if missing.
+        """
+        if "I" not in d or "L" not in d:
+            raise KeyError(
+                f"I and L are required for turbulence config (got keys: {sorted(d.keys())})"
+            )
+        I = float(d["I"])
+        L = float(d["L"])
+        U_ref = float(d.get("U_ref", d.get("U", 1.0)))
+        overrides_raw = d.get("overrides", {}) or {}
+        overrides: Dict[str, TurbulenceInit] = {}
+        for model_value, override_d in overrides_raw.items():
+            if not isinstance(override_d, dict):
+                raise ValueError(
+                    f"turbulence.overrides[{model_value!r}] must be dict, "
+                    f"got {type(override_d).__name__}"
+                )
+            # Each override must also have I and L
+            if "I" not in override_d or "L" not in override_d:
+                raise KeyError(
+                    f"I and L are required for turbulence.overrides[{model_value!r}]"
+                )
+            overrides[model_value] = cls(
+                I=float(override_d["I"]),
+                L=float(override_d["L"]),
+                U_ref=float(override_d.get("U_ref", override_d.get("U", 1.0))),
+            )
+        return cls(
+            I=I,
+            L=L,
+            U_ref=U_ref,
+            overrides=overrides,
+        )
+
+
+def _resolve_turb_init(
+    model: TurbulenceModel, cs: "CaseSweep",
+) -> Optional["TurbulenceInit"]:
+    """按 model 选 TurbulenceInit。
+
+    顺序:
+    1. cs.turbulence.overrides[model.value] 命中 → 用
+       也接受短名 alias(如 "sst" → SST_KW)
+    2. cs.turbulence(I, L, U_ref) 顶层默认 → 用
+    3. 都没有 → 抛 KeyError(同 v0.9.1)
+    4. LAMINAR → 返回 None(不需要 init)
+    """
+    if model == TurbulenceModel.LAMINAR:
+        return None
+    if cs.turbulence is None:
+        raise KeyError(
+            f"turbulence model {model.value!r} requested but "
+            f"cs.turbulence is None; provide top-level `turbulence: {{I, L, U_ref}}`"
+        )
+    overrides = cs.turbulence.overrides
+    # 1. 精确匹配 model.value
+    if model.value in overrides:
+        return overrides[model.value]
+    # 2. 短名 alias(从 _ENUM_ALIASES 反查:任何指向 model.value 的 alias 都算)
+    aliases = _ENUM_ALIASES.get(type(model), {})
+    for alias, canonical in aliases.items():
+        if canonical == model.value and alias in overrides:
+            return overrides[alias]
+    return cs.turbulence
+
+
 # ============================================================
 # PR #1:CaseSpec 抽象(显式 / 分组 / 笛卡尔的统一归一化)
 # ============================================================
@@ -137,6 +242,77 @@ def _normalize_axis(v: SweepValue) -> List[Any]:
     return [v]
 
 
+# ============================================================
+# v0.10.0 新增:枚举轴识别(spec §4.1)
+# ============================================================
+_ENUM_AXES: Dict[str, type] = {
+    "turbulence": TurbulenceModel,
+    "energy": EnergyModel,
+    "gas": GasModel,
+}
+
+# 短名别名(常见缩写 → enum.value)
+# 容忍 CLI/YAML 用户写短名(如 "sst" 而非 "k-omega-sst")。
+_ENUM_ALIASES: Dict[type, Dict[str, str]] = {
+    TurbulenceModel: {
+        "sst": TurbulenceModel.SST_KW.value,
+        "sa": TurbulenceModel.SPALART_ALLMARAS.value,
+        "ke": TurbulenceModel.REALIZABLE_KEPSILON.value,
+        "keps": TurbulenceModel.REALIZABLE_KEPSILON.value,
+        "goldberg": TurbulenceModel.GOLDBERG_RT.value,
+        "laminar": TurbulenceModel.LAMINAR.value,
+    },
+    EnergyModel: {
+        "2t": EnergyModel.TWO_TEMP.value,
+        "3t": EnergyModel.THREE_TEMP.value,
+        "none": EnergyModel.NONE.value,
+    },
+    GasModel: {
+        "perfect": GasModel.PERFECT_GAS.value,
+        "real": GasModel.REAL_GAS.value,
+        "multi": GasModel.MULTI_TEMP.value,
+        "mixture": GasModel.MIXTURE.value,
+    },
+}
+
+
+def _normalize_axis_value(key: str, v: Any) -> List[Any]:
+    """识别 key 名 → 字符串值映射到枚举。
+
+    - key ∈ _ENUM_AXES 且 v 是 str → 转枚举(支持短名别名)
+    - key ∈ _ENUM_AXES 且 v 是 list/tuple 且每个元素是 str → 逐个转枚举
+    - 其他 → 走老 _normalize_axis
+    """
+    if key in _ENUM_AXES:
+        enum_cls = _ENUM_AXES[key]
+        if isinstance(v, str):
+            return _coerce_enum_axis_value(key, v, enum_cls)
+        if isinstance(v, (list, tuple)):
+            coerced: List[Any] = []
+            for item in v:
+                if isinstance(item, str):
+                    coerced.extend(_coerce_enum_axis_value(key, item, enum_cls))
+                else:
+                    # 已是 enum 实例或非 str,原样保留
+                    coerced.append(item)
+            return coerced
+    return _normalize_axis(v)
+
+
+def _coerce_enum_axis_value(key: str, s: str, enum_cls: Type[Enum]) -> List[Any]:
+    """把一个字符串值转成 [enum];失败抛 ValueError,错误信息含 'unknown axis value'。"""
+    aliases = _ENUM_ALIASES.get(enum_cls, {})
+    canonical = aliases.get(s, s)
+    try:
+        return [enum_cls(canonical)]
+    except ValueError:
+        valid = [e.value for e in enum_cls]
+        raise ValueError(
+            f"unknown axis value {s!r} for key {key!r}; "
+            f"expected one of {valid}"
+        ) from None
+
+
 def expand_cartesian(spec: SweepSpec) -> List[Dict[str, Any]]:
     """展开笛卡尔积:返回 [{alpha:v1,beta:v2,...}, ...]"""
     if not spec.values:
@@ -145,7 +321,7 @@ def expand_cartesian(spec: SweepSpec) -> List[Dict[str, Any]]:
     keys: List[str] = []
     axes: List[List[Any]] = []
     for k, v in spec.values.items():
-        norm = _normalize_axis(v)
+        norm = _normalize_axis_value(k, v)  # v0.10.0: 枚举识别
         if not norm:
             raise ValueError(f"SweepSpec.values[{k!r}]: empty list")
         keys.append(k)
@@ -432,9 +608,19 @@ class CaseSweep:
     # v0.9.0 新增:pbs 脚本可选生成
     pbs: Optional[Any] = None  # 实际类型:Optional["PbsConfig"]
     # v0.9.0 新增:方程感知的湍流/2T/组分 preset
-    turbulence: Optional[Any] = None  # 实际类型:Optional[TurbulencePresetBase]
+    # v0.10.0 改:turbulence 改为 TurbulenceInit(原 v0.9.1 TurbulencePresetBase
+    # 仍然在 generate() 内部按 model 动态创建)
+    turbulence: Optional["TurbulenceInit"] = None
     two_temperature: Optional[Any] = None  # 实际类型:Optional[TwoTemperaturePreset]
     species: Optional[Any] = None  # 实际类型:Optional[SpeciesPreset]
+    # v0.10.0 新增:方程改写开关
+    equation_switches: EquationSwitches = field(
+        default_factory=EquationSwitches
+    )
+    # v0.10.0 新增:per-case 能量参数覆盖(dict;key 是 model.value)
+    energy_overrides: Dict[str, Dict[str, float]] = field(
+        default_factory=dict
+    )
 
     # --------------------- 构造 ---------------------
     @classmethod
@@ -505,33 +691,11 @@ class CaseSweep:
             from .pbs import PbsConfig  # 局部 import 避免循环
             pbs_cfg = PbsConfig.from_dict(pbs_d)
 
-        # v0.9.1:turbulence preset 解析
-        # YAML 例:turbulence: {enabled: true, I: 0.01, L: 0.01, U_ref: 100}
-        # 检测 template 的湍流模型,选对应 preset(SST/k-ε/SA/Goldberg)
-        turbulence_preset = None
+        # v0.10.0:turbulence 配置解析(从 preset 改为 init 参数容器)
+        turbulence_init = None
         turb_d = d.get("turbulence")
         if isinstance(turb_d, dict) and turb_d.get("enabled", True):
-            from .equations import (
-                detect_equations, make_turbulence_preset, TurbulenceModel,
-            )
-            from .parser import parse_file as _parse_file
-            _inp = _parse_file(d["template"])
-            _rep = detect_equations(_inp)
-            if _rep.turbulence in (TurbulenceModel.LAMINAR, TurbulenceModel.UNKNOWN):
-                raise ValueError(
-                    f"sweep config turbulence.enabled=true, but template "
-                    f"is {_rep.turbulence.value}; cannot apply turbulence preset"
-                )
-            I = turb_d.get("I")
-            L = turb_d.get("L")
-            U_ref = turb_d.get("U_ref", turb_d.get("U", 1.0))
-            if I is None or L is None:
-                raise KeyError(
-                    "sweep config turbulence: 'I' and 'L' are required"
-                )
-            turbulence_preset = make_turbulence_preset(
-                _rep.turbulence, I=float(I), L=float(L), U_ref=float(U_ref)
-            )
+            turbulence_init = TurbulenceInit.from_dict(turb_d)
 
         # v0.9.1:two_temperature preset 解析
         # YAML 例:two_temperature: {enabled: true, T_trans: 300, T_vib: 200}
@@ -551,6 +715,27 @@ class CaseSweep:
                 set_numeqns=bool(twot_d.get("set_numeqns", True)),
             )
 
+        # v0.10.0:equation_switches 解析
+        equation_switches = EquationSwitches.from_dict(
+            d.get("equation_switches")
+        )
+
+        # v0.10.0:energy_overrides 解析
+        # 形如:energy_overrides: {"2T": {"T_trans": 300.0, "T_vib": 200.0}, ...}
+        energy_overrides_raw = d.get("energy_overrides", {}) or {}
+        if not isinstance(energy_overrides_raw, dict):
+            raise ValueError(
+                f"CaseSweep config: 'energy_overrides' must be a dict, "
+                f"got {type(energy_overrides_raw).__name__}"
+            )
+        # 内部值也必须是 dict(每个 model 一组 T_trans/T_vib)
+        for k, v in energy_overrides_raw.items():
+            if not isinstance(v, dict):
+                raise ValueError(
+                    f"CaseSweep config: energy_overrides[{k!r}] must be a dict, "
+                    f"got {type(v).__name__}"
+                )
+
         return cls(
             template=d["template"],
             output_dir=d["output_dir"],
@@ -565,8 +750,10 @@ class CaseSweep:
             copy_strategy=copy_strategy,
             exclude=exclude,
             pbs=pbs_cfg,
-            turbulence=turbulence_preset,
+            turbulence=turbulence_init,
             two_temperature=two_temperature_preset,
+            equation_switches=equation_switches,
+            energy_overrides=dict(energy_overrides_raw),
         )
 
     def materialize(self) -> List[ExplicitCase]:
@@ -751,6 +938,12 @@ def _build_specs_from_dict(d: Dict[str, Any]) -> List[Union[CartesianSpec, Expli
         sweeps_dict = d["sweeps"]
         if not sweeps_dict:
             raise ValueError("CaseSweep config: 'sweeps' is empty")
+        # v0.10.0:对枚举轴(turbulence/energy/gas)做即时校验
+        # 失败时让 from_dict 抛 ValueError,而不是延后到 expand_cartesian
+        for _k, _v in sweeps_dict.items():
+            if _k in _ENUM_AXES:
+                # 调用 _normalize_axis_value 会抛 ValueError(同义错误信息)
+                _normalize_axis_value(_k, _v)
         specs.append(CartesianSpec(axes=dict(sweeps_dict)))
 
     if has_cases:
@@ -1034,10 +1227,46 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
         if sweep.freestream is not None:
             applied.update(sweep.freestream.apply(inp, params))
 
-        # v0.9.1:应用 turbulence preset(每个 case 同样 I/L/U,
-        # 但因 deepcopy template,字段需重写)
+        # === ① 切方程(先于 preset)— v0.10.0 ===
+        # 切模型必须发生在 preset 应用之前,这样 preset 的 I/L 才会写到
+        # 切完模型的 eqnset 块里。
+        # 用 `params` 里的模型(来自 sweep axis),不是 detect_equations(inp) —
+        # 因为切模型的目的就是替换原模板里的模型。
+        from .equations import (
+            set_turbulence_model, set_energy_model, set_gas_type,
+        )
+        if (sweep.equation_switches.turbulence
+                and "turbulence" in params
+                and isinstance(params["turbulence"], TurbulenceModel)):
+            applied.update(set_turbulence_model(inp, params["turbulence"]))
+        if (sweep.equation_switches.energy
+                and "energy" in params
+                and isinstance(params["energy"], EnergyModel)):
+            _t_d = sweep.energy_overrides.get(params["energy"].value, {})
+            applied.update(set_energy_model(
+                inp, params["energy"],
+                T_trans=_t_d.get("T_trans"),
+                T_vib=_t_d.get("T_vib"),
+            ))
+        if (sweep.equation_switches.gas
+                and "gas" in params
+                and isinstance(params["gas"], GasModel)):
+            applied.update(set_gas_type(inp, params["gas"]))
+
+        # v0.9.1→v0.10.0:应用 turbulence preset(每个 case 同样 I/L/U,
+        # 但因 deepcopy template,字段需重写)。
+        # v0.10.0:turbulence 字段是 TurbulenceInit,需要从 inp 检测当前湍流模型,
+        # 通过 _resolve_turb_init 选 init(overrides 优先),再用
+        # make_turbulence_preset 动态构造 preset 并 apply。
         if sweep.turbulence is not None:
-            applied.update(sweep.turbulence.apply(inp))
+            from .equations import detect_equations, make_turbulence_preset
+            _rep = detect_equations(inp)
+            init = _resolve_turb_init(_rep.turbulence, sweep)
+            if init is not None:
+                _preset = make_turbulence_preset(
+                    _rep.turbulence, I=init.I, L=init.L, U_ref=init.U_ref,
+                )
+                applied.update(_preset.apply(inp))
 
         # v0.9.1:应用 two_temperature preset(联动写 tnoneq_numeqns + 温度)
         if sweep.two_temperature is not None:

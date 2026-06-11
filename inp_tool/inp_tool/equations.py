@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from .model import InpFile, Stmt
+from .model import Block, InpFile, Stmt
 
 
 # ============================================================
@@ -333,6 +333,258 @@ class GasModelError(ValueError):
 
 
 # ============================================================
+# v0.10.0 新增:方程改写异常 + issue(spec §4.2)
+# ============================================================
+
+
+class EquationRewriteError(ValueError):
+    """set_*_model 写不进去或一致性破坏时抛。"""
+    pass
+
+
+@dataclass
+class EquationRewriteIssue:
+    """写完后追加到 inp.notes 列表;generate 末尾聚合。
+
+    复用 v0.9.0 PbsIssue 字段结构(severity/code/message)。
+    """
+    severity: str
+    code: str
+    message: str
+
+    def __post_init__(self) -> None:
+        if self.severity not in ("error", "warning"):
+            raise ValueError(
+                f"severity must be 'error' or 'warning', got {self.severity!r}"
+            )
+
+    def __repr__(self) -> str:
+        return f"[{self.severity}] {self.code}: {self.message}"
+
+
+# ============================================================
+# v0.10.0 新增:set_*_model 写函数(spec §4.2)
+# ============================================================
+
+
+# 湍流模型 → (X, Y) 映射
+_TURB_EQNSET_CODE: Dict[TurbulenceModel, Tuple[int, int]] = {
+    TurbulenceModel.LAMINAR: (0, 1),
+    TurbulenceModel.GOLDBERG_RT: (1, 2),
+    TurbulenceModel.SPALART_ALLMARAS: (1, 4),
+    TurbulenceModel.REALIZABLE_KEPSILON: (2, 2),
+    TurbulenceModel.SST_KW: (2, 3),
+}
+
+
+# 气体模型 → v6 映射(spec §4.2)
+_GAS_V6_CODE: Dict[GasModel, int] = {
+    GasModel.PERFECT_GAS: 0,
+    GasModel.REAL_GAS: 1,
+    GasModel.MULTI_TEMP: 11,
+}
+
+
+def set_turbulence_model(
+    inp: InpFile, model: TurbulenceModel,
+) -> Dict[str, Any]:
+    """改写顶层 `seq.# 1 #vals 31 title eqnset_define` 块第 1 行
+    `values 101 1 1 v4 v5` 的 v4/v5 到 model 对应的 (X, Y)。
+
+    校验:
+    - model != UNKNOWN,否则 EquationRewriteError
+    - template 必须有 eqnset_define 块,否则 EquationRewriteError
+    - 写完 read-back 校验
+
+    Returns:
+        {"eqnset_define.v4_v5": (X, Y), "eqnset_define.turbulence_model": "..."}
+    """
+    if model == TurbulenceModel.UNKNOWN:
+        raise EquationRewriteError(
+            "cannot switch to UNKNOWN turbulence model"
+        )
+    if model not in _TURB_EQNSET_CODE:
+        raise EquationRewriteError(
+            f"no (X, Y) mapping for turbulence model {model.value!r}"
+        )
+    eqnset_stmt = _find_eqnset_define(inp)
+    if eqnset_stmt is None:
+        raise EquationRewriteError(
+            "no_eqnset_define: template has no `seq.# 1 #vals 31 "
+            "title eqnset_define` block; cannot switch turbulence"
+        )
+    x, y = _TURB_EQNSET_CODE[model]
+    eqnset_stmt.children[0].set(3, x)
+    eqnset_stmt.children[0].set(4, y)
+    # Read-back 校验
+    re_stmt = _find_eqnset_define(inp)
+    assert re_stmt is not None
+    raw = re_stmt.children[0].values_raw
+    assert int(raw[3]) == x and int(raw[4]) == y, \
+        f"read-back failed: expected ({x},{y}), got ({raw[3]},{raw[4]})"
+    return {
+        "eqnset_define.v4_v5": (x, y),
+        "eqnset_define.turbulence_model": model.value,
+    }
+
+
+def set_energy_model(
+    inp: InpFile, model: EnergyModel,
+    *, T_trans: Optional[float] = None,
+    T_vib: Optional[float] = None,
+    set_numeqns: bool = True,
+) -> Dict[str, Any]:
+    """改写 physics.tnoneq_numeqns + 联动 eqnset_define v6。
+
+    NONE:
+      - 设 physics.tnoneq_numeqns = 0
+      - 联动 eqnset_define v6 → 0
+      - 不动 reftem / vibtem
+
+    TWO_TEMP:
+      - 强校验 T_trans/T_vib 都给(同 v0.9.1 TwoTemperaturePreset)
+      - 设 physics.tnoneq_numeqns = 1(若 set_numeqns=True)
+      - 写 physics.reftem = T_trans、physics.vibtem = T_vib
+      - 联动 eqnset_define v6 → 11
+    """
+    applied: Dict[str, Any] = {}
+    pb = inp.get_block("physics")
+    if pb is None:
+        raise EquationRewriteError(
+            "template has no `physics` block; cannot set energy model"
+        )
+
+    if model == EnergyModel.TWO_TEMP:
+        if T_trans is None or T_vib is None:
+            raise TwoTemperatureError(
+                "2T model requires BOTH T_trans and T_vib. "
+                f"got T_trans={T_trans!r}, T_vib={T_vib!r}"
+            )
+        if T_trans <= 0 or T_vib <= 0:
+            raise ValueError(
+                f"temperatures must be > 0 K "
+                f"(got T_trans={T_trans}, T_vib={T_vib})"
+            )
+        if set_numeqns:
+            pb.set("tnoneq_numeqns", 1)
+            applied["physics.tnoneq_numeqns"] = 1
+        # reftem / vibtem:若 template 中已存在则 set,否则 append
+        if pb.set("reftem", T_trans):
+            applied["physics.reftem"] = T_trans
+        else:
+            pb.append("reftem", T_trans)
+            applied["physics.reftem"] = T_trans
+        if pb.set("vibtem", T_vib):
+            applied["physics.vibtem"] = T_vib
+        else:
+            pb.append("vibtem", T_vib)
+            applied["physics.vibtem"] = T_vib
+        v6_target = 11
+    elif model == EnergyModel.NONE:
+        if set_numeqns:
+            pb.set("tnoneq_numeqns", 0)
+            applied["physics.tnoneq_numeqns"] = 0
+        v6_target = 0
+    else:
+        raise EquationRewriteError(
+            f"unsupported energy model: {model.value!r} "
+            "(v0.10.0 supports NONE / TWO_TEMP)"
+        )
+
+    # 联动 eqnset_define v6(用 children[1],同 Task 2 经验用 .set(i, int))
+    eqnset_stmt = _find_eqnset_define(inp)
+    if eqnset_stmt is None:
+        raise EquationRewriteError(
+            "no_eqnset_define: cannot link v6 (energy model rewrite)"
+        )
+    if len(eqnset_stmt.children) < 2:
+        raise EquationRewriteError(
+            "eqnset_define block has fewer than 2 values rows; "
+            "cannot link v6"
+        )
+    eqnset_stmt.children[1].set(0, v6_target)
+    # Read-back
+    re_stmt = _find_eqnset_define(inp)
+    assert re_stmt is not None
+    raw = re_stmt.children[1].values_raw
+    assert int(raw[0]) == v6_target, \
+        f"v6 read-back failed: expected {v6_target}, got {raw[0]}"
+    applied["eqnset_define.v6"] = v6_target
+    applied["eqnset_define.energy_model"] = model.value
+    return applied
+
+
+def set_gas_type(
+    inp: InpFile, model: GasModel,
+) -> Dict[str, Any]:
+    """改写顶层 `seq.# 1 #vals 31 title eqnset_define` 块第 2 行
+    `values v6 ...` 的 v6 到 model 对应码。
+
+    一致性校验:
+    - v6=11 → 必须 tnoneq_numeqns=1(否则 EquationRewriteError)
+    - 现有 tnoneq_numeqns=1 但 v6=0 → warning(仅在 applied dict 标记,不阻塞)
+    - v6=1(真实气体)+ tnoneq_numeqns>0 → warning
+    """
+    if model not in _GAS_V6_CODE:
+        raise EquationRewriteError(
+            f"unsupported gas model: {model.value!r} "
+            "(v0.10.0 supports PERFECT_GAS / REAL_GAS / MULTI_TEMP)"
+        )
+    v6_target = _GAS_V6_CODE[model]
+
+    eqnset_stmt = _find_eqnset_define(inp)
+    if eqnset_stmt is None:
+        raise EquationRewriteError(
+            "no_eqnset_define: cannot link v6 (gas type rewrite)"
+        )
+    if len(eqnset_stmt.children) < 2:
+        raise EquationRewriteError(
+            "eqnset_define block has fewer than 2 values rows; "
+            "cannot link v6"
+        )
+
+    pb = inp.get_block("physics")
+    applied: Dict[str, Any] = {}
+
+    if model == GasModel.MULTI_TEMP:
+        # MULTI_TEMP 强制要求 tnoneq_numeqns=1
+        if pb is None:
+            raise EquationRewriteError(
+                "gas=multi-temp requires physics block "
+                "(to set tnoneq_numeqns=1)"
+            )
+        # 强制设 tnoneq=1(spec §4.2 明确;若已是 1 不动)
+        if pb.get("tnoneq_numeqns") != 1:
+            pb.set("tnoneq_numeqns", 1)
+            applied["physics.tnoneq_numeqns"] = 1
+    else:
+        # 非 multi-temp:warning if tnoneq=1(标到 applied,不抛)
+        if pb is not None and pb.get("tnoneq_numeqns") == 1 and model == GasModel.PERFECT_GAS:
+            applied["eqnset_define.issue"] = (
+                "gas_inconsistent_with_energy: "
+                "tnoneq_numeqns=1 but gas=perfect-gas (v6=0); "
+                "may be inconsistent"
+            )
+        if pb is not None and pb.get("tnoneq_numeqns") == 1 and model == GasModel.REAL_GAS:
+            applied["eqnset_define.issue"] = (
+                "gas_real_with_2t: "
+                "v6=1 (real-gas) + tnoneq_numeqns>0; "
+                "may have property conflict"
+            )
+
+    eqnset_stmt.children[1].set(0, v6_target)
+    # Read-back
+    re_stmt = _find_eqnset_define(inp)
+    assert re_stmt is not None
+    raw = re_stmt.children[1].values_raw
+    assert int(raw[0]) == v6_target, \
+        f"v6 read-back failed: expected {v6_target}, got {raw[0]}"
+    applied["eqnset_define.v6"] = v6_target
+    applied["eqnset_define.gas_model"] = model.value
+    return applied
+
+
+# ============================================================
 # 湍流初始化 preset 基类 + 4 子类
 # ============================================================
 
@@ -349,6 +601,11 @@ class TurbulencePresetBase(ABC):
     - I ∈ [0, 1]
     - L > 0
     - U_ref > 0
+
+    v0.10.0 新增:
+    - clear_incompatible_fields: bool — 是否在切模型时清理不兼容的 turbi_* 字段
+    - apply(inp, model=...) — model 提供时按目标模型决定清理哪些字段;
+      model=None 时(默认)走 v0.9.1 路径,不清多余字段
     """
     I: float = 0.01                          # 湍流强度(0.01 = 1%)
     L: float = 0.01                          # 特征长度 [m]
@@ -359,6 +616,8 @@ class TurbulencePresetBase(ABC):
     turbi_len_key: str = "turbi_len"          # 写"长度尺度"
     turbi_tlev_key: str = "turbi_tlev"        # 写"特征量"无量纲比例(2-方程用)
     turbi_tlen_key: str = "turbi_tlen"        # 写"长度"或 ε(Realizable k-ε)
+    # v0.10.0 新增
+    clear_incompatible_fields: bool = True
 
     def _validate(self) -> None:
         if not (0 <= self.I <= 1):
@@ -379,14 +638,61 @@ class TurbulencePresetBase(ABC):
         """算湍流参数。返回 dict {guiopts_field_name: float}。"""
         raise NotImplementedError
 
-    def apply(self, inp: InpFile) -> Dict[str, Any]:
-        """写入 guiopts 块;返回 applied 字典供 undo / manifest。"""
+    def _clear_incompatible(
+        self, gb: Block, new_model: TurbulenceModel,
+    ) -> List[str]:
+        """按 new_model 决定清掉哪些 turbi_* 字段。
+
+        规则(v0.10.0 spec §4.4):
+        - LAMINAR:清 turbi_lev, turbi_len, turbi_tlev, turbi_tlen(全部)
+        - SST_KW / REALIZABLE_KEPSILON(2-方程):保留全部
+        - SPALART_ALLMARAS / GOLDBERG_RT(1-方程):清 turbi_tlev, turbi_tlen
+
+        返回被清字段名列表(供 manifest/调试)。
+        """
+        cleared: List[str] = []
+        if new_model == TurbulenceModel.LAMINAR:
+            targets = [
+                "turbi_lev", "turbi_len", "turbi_tlev", "turbi_tlen",
+            ]
+        elif new_model in (
+            TurbulenceModel.SST_KW,
+            TurbulenceModel.REALIZABLE_KEPSILON,
+        ):
+            return cleared  # 2-方程:保留全部 turbi_*
+        else:  # 1-方程:SA / Goldberg
+            targets = ["turbi_tlev", "turbi_tlen"]
+        for f in targets:
+            if gb.get(f) is not None:
+                gb.remove_field(f)
+                cleared.append(f)
+        return cleared
+
+    def apply(
+        self, inp: InpFile, model: Optional[TurbulenceModel] = None,
+        clear_incompatible_fields: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """写入 guiopts 块;返回 applied 字典供 undo / manifest。
+
+        v0.10.0 新增参数:
+        - model: 若提供,在写之前按 model 清不兼容 turbi_* 字段
+        - clear_incompatible_fields: 显式覆盖 self.clear_incompatible_fields
+                 (None = 沿用 self 上的默认)
+        """
         self._validate()
         gb = inp.get_block("guiopts")
         if gb is None:
             raise ValueError(
                 "template has no `guiopts` block; cannot apply turbulence preset"
             )
+        # 切模型时清理不兼容字段
+        do_clear = (
+            self.clear_incompatible_fields
+            if clear_incompatible_fields is None
+            else clear_incompatible_fields
+        )
+        if model is not None and do_clear:
+            self._clear_incompatible(gb, model)
         values = self.compute()
         applied: Dict[str, Any] = {}
         for field_key, value in values.items():
@@ -647,8 +953,14 @@ __all__ = [
     "TwoTemperatureError",
     "SpeciesNotFoundError",
     "GasModelError",
+    "EquationRewriteError",
+    "EquationRewriteIssue",
     # 检测器
     "detect_equations",
+    # v0.10.0 写函数
+    "set_turbulence_model",
+    "set_energy_model",
+    "set_gas_type",
     # 湍流 preset
     "TurbulencePresetBase",
     "SSTKOmegaPreset",
