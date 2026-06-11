@@ -431,6 +431,10 @@ class CaseSweep:
     exclude: List[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE))
     # v0.9.0 新增:pbs 脚本可选生成
     pbs: Optional[Any] = None  # 实际类型:Optional["PbsConfig"]
+    # v0.9.0 新增:方程感知的湍流/2T/组分 preset
+    turbulence: Optional[Any] = None  # 实际类型:Optional[TurbulencePresetBase]
+    two_temperature: Optional[Any] = None  # 实际类型:Optional[TwoTemperaturePreset]
+    species: Optional[Any] = None  # 实际类型:Optional[SpeciesPreset]
 
     # --------------------- 构造 ---------------------
     @classmethod
