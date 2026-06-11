@@ -51,20 +51,47 @@ class TestFromDictTurbulence:
         })
         assert cs.turbulence is None
 
-    def test_turbulence_missing_I_uses_default(self, tmp_path):
-        """v0.10.0:不传 I/L 走默认(0.01/0.01),不抛错(老 v0.9.1 抛 KeyError)"""
+    def test_turbulence_missing_I_raises(self, tmp_path):
+        """v0.9.1 behavior preserved: missing I → KeyError (spec §4.6)."""
         if not SST_FILE.exists():
             pytest.skip("compare sample 缺失")
-        cs = CaseSweep.from_dict({
+        d = {
             "template": str(SST_FILE),
             "output_dir": str(tmp_path),
             "sweeps": {"alpha": [0]},
-            "turbulence": {"L": 0.02},
-        })
-        # I 缺省 = 0.01;L 显式 0.02
-        assert cs.turbulence is not None
-        assert cs.turbulence.I == 0.01
-        assert cs.turbulence.L == 0.02
+            "turbulence": {"L": 0.01, "U_ref": 204.0},  # missing I
+        }
+        with pytest.raises(KeyError, match="I and L are required"):
+            CaseSweep.from_dict(d)
+
+    def test_turbulence_missing_L_raises(self, tmp_path):
+        """v0.9.1 behavior preserved: missing L → KeyError (spec §4.6)."""
+        if not SST_FILE.exists():
+            pytest.skip("compare sample 缺失")
+        d = {
+            "template": str(SST_FILE),
+            "output_dir": str(tmp_path),
+            "sweeps": {"alpha": [0]},
+            "turbulence": {"I": 0.01, "U_ref": 204.0},  # missing L
+        }
+        with pytest.raises(KeyError, match="I and L are required"):
+            CaseSweep.from_dict(d)
+
+    def test_turbulence_override_missing_I_raises(self, tmp_path):
+        """每个 override 也必须自带 I/L(同顶层严格策略)。"""
+        if not SST_FILE.exists():
+            pytest.skip("compare sample 缺失")
+        d = {
+            "template": str(SST_FILE),
+            "output_dir": str(tmp_path),
+            "sweeps": {"alpha": [0]},
+            "turbulence": {
+                "I": 0.01, "L": 0.01, "U_ref": 100.0,
+                "overrides": {"sst": {"L": 0.02}},  # missing I
+            },
+        }
+        with pytest.raises(KeyError, match="I and L are required"):
+            CaseSweep.from_dict(d)
 
     def test_turbulence_on_laminar_template_accepted_in_v010(self, tmp_path):
         """v0.10.0:层流 template + turbulence 块不再在 from_dict 抛错;

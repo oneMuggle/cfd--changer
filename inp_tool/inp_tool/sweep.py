@@ -140,6 +140,18 @@ class TurbulenceInit:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "TurbulenceInit":
+        """Parse YAML/JSON dict into TurbulenceInit.
+
+        I and L are REQUIRED (same as v0.9.1 behavior per spec §4.6).
+        U_ref defaults to 1.0 if missing.
+        """
+        if "I" not in d or "L" not in d:
+            raise KeyError(
+                f"I and L are required for turbulence config (got keys: {sorted(d.keys())})"
+            )
+        I = float(d["I"])
+        L = float(d["L"])
+        U_ref = float(d.get("U_ref", d.get("U", 1.0)))
         overrides_raw = d.get("overrides", {}) or {}
         overrides: Dict[str, TurbulenceInit] = {}
         for model_value, override_d in overrides_raw.items():
@@ -148,15 +160,20 @@ class TurbulenceInit:
                     f"turbulence.overrides[{model_value!r}] must be dict, "
                     f"got {type(override_d).__name__}"
                 )
+            # Each override must also have I and L
+            if "I" not in override_d or "L" not in override_d:
+                raise KeyError(
+                    f"I and L are required for turbulence.overrides[{model_value!r}]"
+                )
             overrides[model_value] = cls(
-                I=float(override_d.get("I", 0.01)),
-                L=float(override_d.get("L", 0.01)),
+                I=float(override_d["I"]),
+                L=float(override_d["L"]),
                 U_ref=float(override_d.get("U_ref", override_d.get("U", 1.0))),
             )
         return cls(
-            I=float(d.get("I", 0.01)),
-            L=float(d.get("L", 0.01)),
-            U_ref=float(d.get("U_ref", d.get("U", 1.0))),
+            I=I,
+            L=L,
+            U_ref=U_ref,
             overrides=overrides,
         )
 
