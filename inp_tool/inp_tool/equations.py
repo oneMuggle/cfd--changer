@@ -70,14 +70,20 @@ class TurbulenceModel(str, Enum):
 class GasModel(str, Enum):
     """气体模型
 
-    实测(从 reference/inp_example/compare/):
-    - physics.gasnam 存在(且值是已知气体名)= PERFECT_GAS
-    - 顶层 infsets > 0 + 顶层有 species_*.Mwt1_* → MIXTURE(多组分)
-    - 都没有 → UNKNOWN
+    实测(从 reference/inp_example/compare/ 7 文件 + 用户 2026-06-11 确认):
+    判定来源是顶层 `seq.# 1 #vals 31 title eqnset_define` 块**第 2 行**
+    `values v6 ...` 的 v6:
+    - v6 == 0  → PERFECT_GAS(可压缩理想气体)
+    - v6 == 1  → REAL_GAS(可压缩真实气体 / 多组分)
+    - v6 == 11 → MULTI_TEMP(双温热非平衡)— 与 physics.tnoneq_numeqns=1 互锁
+
+    NOTE: 不要用 `physics.gasnam` 判别 — 实测 7 个文件全部有 `gasnam Air`
+    (包括真实气体和双温),会造成误判。
     """
     PERFECT_GAS = "perfect-gas"
     REAL_GAS = "real-gas"
-    MIXTURE = "mixture"
+    MULTI_TEMP = "multi-temp"          # v0.9.1 新增(对应 v6=11 + tnoneq_numeqns=1)
+    MIXTURE = "mixture"                # 顶层 species_*.Mwt1_* 显式声明的多组分(v0.10+ 细化)
     UNKNOWN = "unknown"
 
 
@@ -100,14 +106,16 @@ class EquationSystemReport:
     """detect_equations 的输出,所有 preset 共享"""
     energy: EnergyModel                       # NONE / TWO_TEMP / THREE_TEMP / UNKNOWN
     turbulence: TurbulenceModel              # 6 枚举 + UNKNOWN
-    gas: GasModel                             # PERFECT_GAS / REAL_GAS / MIXTURE / UNKNOWN
+    gas: GasModel                             # PERFECT_GAS / REAL_GAS / MULTI_TEMP / MIXTURE / UNKNOWN
     n_species: int = 0                        # 顶层 infsets 解析出的 species 数
     species: List[SpeciesEntry] = field(default_factory=list)
-    has_gasnam: bool = False                  # physics.gasnam 是否存在
+    has_gasnam: bool = False                  # physics.gasnam 是否存在(仅参考,不用于判别)
     gasnam: Optional[str] = None              # "Air" / "CO2" / ...
     # 湍流原始索引(从 seq.# 1 第 1 行 values 取,用于追溯)
-    ntrbst_family: Optional[int] = None       # X 值(0/1/2/3)
-    ntrbst_code: Optional[int] = None         # Y 值(家族内索引)
+    ntrbst_family: Optional[int] = None       # X 值(0/1/2/3,即 eqnset_define v4)
+    ntrbst_code: Optional[int] = None         # Y 值(家族内索引,即 eqnset_define v5)
+    # 气体原始索引(v0.9.1 新增,从 eqnset_define 第 2 行第 0 位 v6 取)
+    gas_code: Optional[int] = None            # 0=理想 / 1=真实 / 11=双温
     notes: List[str] = field(default_factory=list)  # 警告/说明
 
     def summary_zh(self) -> str:
@@ -148,6 +156,18 @@ _MAP_TURBULENCE: Dict[Tuple[int, int], TurbulenceModel] = {
     (2, 2): TurbulenceModel.REALIZABLE_KEPSILON,       # 2-方程 Realizable k-ε(实测)
     (2, 3): TurbulenceModel.SST_KW,                    # 2-方程 SST k-ω(实测)
     # (3, *) v0.10+ scope(k-eps-Rt, k-eps-fmu)
+}
+
+
+# ============================================================
+# 气体类型码映射表(v0.9.1)
+# ============================================================
+# 数据源:reference/inp_example/compare/ 7 文件实测
+# 位置:顶层 seq.# 1 #vals 31 title eqnset_define 块第 2 行第 0 位 (v6)
+_MAP_GAS: Dict[int, GasModel] = {
+    0:  GasModel.PERFECT_GAS,   # 可压缩理想气体(实测)
+    1:  GasModel.REAL_GAS,      # 可压缩真实气体(实测 — 同位 v25 = 6 物种)
+    11: GasModel.MULTI_TEMP,    # 双温热非平衡(实测 — 同时 tnoneq_numeqns = 1)
 }
 
 
@@ -211,10 +231,12 @@ def _collect_following_values(start_stmt: Stmt, inp: InpFile, max_count: int = 7
 def detect_equations(inp: InpFile) -> EquationSystemReport:
     """扫描 InpFile 推断:
     1) 能量模型:physics.tnoneq_numeqns(0/1/2)
-    2) 湍流模型:顶层 seq.# 1 第 1 行 values 101 1 1 X Y
-       (X=方程家族 0/1/2/3, Y=家族内码;实测 ntrbst 不可靠)
-    3) 气体类型:physics.gasnam 存在 → PERFECT_GAS;否则看 infsets
-    4) 物性:理想气体用 physics.gasnam/gasgam/gasmwt;多组分用顶层 species
+    2) 湍流模型:顶层 seq.# eqnset_define 块第 1 行 values 101 1 1 v4 v5
+       (v4=方程家族 0/1/2/3, v5=家族内码;实测 physics.ntrbst 不可靠)
+    3) 气体类型:顶层 seq.# eqnset_define 块第 2 行 values v6 ...
+       (v6: 0=PERFECT_GAS / 1=REAL_GAS / 11=MULTI_TEMP)
+       NOTE: 不再用 physics.gasnam 判别 — 实测 7 文件全部 gasnam=Air,会误判
+    4) 物种数:顶层 infsets(实测 v0.9.1 简化,具体物种枚举留 v0.10+)
     """
     rep = EquationSystemReport(
         energy=EnergyModel.UNKNOWN,
@@ -237,21 +259,19 @@ def detect_equations(inp: InpFile) -> EquationSystemReport:
                 rep.notes.append(
                     f"physics.tnoneq_numeqns={v!r} 非预期值(v0.9.1 仅支持 0/1/2)"
                 )
-        # 气体类型(v0.9.1 启发式:gasnam 存在 → PERFECT_GAS)
+        # gasnam 仅作参考(实测 7 文件全 = Air,不可用于判别气体类型)
         gasnam_v = pb.get_value("gasnam")
         if gasnam_v is not None:
             rep.has_gasnam = True
             rep.gasnam = str(gasnam_v)
-            rep.gas = GasModel.PERFECT_GAS
 
-    # 2) 湍流模型:扫顶层 seq.# 1 #vals 31 title eqnset_define 块
+    # 2 + 3) 湍流模型 + 气体类型:扫顶层 seq.# eqnset_define 块
     eqnset_define_stmt = _find_top_stmt_by_title(inp, "eqnset_define")
     if eqnset_define_stmt is not None:
-        # parser 把后续 values 行存为 children;从 children 取
         values_lines = _get_values_lines(eqnset_define_stmt)
+        # 2) 湍流(第 1 行 values 101 1 1 v4 v5)
         if values_lines:
             x_y = values_lines[0].values_raw
-            # x_y = ["101", "1", "1", "X", "Y"] 至少 5 个
             if len(x_y) >= 5 and x_y[0] == "101":
                 try:
                     eq_count = int(x_y[3])
@@ -273,8 +293,34 @@ def detect_equations(inp: InpFile) -> EquationSystemReport:
                             )
                 except ValueError as e:
                     rep.notes.append(f"eqnset_define 第 1 行 values 解析失败: {e}")
+        # 3) 气体(第 2 行 values v6 ...)
+        if len(values_lines) >= 2:
+            row2 = values_lines[1].values_raw
+            if row2:
+                try:
+                    gas_code = int(row2[0])
+                    rep.gas_code = gas_code
+                    rep.gas = _MAP_GAS.get(gas_code, GasModel.UNKNOWN)
+                    if rep.gas == GasModel.UNKNOWN:
+                        rep.notes.append(
+                            f"未识别气体类型码 v6={gas_code}"
+                            f"(v0.9.1 仅支持 0/1/11)"
+                        )
+                    # 一致性检查:v6=11 ↔ tnoneq_numeqns=1
+                    if gas_code == 11 and rep.energy != EnergyModel.TWO_TEMP:
+                        rep.notes.append(
+                            f"eqnset_define v6=11 表示双温,但 tnoneq_numeqns"
+                            f"={pb.get('tnoneq_numeqns') if pb else None!r} 不匹配"
+                        )
+                    if rep.energy == EnergyModel.TWO_TEMP and gas_code != 11:
+                        rep.notes.append(
+                            f"tnoneq_numeqns=1 表示双温,但 eqnset_define v6"
+                            f"={gas_code} ≠ 11(可能不一致)"
+                        )
+                except ValueError as e:
+                    rep.notes.append(f"eqnset_define 第 2 行 values 解析失败: {e}")
 
-    # 3) 顶层 infsets + 顶层 species(细化气体类型为 MIXTURE;v0.9.1 简化)
+    # 4) 顶层 infsets(物种数;v0.9.1 简化:仅记数,不枚举)
     infsets_stmt = next(
         (s for s in inp.top_stmts if s.keyword == "infsets"), None
     )
@@ -282,15 +328,8 @@ def detect_equations(inp: InpFile) -> EquationSystemReport:
         n_v = infsets_stmt.values[0].typed
         if isinstance(n_v, int) and n_v > 0:
             rep.n_species = n_v
-            if rep.gas == GasModel.PERFECT_GAS:
-                # gasnam 已设但 infsets>0 → 矛盾,notes 警告
-                rep.notes.append(
-                    "physics.gasnam 存在但顶层有 infsets"
-                    "(可能是多组分仿真)— v0.9.1 默认 gas=PERFECT_GAS"
-                )
-            else:
-                # 默认推断为 MIXTURE(v0.9.1 简化版)
-                rep.gas = GasModel.MIXTURE
+            # 若 v0.10+ 引入 species 显式声明(顶层 species_*.Mwt1_*),
+            # 则把 gas 从 REAL_GAS 升级为 MIXTURE — v0.9.1 不做(infsets 不等于 species)
 
     return rep
 

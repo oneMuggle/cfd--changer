@@ -217,26 +217,48 @@ class TestDetectTurbulence:
 
 
 class TestDetectGas:
-    """气体类型检测:启发式 gasnam 存在 = perfect gas,否则 unknown"""
+    """气体类型检测:v0.9.1 改用 eqnset_define 第 2 行 v6(实测发现 gasnam 全 = Air,不可用于判别)"""
 
     def test_gasnam_air_is_perfect_gas(self):
-        inp = _make_inp(["gasnam Air", "gasgam 1.4", "gasmwt 28.95"])
+        """gasnam + eqnset_define v6=0 → PERFECT_GAS (v0.9.1 用 v6 判别)"""
+        top = [
+            "infsets 1",
+            "seq.# 1 #vals 31 title eqnset_define",
+            "values 101 1 1 0 1",
+            "values 0 0 1 1 1",     # v6 = 0 → 理想气体
+            "values 0 5 5 0 0",
+            "values 0 0 0 0 0",
+            "values 0 5 5 1 1",
+            "values 3 0 0 0 0",
+            "values 0",
+        ]
+        inp = _make_inp(["gasnam Air", "gasgam 1.4", "gasmwt 28.95"], top)
         rep = detect_equations(inp)
         assert rep.gas == GasModel.PERFECT_GAS
+        assert rep.gas_code == 0
+        assert rep.gasnam == "Air"      # 字段仍保留为参考
+
+    def test_gasnam_without_eqnset_define_is_unknown(self):
+        """v0.9.1:gasnam 不再判别 gas;无 eqnset_define → UNKNOWN"""
+        inp = _make_inp(["gasnam Air", "gasgam 1.4"])
+        rep = detect_equations(inp)
+        assert rep.gas == GasModel.UNKNOWN          # gasnam 单独不再决定 gas
+        assert rep.has_gasnam is True
         assert rep.gasnam == "Air"
+        assert rep.gas_code is None
 
     def test_no_gasnam_unknown(self):
         inp = _make_inp(["ifrnue 1"])
         rep = detect_equations(inp)
         assert rep.gas == GasModel.UNKNOWN
 
-    def test_infsets_55_marks_mixture(self):
-        """infsets > 0 + 顶层有 species → MIXTURE"""
+    def test_infsets_55_fills_n_species_only(self):
+        """v0.9.1:infsets 只是 settings 数,不再 → MIXTURE;只填 n_species 字段"""
         top = [
             "infsets 55",
             "seq.# 1 #vals 31 title eqnset_define",
             "values 101 1 1 0 1",
-            "values 0 0 1 1 1",
+            "values 0 0 1 1 1",     # v6 = 0 → 理想气体
             "values 0 5 5 0 0",
             "values 0 0 0 0 0",
             "values 0 5 5 1 1",
@@ -245,8 +267,66 @@ class TestDetectGas:
         ]
         inp = _make_inp([], top)
         rep = detect_equations(inp)
-        assert rep.gas == GasModel.MIXTURE
-        assert rep.n_species == 55
+        assert rep.gas == GasModel.PERFECT_GAS      # v6=0 主判
+        assert rep.gas_code == 0
+        assert rep.n_species == 55                  # infsets 入 n_species
+
+    def test_v6_1_is_real_gas(self):
+        """v6=1 → REAL_GAS(可压缩真实气体)"""
+        top = [
+            "infsets 1",
+            "seq.# 1 #vals 31 title eqnset_define",
+            "values 101 1 1 0 1",
+            "values 1 0 1 1 1",     # v6 = 1 → 真实气体
+            "values 0 5 5 0 0",
+            "values 0 0 0 0 0",
+            "values 0 23 23 1 6",   # 实测真实气体的 v22/v23/v25
+            "values 3 0 0 0 0",
+            "values 0",
+        ]
+        inp = _make_inp([], top)
+        rep = detect_equations(inp)
+        assert rep.gas == GasModel.REAL_GAS
+        assert rep.gas_code == 1
+
+    def test_v6_11_is_multi_temp(self):
+        """v6=11 + tnoneq_numeqns=1 → MULTI_TEMP(双温热非平衡)"""
+        top = [
+            "infsets 1",
+            "seq.# 1 #vals 31 title eqnset_define",
+            "values 101 1 1 0 1",
+            "values 11 0 1 1 1",    # v6 = 11 → 双温
+            "values 0 6 5 0 0",
+            "values 0 0 0 0 0",
+            "values 0 25 25 10 10", # 实测双温的 v22/v23/v24/v25
+            "values 3 0 0 0 0",
+            "values 0",
+        ]
+        inp = _make_inp(["tnoneq_numeqns 1"], top)
+        rep = detect_equations(inp)
+        assert rep.gas == GasModel.MULTI_TEMP
+        assert rep.gas_code == 11
+        assert rep.energy == EnergyModel.TWO_TEMP   # 一致性
+        assert rep.notes == []                        # 无不一致告警
+
+    def test_v6_unknown_logs_note(self):
+        """v6 不在 {0,1,11} → UNKNOWN + note"""
+        top = [
+            "infsets 1",
+            "seq.# 1 #vals 31 title eqnset_define",
+            "values 101 1 1 0 1",
+            "values 99 0 1 1 1",
+            "values 0 5 5 0 0",
+            "values 0 0 0 0 0",
+            "values 0 5 5 1 1",
+            "values 3 0 0 0 0",
+            "values 0",
+        ]
+        inp = _make_inp([], top)
+        rep = detect_equations(inp)
+        assert rep.gas == GasModel.UNKNOWN
+        assert rep.gas_code == 99
+        assert any("99" in n for n in rep.notes)
 
 
 class TestSuanliDetection:
@@ -270,13 +350,19 @@ class TestSuanliDetection:
         assert rep.ntrbst_family == 2
         assert rep.ntrbst_code == 3
 
-    def test_suanli_gas_perfect_with_gasnam(self):
+    def test_suanli_gas_multi_temp_with_v6_eq_11(self):
+        """v0.9.1:suanli 是 v6=11(双温热非平衡)+ tnoneq_numeqns=1。
+
+        实测发现:gasnam=Air 不能作为 PERFECT_GAS 判别依据 — 双温/真实气体
+        文件也都标 gasnam=Air,需用 eqnset_define v6 主判。
+        """
         if not self.SUANLI.exists():
             pytest.skip("suanli not present")
         inp = parse_file(str(self.SUANLI))
         rep = detect_equations(inp)
-        assert rep.gas == GasModel.PERFECT_GAS
-        assert rep.gasnam == "Air"
+        assert rep.gas == GasModel.MULTI_TEMP
+        assert rep.gas_code == 11
+        assert rep.gasnam == "Air"      # 字段仍保留,但不影响判别
 
 
 class TestCompareFolderDetection:
@@ -294,17 +380,25 @@ class TestCompareFolderDetection:
         assert rep.gas == GasModel.PERFECT_GAS
 
     def test_layered_real_gas(self):
-        """真实气体 + 层流(文件名标注,但实际 gasnam=Air;v0.9.1 启发式判 PERFECT_GAS)
-
-        真实气体检测(无 gasnam + infsets>0 + 顶层 species_*.Mwt1_*)留 v0.10+ scope
-        """
+        """真实气体 + 层流 → REAL_GAS + LAMINAR(v0.9.1 用 eqnset_define v6=1 判别)"""
         f = self.COMPARE / "可压缩真实气体+层流mcfd.inp"
         if not f.exists():
             pytest.skip("compare file not present")
         rep = detect_equations(parse_file(str(f)))
         assert rep.turbulence == TurbulenceModel.LAMINAR
-        # 此文件 gasnam=Air → v0.9.1 启发式判 PERFECT_GAS(虽然文件名说真实气体)
-        assert rep.gas == GasModel.PERFECT_GAS
+        assert rep.gas == GasModel.REAL_GAS
+        assert rep.gas_code == 1
+
+    def test_two_temperature_layered(self):
+        """双温模型 + 层流 → MULTI_TEMP + 2T + LAMINAR(v0.9.1 用 v6=11 + tnoneq_numeqns=1)"""
+        f = self.COMPARE / "双温模型+层流mcfd.inp"
+        if not f.exists():
+            pytest.skip("compare file not present")
+        rep = detect_equations(parse_file(str(f)))
+        assert rep.turbulence == TurbulenceModel.LAMINAR
+        assert rep.gas == GasModel.MULTI_TEMP
+        assert rep.gas_code == 11
+        assert rep.energy == EnergyModel.TWO_TEMP
 
     def test_goldberg_rt_1eq(self):
         f = self.COMPARE / "可压缩理想气体+1方程goldberg RTmcfd.inp"

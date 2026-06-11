@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.9.1] - 2026-06-11
+
+### Added
+- **`equations.py` GasModel 新增 `MULTI_TEMP`** 枚举(对应 eqnset_define v6=11 + tnoneq_numeqns=1 双温热非平衡)。
+- **`EquationSystemReport.gas_code` 字段**:保留 eqnset_define 第 2 行第 0 位的原始整数(0/1/11),供 wizard 追溯使用。
+- **CLI `info --detect` flag**:`inp-tool info <file> --detect` 在文件概览后追加方程系统/湍流模型/气体类型检测报告 + 一致性告警。
+- **REPL 新增 3 个语义化命令**(v0.9.1 方程感知组):
+  - `detect` — 显示当前 file 的检测报告
+  - `turb I=<x> L=<y> [U=<z>]` — 按检测到的湍流模型(SST/k-ε/SA/Goldberg)写 `guiopts.turbi_*` 初始化字段(层流自动拒绝)
+  - `2t T=<x> Tvib=<y>` — 双温联动写 `physics.tnoneq_numeqns=1`、`reftem`、`vibtem`,缺一抛 `TwoTemperatureError`
+- **`docs/technical/18-equation-aware-config.md`**(参数表固化):eqnset_define 31 个 values 中 9 个语义位置 + 5 湍流模型 × 3 气体类型实测真值表 + 4 个常见误区(`gasnam` / `ntrbst` / `dfceli` / `ifwfne` / `infsets`)。
+- **测试 +20**:5 个 v6 单元(`TestDetectGas`)+ 1 个 multi_temp suanli 端到端 + 1 个 two_temperature_layered + 2 个 `info --detect` CLI + 13 个 REPL equations(`test_repl_equations.py`)。
+
+### Changed
+- **`detect_equations()` 改用 eqnset_define v6 判别 GasModel**(替代 v0.9.0 的 gasnam 启发式 — 实测 7 个 compare/ 文件全部 gasnam=Air,旧逻辑误判)。
+- **一致性校验**:v6==11 ⇔ tnoneq_numeqns==1 不匹配时写 `report.notes` 警告(不阻断)。
+- **REPL `REPL_COMMANDS` / 命令分组**:新增"方程感知"组(detect/turb/2t)。
+- **`docs/technical/README.md`**:章节数 16 → 17。
+
+### Fixed
+- **14 个 pre-existing CLI subprocess 测试失败**(`test_cli.py` / `test_sweep_cli.py` / `test_sweep_cli_csv.py`):根因是从仓库根跑 subprocess 时 Python 把外层 `./inp_tool/` 当 namespace package,触发 `ImportError: cannot import name '__version__'`。修复:所有 subprocess 调用加 `cwd=tmp_path`。
+
+### Migration
+- **API 用户**:`EquationSystemReport` 新增 `gas_code` 字段(向后兼容);`GasModel.MULTI_TEMP` 是新枚举值,既有代码 `== GasModel.PERFECT_GAS` 等比较不受影响。
+- **CLI 用户**:`info` 不传 `--detect` 时输出与 v0.9.0 完全一致。
+- **REPL 用户**:3 个新命令是加法,旧命令零变化。
+
 ## [v0.9.0] - 2026-06-10
 
 ### Added
