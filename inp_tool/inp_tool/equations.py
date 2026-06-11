@@ -333,6 +333,36 @@ class GasModelError(ValueError):
 
 
 # ============================================================
+# v0.10.0 新增:方程改写异常 + issue(spec §4.2)
+# ============================================================
+
+
+class EquationRewriteError(ValueError):
+    """set_*_model 写不进去或一致性破坏时抛。"""
+    pass
+
+
+@dataclass
+class EquationRewriteIssue:
+    """写完后追加到 inp.notes 列表;generate 末尾聚合。
+
+    复用 v0.9.0 PbsIssue 字段结构(severity/code/message)。
+    """
+    severity: str
+    code: str
+    message: str
+
+    def __post_init__(self) -> None:
+        if self.severity not in ("error", "warning"):
+            raise ValueError(
+                f"severity must be 'error' or 'warning', got {self.severity!r}"
+            )
+
+    def __repr__(self) -> str:
+        return f"[{self.severity}] {self.code}: {self.message}"
+
+
+# ============================================================
 # 湍流初始化 preset 基类 + 4 子类
 # ============================================================
 
@@ -647,6 +677,8 @@ __all__ = [
     "TwoTemperatureError",
     "SpeciesNotFoundError",
     "GasModelError",
+    "EquationRewriteError",
+    "EquationRewriteIssue",
     # 检测器
     "detect_equations",
     # 湍流 preset
