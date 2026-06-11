@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from inp_tool.sweep import CaseSweep, generate
+from inp_tool.sweep import CaseSweep, generate, TurbulenceInit
 from inp_tool.parser import parse_file
 from inp_tool.equations import (
     detect_equations, EnergyModel, GasModel, TurbulenceModel,
@@ -23,7 +23,7 @@ LAMINAR_FILE = COMPARE_DIR / "可压缩理想气体+层流mcfd.inp"
 # ============================================================
 class TestFromDictTurbulence:
     def test_turbulence_enabled_parses_preset(self, tmp_path):
-        """YAML turbulence: {enabled: true, I, L, U_ref} → SSTKOmegaPreset"""
+        """YAML turbulence: {enabled: true, I, L, U_ref} → TurbulenceInit(v0.10.0)"""
         if not SST_FILE.exists():
             pytest.skip("compare sample 缺失")
         cs = CaseSweep.from_dict({
@@ -33,7 +33,8 @@ class TestFromDictTurbulence:
             "turbulence": {"enabled": True, "I": 0.01, "L": 0.01, "U_ref": 204.0},
         })
         assert cs.turbulence is not None
-        assert isinstance(cs.turbulence, SSTKOmegaPreset)
+        # v0.10.0:turbulence 字段是 TurbulenceInit(原 v0.9.1 是 TurbulencePresetBase)
+        assert isinstance(cs.turbulence, TurbulenceInit)
         assert cs.turbulence.I == 0.01
         assert cs.turbulence.L == 0.01
         assert cs.turbulence.U_ref == 204.0
@@ -50,28 +51,36 @@ class TestFromDictTurbulence:
         })
         assert cs.turbulence is None
 
-    def test_turbulence_missing_I_raises(self, tmp_path):
+    def test_turbulence_missing_I_uses_default(self, tmp_path):
+        """v0.10.0:不传 I/L 走默认(0.01/0.01),不抛错(老 v0.9.1 抛 KeyError)"""
         if not SST_FILE.exists():
             pytest.skip("compare sample 缺失")
-        with pytest.raises(KeyError, match="I.*L"):
-            CaseSweep.from_dict({
-                "template": str(SST_FILE),
-                "output_dir": str(tmp_path),
-                "sweeps": {"alpha": [0]},
-                "turbulence": {"L": 0.01},
-            })
+        cs = CaseSweep.from_dict({
+            "template": str(SST_FILE),
+            "output_dir": str(tmp_path),
+            "sweeps": {"alpha": [0]},
+            "turbulence": {"L": 0.02},
+        })
+        # I 缺省 = 0.01;L 显式 0.02
+        assert cs.turbulence is not None
+        assert cs.turbulence.I == 0.01
+        assert cs.turbulence.L == 0.02
 
-    def test_turbulence_on_laminar_template_raises(self, tmp_path):
-        """层流 template + turbulence.enabled=true → ValueError"""
+    def test_turbulence_on_laminar_template_accepted_in_v010(self, tmp_path):
+        """v0.10.0:层流 template + turbulence 块不再在 from_dict 抛错;
+        由 generate() 按 per-case 解析时识别 LAMINAR → _resolve_turb_init 返回 None。
+        """
         if not LAMINAR_FILE.exists():
             pytest.skip("compare sample 缺失")
-        with pytest.raises(ValueError, match="laminar"):
-            CaseSweep.from_dict({
-                "template": str(LAMINAR_FILE),
-                "output_dir": str(tmp_path),
-                "sweeps": {"alpha": [0]},
-                "turbulence": {"enabled": True, "I": 0.01, "L": 0.01, "U_ref": 100},
-            })
+        cs = CaseSweep.from_dict({
+            "template": str(LAMINAR_FILE),
+            "output_dir": str(tmp_path),
+            "sweeps": {"alpha": [0]},
+            "turbulence": {"enabled": True, "I": 0.01, "L": 0.01, "U_ref": 100},
+        })
+        # TurbulenceInit 容器就绪,实际写入由 generate() 按 model 解析
+        assert isinstance(cs.turbulence, TurbulenceInit)
+        assert cs.turbulence.I == 0.01
 
     def test_no_turbulence_block_means_none(self, tmp_path):
         """没有 turbulence: 字段 → 默认 None(向后兼容)"""

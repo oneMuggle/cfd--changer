@@ -114,3 +114,53 @@ class TestEquationSwitches:
         assert cs.equation_switches.turbulence is False
         assert cs.equation_switches.energy is True
         assert cs.equation_switches.gas is True
+
+
+class TestTurbInitOverride:
+    def test_resolve_sst_override(self):
+        """sst 模型用 overrides.sst 的 I/L/U_ref,不用顶层默认。"""
+        from inp_tool.sweep import _resolve_turb_init, TurbulenceInit
+        cs = CaseSweep(
+            template="reference/inp_example/compare/可压缩理想气体+2方程SST mcfd.inp",
+            output_dir="/tmp/cs_out",
+            sweeps=SweepSpec(values={}),
+            turbulence=None,  # 实际用 overrides
+        )
+        # 手动塞 overrides(模拟 from_dict 后的状态)
+        cs.turbulence = TurbulenceInit(
+            I=0.01, L=0.01, U_ref=204.0,
+            overrides={
+                "sst": TurbulenceInit(I=0.005, L=0.02, U_ref=250.0),
+                "sa":  TurbulenceInit(I=0.03, L=0.005, U_ref=100.0),
+            },
+        )
+        init = _resolve_turb_init(TurbulenceModel.SST_KW, cs)
+        assert init.I == 0.005
+        assert init.L == 0.02
+        assert init.U_ref == 250.0
+
+    def test_resolve_sa_uses_top_level_default(self):
+        """sa 模型(无 overrides.sa)用顶层默认。"""
+        from inp_tool.sweep import _resolve_turb_init, TurbulenceInit
+        cs = CaseSweep(
+            template="reference/inp_example/compare/可压缩理想气体+2方程SST mcfd.inp",
+            output_dir="/tmp/cs_out",
+            sweeps=SweepSpec(values={}),
+        )
+        cs.turbulence = TurbulenceInit(I=0.01, L=0.01, U_ref=204.0)
+        init = _resolve_turb_init(TurbulenceModel.SPALART_ALLMARAS, cs)
+        assert init.I == 0.01
+        assert init.L == 0.01
+        assert init.U_ref == 204.0
+
+    def test_resolve_laminar_no_init(self):
+        """LAMINAR 模型不需要 I/L/U,返回 None。"""
+        from inp_tool.sweep import _resolve_turb_init
+        cs = CaseSweep(
+            template="reference/inp_example/compare/可压缩理想气体+2方程SST mcfd.inp",
+            output_dir="/tmp/cs_out",
+            sweeps=SweepSpec(values={}),
+            turbulence=None,
+        )
+        init = _resolve_turb_init(TurbulenceModel.LAMINAR, cs)
+        assert init is None

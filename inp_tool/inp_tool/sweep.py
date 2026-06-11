@@ -126,6 +126,72 @@ class EquationSwitches:
         )
 
 
+@dataclass
+class TurbulenceInit:
+    """v0.10.0:湍流初始化参数 + per-case 覆盖。
+
+    顶层默认: I, L, U_ref(同 v0.9.1)
+    overrides: {model_value: TurbulenceInit}
+    """
+    I: float
+    L: float
+    U_ref: float = 1.0
+    overrides: Dict[str, "TurbulenceInit"] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "TurbulenceInit":
+        overrides_raw = d.get("overrides", {}) or {}
+        overrides: Dict[str, TurbulenceInit] = {}
+        for model_value, override_d in overrides_raw.items():
+            if not isinstance(override_d, dict):
+                raise ValueError(
+                    f"turbulence.overrides[{model_value!r}] must be dict, "
+                    f"got {type(override_d).__name__}"
+                )
+            overrides[model_value] = cls(
+                I=float(override_d.get("I", 0.01)),
+                L=float(override_d.get("L", 0.01)),
+                U_ref=float(override_d.get("U_ref", override_d.get("U", 1.0))),
+            )
+        return cls(
+            I=float(d.get("I", 0.01)),
+            L=float(d.get("L", 0.01)),
+            U_ref=float(d.get("U_ref", d.get("U", 1.0))),
+            overrides=overrides,
+        )
+
+
+def _resolve_turb_init(
+    model: TurbulenceModel, cs: "CaseSweep",
+) -> Optional["TurbulenceInit"]:
+    """按 model 选 TurbulenceInit。
+
+    顺序:
+    1. cs.turbulence.overrides[model.value] 命中 → 用
+       也接受短名 alias(如 "sst" → SST_KW)
+    2. cs.turbulence(I, L, U_ref) 顶层默认 → 用
+    3. 都没有 → 抛 KeyError(同 v0.9.1)
+    4. LAMINAR → 返回 None(不需要 init)
+    """
+    if model == TurbulenceModel.LAMINAR:
+        return None
+    if cs.turbulence is None:
+        raise KeyError(
+            f"turbulence model {model.value!r} requested but "
+            f"cs.turbulence is None; provide top-level `turbulence: {{I, L, U_ref}}`"
+        )
+    overrides = cs.turbulence.overrides
+    # 1. 精确匹配 model.value
+    if model.value in overrides:
+        return overrides[model.value]
+    # 2. 短名 alias(从 _ENUM_ALIASES 反查:任何指向 model.value 的 alias 都算)
+    aliases = _ENUM_ALIASES.get(type(model), {})
+    for alias, canonical in aliases.items():
+        if canonical == model.value and alias in overrides:
+            return overrides[alias]
+    return cs.turbulence
+
+
 # ============================================================
 # PR #1:CaseSpec 抽象(显式 / 分组 / 笛卡尔的统一归一化)
 # ============================================================
@@ -508,7 +574,9 @@ class CaseSweep:
     # v0.9.0 新增:pbs 脚本可选生成
     pbs: Optional[Any] = None  # 实际类型:Optional["PbsConfig"]
     # v0.9.0 新增:方程感知的湍流/2T/组分 preset
-    turbulence: Optional[Any] = None  # 实际类型:Optional[TurbulencePresetBase]
+    # v0.10.0 改:turbulence 改为 TurbulenceInit(原 v0.9.1 TurbulencePresetBase
+    # 仍然在 generate() 内部按 model 动态创建)
+    turbulence: Optional["TurbulenceInit"] = None
     two_temperature: Optional[Any] = None  # 实际类型:Optional[TwoTemperaturePreset]
     species: Optional[Any] = None  # 实际类型:Optional[SpeciesPreset]
     # v0.10.0 新增:方程改写开关
@@ -585,33 +653,11 @@ class CaseSweep:
             from .pbs import PbsConfig  # 局部 import 避免循环
             pbs_cfg = PbsConfig.from_dict(pbs_d)
 
-        # v0.9.1:turbulence preset 解析
-        # YAML 例:turbulence: {enabled: true, I: 0.01, L: 0.01, U_ref: 100}
-        # 检测 template 的湍流模型,选对应 preset(SST/k-ε/SA/Goldberg)
-        turbulence_preset = None
+        # v0.10.0:turbulence 配置解析(从 preset 改为 init 参数容器)
+        turbulence_init = None
         turb_d = d.get("turbulence")
         if isinstance(turb_d, dict) and turb_d.get("enabled", True):
-            from .equations import (
-                detect_equations, make_turbulence_preset, TurbulenceModel,
-            )
-            from .parser import parse_file as _parse_file
-            _inp = _parse_file(d["template"])
-            _rep = detect_equations(_inp)
-            if _rep.turbulence in (TurbulenceModel.LAMINAR, TurbulenceModel.UNKNOWN):
-                raise ValueError(
-                    f"sweep config turbulence.enabled=true, but template "
-                    f"is {_rep.turbulence.value}; cannot apply turbulence preset"
-                )
-            I = turb_d.get("I")
-            L = turb_d.get("L")
-            U_ref = turb_d.get("U_ref", turb_d.get("U", 1.0))
-            if I is None or L is None:
-                raise KeyError(
-                    "sweep config turbulence: 'I' and 'L' are required"
-                )
-            turbulence_preset = make_turbulence_preset(
-                _rep.turbulence, I=float(I), L=float(L), U_ref=float(U_ref)
-            )
+            turbulence_init = TurbulenceInit.from_dict(turb_d)
 
         # v0.9.1:two_temperature preset 解析
         # YAML 例:two_temperature: {enabled: true, T_trans: 300, T_vib: 200}
@@ -650,7 +696,7 @@ class CaseSweep:
             copy_strategy=copy_strategy,
             exclude=exclude,
             pbs=pbs_cfg,
-            turbulence=turbulence_preset,
+            turbulence=turbulence_init,
             two_temperature=two_temperature_preset,
             equation_switches=equation_switches,
         )
@@ -1120,10 +1166,20 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
         if sweep.freestream is not None:
             applied.update(sweep.freestream.apply(inp, params))
 
-        # v0.9.1:应用 turbulence preset(每个 case 同样 I/L/U,
-        # 但因 deepcopy template,字段需重写)
+        # v0.9.1→v0.10.0:应用 turbulence preset(每个 case 同样 I/L/U,
+        # 但因 deepcopy template,字段需重写)。
+        # v0.10.0:turbulence 字段是 TurbulenceInit,需要从 inp 检测当前湍流模型,
+        # 通过 _resolve_turb_init 选 init(overrides 优先),再用
+        # make_turbulence_preset 动态构造 preset 并 apply。
         if sweep.turbulence is not None:
-            applied.update(sweep.turbulence.apply(inp))
+            from .equations import detect_equations, make_turbulence_preset
+            _rep = detect_equations(inp)
+            init = _resolve_turb_init(_rep.turbulence, sweep)
+            if init is not None:
+                _preset = make_turbulence_preset(
+                    _rep.turbulence, I=init.I, L=init.L, U_ref=init.U_ref,
+                )
+                applied.update(_preset.apply(inp))
 
         # v0.9.1:应用 two_temperature preset(联动写 tnoneq_numeqns + 温度)
         if sweep.two_temperature is not None:
