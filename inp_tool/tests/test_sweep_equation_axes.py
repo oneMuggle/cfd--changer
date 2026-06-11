@@ -2,6 +2,7 @@
 v0.10.0:sweep 枚举轴识别 + per-case 覆盖 集成测试
 """
 from __future__ import annotations
+from pathlib import Path
 import pytest
 from inp_tool.sweep import (
     CaseSweep, SweepSpec, _normalize_axis_value,
@@ -164,3 +165,88 @@ class TestTurbInitOverride:
         )
         init = _resolve_turb_init(TurbulenceModel.LAMINAR, cs)
         assert init is None
+
+
+# ============================================================
+# v0.10.0:generate() 末尾循环中切模型 + 动态 preset
+# (Task 9)
+# ============================================================
+SST_FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "compare"
+    / "可压缩理想气体+2方程SST mcfd.inp"
+)
+
+
+class TestGenerateWithEquations:
+    def test_sst_axis_switches_eqnset(self):
+        """sweeps.turbulence=[sst, sa] → 2 cases,各自 eqnset_define v4/v5 不同。"""
+        from inp_tool.sweep import generate, CaseSweep
+        d = {
+            "template": str(SST_FIXTURE),
+            "output_dir": "/tmp/cs_out_gen1",
+            "sweeps": {
+                "turbulence": [TurbulenceModel.SST_KW, TurbulenceModel.SPALART_ALLMARAS],
+            },
+            "naming": "case_{turbulence}",
+            "turbulence": {"I": 0.01, "L": 0.01, "U_ref": 204.0},
+        }
+        cs = CaseSweep.from_dict(d)
+        rep = generate(cs, dry_run=True)
+        assert rep.total == 2
+        # 验每个 case_id 含正确模型名(默认 .inp 扩展)
+        turbs = {c.case_id for c in rep.cases}
+        assert "case_k-omega-sst.inp" in turbs
+        assert "case_spalart-allmaras.inp" in turbs
+
+    def test_equation_switches_turbulence_false_keeps_template(self):
+        """equation_switches.turbulence=false → eqnset_define 不动。"""
+        from inp_tool.sweep import generate, CaseSweep
+        d = {
+            "template": str(SST_FIXTURE),
+            "output_dir": "/tmp/cs_out_gen2",
+            "sweeps": {
+                "turbulence": [TurbulenceModel.SST_KW, TurbulenceModel.SPALART_ALLMARAS],
+            },
+            "naming": "case_{turbulence}",
+            "turbulence": {"I": 0.01, "L": 0.01, "U_ref": 204.0},
+            "equation_switches": {"turbulence": False, "energy": True, "gas": True},
+        }
+        cs = CaseSweep.from_dict(d)
+        rep = generate(cs, dry_run=True)
+        for c in rep.cases:
+            # 因 dry_run 没写盘,验 case.applied 不含 eqnset_define.v4_v5
+            assert "eqnset_define.v4_v5" not in c.applied
+
+    def test_energy_axis_two_temp_writes_numeqns(self):
+        """sweeps.energy=[2t] → tnoneq_numeqns=1 + vibtem 写入。"""
+        from inp_tool.sweep import generate, CaseSweep
+        d = {
+            "template": str(SST_FIXTURE),
+            "output_dir": "/tmp/cs_out_gen3",
+            "sweeps": {
+                "energy": [EnergyModel.TWO_TEMP],
+            },
+            "naming": "case_{energy}",
+            "energy_overrides": {
+                "2T": {"T_trans": 300.0, "T_vib": 200.0},
+            },
+        }
+        cs = CaseSweep.from_dict(d)
+        rep = generate(cs, dry_run=True)
+        for c in rep.cases:
+            assert c.applied.get("physics.tnoneq_numeqns") == 1
+            assert c.applied.get("physics.vibtem") == 200.0
+
+    def test_unknown_axis_value_raises(self):
+        """sweeps.turbulence=[sst, foo] → from_dict 抛 ValueError。"""
+        from inp_tool.sweep import CaseSweep
+        d = {
+            "template": str(SST_FIXTURE),
+            "output_dir": "/tmp/cs_out_gen4",
+            "sweeps": {"turbulence": ["sst", "foo"]},
+            "naming": "case_{turbulence}",
+        }
+        with pytest.raises(ValueError, match="unknown axis value 'foo'"):
+            CaseSweep.from_dict(d)

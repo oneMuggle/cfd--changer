@@ -279,21 +279,37 @@ def _normalize_axis_value(key: str, v: Any) -> List[Any]:
     """识别 key 名 → 字符串值映射到枚举。
 
     - key ∈ _ENUM_AXES 且 v 是 str → 转枚举(支持短名别名)
+    - key ∈ _ENUM_AXES 且 v 是 list/tuple 且每个元素是 str → 逐个转枚举
     - 其他 → 走老 _normalize_axis
     """
-    if key in _ENUM_AXES and isinstance(v, str):
+    if key in _ENUM_AXES:
         enum_cls = _ENUM_AXES[key]
-        # 先查别名(短名 → enum.value),命中则用规范 value
-        canonical = _ENUM_ALIASES.get(enum_cls, {}).get(v, v)
-        try:
-            return [enum_cls(canonical)]
-        except ValueError:
-            valid = [e.value for e in enum_cls]
-            raise ValueError(
-                f"unknown axis value {v!r} for key {key!r}; "
-                f"expected one of {valid}"
-            ) from None
+        if isinstance(v, str):
+            return _coerce_enum_axis_value(key, v, enum_cls)
+        if isinstance(v, (list, tuple)):
+            coerced: List[Any] = []
+            for item in v:
+                if isinstance(item, str):
+                    coerced.extend(_coerce_enum_axis_value(key, item, enum_cls))
+                else:
+                    # 已是 enum 实例或非 str,原样保留
+                    coerced.append(item)
+            return coerced
     return _normalize_axis(v)
+
+
+def _coerce_enum_axis_value(key: str, s: str, enum_cls: type) -> List[Any]:
+    """把一个字符串值转成 [enum];失败抛 ValueError,错误信息含 'unknown axis value'。"""
+    aliases = _ENUM_ALIASES.get(enum_cls, {})
+    canonical = aliases.get(s, s)
+    try:
+        return [enum_cls(canonical)]
+    except ValueError:
+        valid = [e.value for e in enum_cls]
+        raise ValueError(
+            f"unknown axis value {s!r} for key {key!r}; "
+            f"expected one of {valid}"
+        ) from None
 
 
 def expand_cartesian(spec: SweepSpec) -> List[Dict[str, Any]]:
@@ -600,6 +616,10 @@ class CaseSweep:
     equation_switches: EquationSwitches = field(
         default_factory=EquationSwitches
     )
+    # v0.10.0 新增:per-case 能量参数覆盖(dict;key 是 model.value)
+    energy_overrides: Dict[str, Dict[str, float]] = field(
+        default_factory=dict
+    )
 
     # --------------------- 构造 ---------------------
     @classmethod
@@ -699,6 +719,22 @@ class CaseSweep:
             d.get("equation_switches")
         )
 
+        # v0.10.0:energy_overrides 解析
+        # 形如:energy_overrides: {"2T": {"T_trans": 300.0, "T_vib": 200.0}, ...}
+        energy_overrides_raw = d.get("energy_overrides", {}) or {}
+        if not isinstance(energy_overrides_raw, dict):
+            raise ValueError(
+                f"CaseSweep config: 'energy_overrides' must be a dict, "
+                f"got {type(energy_overrides_raw).__name__}"
+            )
+        # 内部值也必须是 dict(每个 model 一组 T_trans/T_vib)
+        for k, v in energy_overrides_raw.items():
+            if not isinstance(v, dict):
+                raise ValueError(
+                    f"CaseSweep config: energy_overrides[{k!r}] must be a dict, "
+                    f"got {type(v).__name__}"
+                )
+
         return cls(
             template=d["template"],
             output_dir=d["output_dir"],
@@ -716,6 +752,7 @@ class CaseSweep:
             turbulence=turbulence_init,
             two_temperature=two_temperature_preset,
             equation_switches=equation_switches,
+            energy_overrides=dict(energy_overrides_raw),
         )
 
     def materialize(self) -> List[ExplicitCase]:
@@ -900,6 +937,12 @@ def _build_specs_from_dict(d: Dict[str, Any]) -> List[Union[CartesianSpec, Expli
         sweeps_dict = d["sweeps"]
         if not sweeps_dict:
             raise ValueError("CaseSweep config: 'sweeps' is empty")
+        # v0.10.0:对枚举轴(turbulence/energy/gas)做即时校验
+        # 失败时让 from_dict 抛 ValueError,而不是延后到 expand_cartesian
+        for _k, _v in sweeps_dict.items():
+            if _k in _ENUM_AXES:
+                # 调用 _normalize_axis_value 会抛 ValueError(同义错误信息)
+                _normalize_axis_value(_k, _v)
         specs.append(CartesianSpec(axes=dict(sweeps_dict)))
 
     if has_cases:
@@ -1182,6 +1225,32 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
         applied: Dict[str, Any] = {}
         if sweep.freestream is not None:
             applied.update(sweep.freestream.apply(inp, params))
+
+        # === ① 切方程(先于 preset)— v0.10.0 ===
+        # 切模型必须发生在 preset 应用之前,这样 preset 的 I/L 才会写到
+        # 切完模型的 eqnset 块里。
+        # 用 `params` 里的模型(来自 sweep axis),不是 detect_equations(inp) —
+        # 因为切模型的目的就是替换原模板里的模型。
+        from .equations import (
+            set_turbulence_model, set_energy_model, set_gas_type,
+        )
+        if (sweep.equation_switches.turbulence
+                and "turbulence" in params
+                and isinstance(params["turbulence"], TurbulenceModel)):
+            applied.update(set_turbulence_model(inp, params["turbulence"]))
+        if (sweep.equation_switches.energy
+                and "energy" in params
+                and isinstance(params["energy"], EnergyModel)):
+            _t_d = sweep.energy_overrides.get(params["energy"].value, {})
+            applied.update(set_energy_model(
+                inp, params["energy"],
+                T_trans=_t_d.get("T_trans"),
+                T_vib=_t_d.get("T_vib"),
+            ))
+        if (sweep.equation_switches.gas
+                and "gas" in params
+                and isinstance(params["gas"], GasModel)):
+            applied.update(set_gas_type(inp, params["gas"]))
 
         # v0.9.1→v0.10.0:应用 turbulence preset(每个 case 同样 I/L/U,
         # 但因 deepcopy template,字段需重写)。
