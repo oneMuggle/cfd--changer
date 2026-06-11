@@ -2,7 +2,7 @@
 
 **日期**: 2026-06-11
 **作者**: brainstorming with user
-**Status:** ✅ 已批准,待写 plan
+**Status:** ✅ 已实施,待 PR merge
 **目标版本**: inp-tool v0.10.0
 **前置**: v0.9.1（方程感知 — commit 3160d8d；`detect_equations` / `TurbulencePresetBase` / `TwoTemperaturePreset` / `SpeciesPreset` 已就位）
 
