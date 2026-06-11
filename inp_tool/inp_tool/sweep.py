@@ -26,6 +26,9 @@ from typing import Any, Dict, List, Optional, Union
 from .model import InpFile
 from .parser import parse_file
 from .writer import write as write_inp
+from .equations import (
+    TurbulenceModel, EnergyModel, GasModel,
+)
 
 
 # 一个 sweep 轴的值可以是标量或列表
@@ -137,6 +140,61 @@ def _normalize_axis(v: SweepValue) -> List[Any]:
     return [v]
 
 
+# ============================================================
+# v0.10.0 新增:枚举轴识别(spec §4.1)
+# ============================================================
+_ENUM_AXES: Dict[str, type] = {
+    "turbulence": TurbulenceModel,
+    "energy": EnergyModel,
+    "gas": GasModel,
+}
+
+# 短名别名(常见缩写 → enum.value)
+# 容忍 CLI/YAML 用户写短名(如 "sst" 而非 "k-omega-sst")。
+_ENUM_ALIASES: Dict[type, Dict[str, str]] = {
+    TurbulenceModel: {
+        "sst": TurbulenceModel.SST_KW.value,
+        "sa": TurbulenceModel.SPALART_ALLMARAS.value,
+        "ke": TurbulenceModel.REALIZABLE_KEPSILON.value,
+        "keps": TurbulenceModel.REALIZABLE_KEPSILON.value,
+        "goldberg": TurbulenceModel.GOLDBERG_RT.value,
+        "laminar": TurbulenceModel.LAMINAR.value,
+    },
+    EnergyModel: {
+        "2t": EnergyModel.TWO_TEMP.value,
+        "3t": EnergyModel.THREE_TEMP.value,
+        "none": EnergyModel.NONE.value,
+    },
+    GasModel: {
+        "perfect": GasModel.PERFECT_GAS.value,
+        "real": GasModel.REAL_GAS.value,
+        "multi": GasModel.MULTI_TEMP.value,
+        "mixture": GasModel.MIXTURE.value,
+    },
+}
+
+
+def _normalize_axis_value(key: str, v: Any) -> List[Any]:
+    """识别 key 名 → 字符串值映射到枚举。
+
+    - key ∈ _ENUM_AXES 且 v 是 str → 转枚举(支持短名别名)
+    - 其他 → 走老 _normalize_axis
+    """
+    if key in _ENUM_AXES and isinstance(v, str):
+        enum_cls = _ENUM_AXES[key]
+        # 先查别名(短名 → enum.value),命中则用规范 value
+        canonical = _ENUM_ALIASES.get(enum_cls, {}).get(v, v)
+        try:
+            return [enum_cls(canonical)]
+        except ValueError:
+            valid = [e.value for e in enum_cls]
+            raise ValueError(
+                f"unknown axis value {v!r} for key {key!r}; "
+                f"expected one of {valid}"
+            ) from None
+    return _normalize_axis(v)
+
+
 def expand_cartesian(spec: SweepSpec) -> List[Dict[str, Any]]:
     """展开笛卡尔积:返回 [{alpha:v1,beta:v2,...}, ...]"""
     if not spec.values:
@@ -145,7 +203,7 @@ def expand_cartesian(spec: SweepSpec) -> List[Dict[str, Any]]:
     keys: List[str] = []
     axes: List[List[Any]] = []
     for k, v in spec.values.items():
-        norm = _normalize_axis(v)
+        norm = _normalize_axis_value(k, v)  # v0.10.0: 枚举识别
         if not norm:
             raise ValueError(f"SweepSpec.values[{k!r}]: empty list")
         keys.append(k)
