@@ -108,6 +108,24 @@ class SweepSpec:
         return list(self.values.keys())
 
 
+@dataclass
+class EquationSwitches:
+    """v0.10.0 新增:方程改写开关(默认全 True,切)。"""
+    turbulence: bool = True
+    energy: bool = True
+    gas: bool = True
+
+    @classmethod
+    def from_dict(cls, d: Optional[Dict[str, bool]]) -> "EquationSwitches":
+        if d is None:
+            return cls()
+        return cls(
+            turbulence=bool(d.get("turbulence", True)),
+            energy=bool(d.get("energy", True)),
+            gas=bool(d.get("gas", True)),
+        )
+
+
 # ============================================================
 # PR #1:CaseSpec 抽象(显式 / 分组 / 笛卡尔的统一归一化)
 # ============================================================
@@ -493,6 +511,10 @@ class CaseSweep:
     turbulence: Optional[Any] = None  # 实际类型:Optional[TurbulencePresetBase]
     two_temperature: Optional[Any] = None  # 实际类型:Optional[TwoTemperaturePreset]
     species: Optional[Any] = None  # 实际类型:Optional[SpeciesPreset]
+    # v0.10.0 新增:方程改写开关
+    equation_switches: EquationSwitches = field(
+        default_factory=EquationSwitches
+    )
 
     # --------------------- 构造 ---------------------
     @classmethod
@@ -609,6 +631,11 @@ class CaseSweep:
                 set_numeqns=bool(twot_d.get("set_numeqns", True)),
             )
 
+        # v0.10.0:equation_switches 解析
+        equation_switches = EquationSwitches.from_dict(
+            d.get("equation_switches")
+        )
+
         return cls(
             template=d["template"],
             output_dir=d["output_dir"],
@@ -625,6 +652,7 @@ class CaseSweep:
             pbs=pbs_cfg,
             turbulence=turbulence_preset,
             two_temperature=two_temperature_preset,
+            equation_switches=equation_switches,
         )
 
     def materialize(self) -> List[ExplicitCase]:

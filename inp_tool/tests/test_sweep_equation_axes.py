@@ -70,3 +70,47 @@ class TestEnumAliasTable:
         from inp_tool.sweep import _ENUM_ALIASES
         expected = {"perfect", "real", "multi", "mixture"}
         assert set(_ENUM_ALIASES[GasModel].keys()) == expected
+
+
+class TestEquationSwitches:
+    def _cs(self, **kwargs) -> "CaseSweep":
+        return CaseSweep(
+            template="reference/inp_example/compare/可压缩理想气体+2方程SST mcfd.inp",
+            output_dir="/tmp/cs_out",
+            sweeps=SweepSpec(values=kwargs.pop("sweeps", {})),
+            **{k: v for k, v in kwargs.items() if k != "sweeps"},
+        )
+
+    def test_default_all_true(self):
+        """不传 equation_switches → 三个开关全 True。"""
+        from inp_tool.sweep import EquationSwitches
+        cs = self._cs()
+        assert cs.equation_switches.turbulence is True
+        assert cs.equation_switches.energy is True
+        assert cs.equation_switches.gas is True
+
+    def test_yaml_disable_turbulence(self):
+        """from_dict: equation_switches.turbulence: false → 关。"""
+        d = {
+            "template": "reference/inp_example/compare/可压缩理想气体+2方程SST mcfd.inp",
+            "output_dir": "/tmp/cs_out",
+            "sweeps": {"turbulence": ["sst", "sa"]},
+            "equation_switches": {"turbulence": False, "energy": True, "gas": True},
+        }
+        cs = CaseSweep.from_dict(d)
+        assert cs.equation_switches.turbulence is False
+        assert cs.equation_switches.energy is True
+        assert cs.equation_switches.gas is True
+
+    def test_yaml_partial(self):
+        """只传 turbulence 开关 → 其他走默认 True。"""
+        d = {
+            "template": "reference/inp_example/compare/可压缩理想气体+2方程SST mcfd.inp",
+            "output_dir": "/tmp/cs_out",
+            "sweeps": {"turbulence": ["sst"]},
+            "equation_switches": {"turbulence": False},
+        }
+        cs = CaseSweep.from_dict(d)
+        assert cs.equation_switches.turbulence is False
+        assert cs.equation_switches.energy is True
+        assert cs.equation_switches.gas is True
