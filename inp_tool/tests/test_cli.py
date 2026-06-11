@@ -102,13 +102,20 @@ def test_cli_diff_unified(capsys, sample_inp: Path, tmp_path: Path):
 
 
 # ========== __main__ 入口 ==========
-def test_python_dash_m_inp_tool():
-    """python -m inp_tool --version 调用 __main__ 入口。"""
+def test_python_dash_m_inp_tool(tmp_path):
+    """python -m inp_tool --version 调用 __main__ 入口。
+
+    NOTE: cwd 设到 tmp_path,避免在仓库根跑 subprocess 时
+    Python 把外层 `./inp_tool/` 当作 namespace package(没 __init__.py),
+    优先于 site-packages 中真正的 inp_tool package — 触发
+    `ImportError: cannot import name '__version__'`。
+    """
     import subprocess
     import sys
     r = subprocess.run(
         [sys.executable, "-m", "inp_tool", "--version"],
         capture_output=True, text=True, timeout=30,
+        cwd=str(tmp_path),
     )
     assert r.returncode == 0
     assert "0.9.0" in r.stdout
@@ -139,6 +146,7 @@ def test_shell_via_subprocess(tmp_path):
         [sys.executable, '-m', 'inp_tool.cli', 'shell', str(p)],
         input='files\nexit\n',
         capture_output=True, text=True, timeout=10,
+        cwd=str(tmp_path),  # 避免 cwd-induced namespace package 冲突
         env={**os.environ, 'TERM': 'dumb'},  # avoid readline/prompt interference
     )
     assert cp.returncode == 0, f'shell exited with {cp.returncode}: stderr={cp.stderr}'
@@ -188,3 +196,46 @@ def test_cli_sweep_with_source_dir_no_deprecation(capsys, sample_inp, tmp_path):
     for d in case_dirs:
         assert (d / "mcfd.inp").is_file()
         assert (d / "grid.bin").is_file()
+
+
+# ============================================================
+# v0.9.1: info --detect 子命令测试
+# ============================================================
+def test_info_detect_two_temperature(tmp_path):
+    """info --detect 对双温文件输出 energy=2T / gas=multi-temp / gas_code=11"""
+    import subprocess
+    import sys
+    from pathlib import Path
+    target = (
+        Path(__file__).parent / "fixtures" / "compare" / "双温模型+层流mcfd.inp"
+    )
+    if not target.exists():
+        import pytest
+        pytest.skip("compare 样本不存在")
+    r = subprocess.run(
+        [sys.executable, "-m", "inp_tool.cli", "info", str(target), "--detect"],
+        capture_output=True, text=True, timeout=30,
+        cwd=str(tmp_path),
+    )
+    assert r.returncode == 0, f"stderr={r.stderr}"
+    out = r.stdout
+    assert "方程系统检测" in out
+    assert "能量模型" in out and "2T" in out
+    assert "气体类型" in out and "multi-temp" in out
+    assert "v6=11" in out
+
+
+def test_info_without_detect_omits_report(tmp_path):
+    """无 --detect 时不显示检测段(向后兼容)"""
+    import subprocess
+    import sys
+    # 简单合成 inp
+    p = tmp_path / "x.inp"
+    p.write_text("physics begin\n  refvel 1.0\nphysics end\n")
+    r = subprocess.run(
+        [sys.executable, "-m", "inp_tool.cli", "info", str(p)],
+        capture_output=True, text=True, timeout=30,
+        cwd=str(tmp_path),
+    )
+    assert r.returncode == 0
+    assert "方程系统检测" not in r.stdout

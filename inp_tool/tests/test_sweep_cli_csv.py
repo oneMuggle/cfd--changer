@@ -53,11 +53,17 @@ def cases_csv(tmp_path):
     return p
 
 
-def _run_cli(*args):
+def _run_cli(*args, cwd=None):
+    """通过 python -m inp_tool.cli 调用,返回 (returncode, stdout, stderr)
+
+    cwd: 默认 None。建议传 tmp_path 避免在仓库根跑 subprocess 时
+    Python 把外层 `./inp_tool/` 当 namespace package。
+    """
     proc = subprocess.run(
         [sys.executable, "-m", "inp_tool.cli", *args],
         capture_output=True,
         text=True,
+        cwd=str(cwd) if cwd is not None else None,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -70,6 +76,7 @@ class TestSweepCLI_CsvRouting:
             "--template", str(template_inp),
             "--out", out_dir,
             "--naming", "case_a{alpha:02.0f}_b{beta:02.0f}.inp",
+            cwd=tmp_path,
         )
         assert rc == 0, f"stderr={err}"
         # 4 个 case 应生成
@@ -89,6 +96,7 @@ class TestSweepCLI_CsvRouting:
         rc, out, err = _run_cli(
             "sweep", str(cases_csv),
             "--out", str(tmp_path / "out"),
+            cwd=tmp_path,
         )
         assert rc != 0
         # 错误应提到 template
@@ -102,7 +110,7 @@ class TestSweepCLI_CsvRouting:
             "output_dir": str(tmp_path / "out"),
             "sweeps": {"alpha": [0, 4]},
         }))
-        rc, out, err = _run_cli("sweep", str(cfg))
+        rc, out, err = _run_cli("sweep", str(cfg), cwd=tmp_path)
         assert rc == 0
         inps = list((tmp_path / "out").glob("*.inp"))
         assert len(inps) == 2  # 老用法:2 cases
@@ -116,7 +124,7 @@ class TestSweepCLI_CsvRouting:
             "output_dir": str(tmp_path / "out"),
             "sweeps": {"alpha": [0, 4]},
         }))
-        rc, out, err = _run_cli("sweep", str(cfg))
+        rc, out, err = _run_cli("sweep", str(cfg), cwd=tmp_path)
         assert rc == 0
         inps = list((tmp_path / "out").glob("*.inp"))
         assert len(inps) == 2
@@ -128,6 +136,7 @@ class TestSweepCLI_CsvRouting:
             "sweep", str(cases_csv),
             "--template", str(template_inp),
             "--out", out_dir,
+            cwd=tmp_path,
         )
         assert rc == 0, f"stderr={err}"
         # 默认 naming:case_{alpha}

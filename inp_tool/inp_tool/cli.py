@@ -123,6 +123,24 @@ def cmd_info(args):
         kw_counter = Counter(s.keyword for s in b.statements)
         print(f'  [{i:2d}] {b.name:15s} L{b.begin_line:4d}-{b.end_line:4d}  '
               f'{len(b.statements):4d} stmts  {len(kw_counter):3d} unique keys')
+    # v0.9.1: --detect 输出方程系统/湍流模型/气体类型报告
+    if getattr(args, 'detect', False):
+        from .equations import detect_equations
+        rep = detect_equations(inp)
+        print(f'\n方程系统检测 (detect_equations):')
+        print(f'  能量模型     : {rep.energy.value:12s}'
+              f' (physics.tnoneq_numeqns)')
+        print(f'  湍流模型     : {rep.turbulence.value:20s}'
+              f' (eqnset_define v4={rep.ntrbst_family}, v5={rep.ntrbst_code})')
+        print(f'  气体类型     : {rep.gas.value:12s}'
+              f' (eqnset_define v6={rep.gas_code})')
+        print(f'  物种数 (infsets) : {rep.n_species}')
+        if rep.gasnam:
+            print(f'  physics.gasnam   : {rep.gasnam}  (仅参考,不用于判别)')
+        if rep.notes:
+            print(f'\n  一致性告警:')
+            for n in rep.notes:
+                print(f'    ⚠ {n}')
     return 0
 
 
@@ -623,6 +641,8 @@ def main(argv=None):
 
     si = sub.add_parser('info', help='文件概览')
     si.add_argument('file')
+    si.add_argument('--detect', action='store_true',
+                    help='额外输出方程系统/湍流模型/气体类型检测报告 (v0.9.1)')
     si.set_defaults(func=cmd_info)
 
     # === sweep 子命令 ===

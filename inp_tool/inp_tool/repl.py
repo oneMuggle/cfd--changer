@@ -32,6 +32,7 @@ REPL_COMMANDS = {
     'sweep-config',  # v0.7.0:从 JSON/YAML 跑 sweep(预校验+预览)
     'tutorial',  # v0.7.1:5 步引导教程(自动跑命令,看演示)
     'wizard',  # v0.7.1:任务向导(用户驱动,完成具体任务)
+    'detect', 'turb', '2t',  # v0.9.1:方程感知 + 湍流/2T preset
     'undo', 'let', 'help', 'history', 'exit', 'quit',
 }
 
@@ -40,6 +41,7 @@ REPL_COMMANDS = {
 _COMMAND_GROUPS_ZH = [
     ("文件管理", ['load', 'unload', 'files', 'use', 'status', 'save']),
     ("编辑 / 查看", ['info', 'get', 'set', 'aero', 'parse']),
+    ("方程感知", ['detect', 'turb', '2t']),
     ("比较", ['diff']),
     ("批量生成", ['sweep', 'sweep-config']),
     ("任务向导", ['tutorial', 'wizard']),
@@ -49,6 +51,7 @@ _COMMAND_GROUPS_ZH = [
 _COMMAND_GROUPS_EN = [
     ("File Management", ['load', 'unload', 'files', 'use', 'status', 'save']),
     ("Edit / View", ['info', 'get', 'set', 'aero', 'parse']),
+    ("Equation-Aware", ['detect', 'turb', '2t']),
     ("Compare", ['diff']),
     ("Batch", ['sweep', 'sweep-config']),
     ("Tasks", ['tutorial', 'wizard']),
@@ -993,6 +996,128 @@ class ShellREPL(cmd.Cmd):
         )
         print(f'aero: {change_str}')
         print(self._aero_format(new_state))
+
+    # ----- v0.9.1 方程感知:detect / turb / 2t -------------------------
+    def do_detect(self, arg):
+        """detect — 显示当前文件的方程系统/湍流模型/气体类型检测报告"""
+        if not self.session.current:
+            self._err('detect: no file is current. use `load <path>` first.')
+            return
+        from .equations import detect_equations
+        inp = self.session.files[self.session.current].inp
+        rep = detect_equations(inp)
+        print(f'方程系统检测 ({self.session.current}):')
+        print(f'  能量模型   : {rep.energy.value:12s}'
+              f' (physics.tnoneq_numeqns)')
+        print(f'  湍流模型   : {rep.turbulence.value:20s}'
+              f' (eqnset_define v4={rep.ntrbst_family}, v5={rep.ntrbst_code})')
+        print(f'  气体类型   : {rep.gas.value:12s}'
+              f' (eqnset_define v6={rep.gas_code})')
+        print(f'  物种数     : {rep.n_species}')
+        if rep.gasnam:
+            print(f'  gasnam     : {rep.gasnam}  (仅参考)')
+        if rep.notes:
+            print(f'  告警:')
+            for n in rep.notes:
+                print(f'    ⚠ {n}')
+
+    def do_turb(self, arg):
+        """turb I=0.01 L=0.01 [U=204] — 按检测到的湍流模型写湍流初始化字段。
+
+        必填:I (湍流强度) 和 L (特征长度)
+        可选:U (参考速度;不给则用 sqrt(u²+v²+w²) 或 1.0)
+        例:turb I=0.01 L=0.01 U=204
+        """
+        if not self.session.current:
+            self._err('turb: no file is current. use `load <path>` first.')
+            return
+        if not arg.strip():
+            self._err('turb: 需要参数,如 `turb I=0.01 L=0.01 U=204`')
+            return
+        # 解析 KEY=VALUE
+        params = {}
+        for token in arg.split():
+            if '=' not in token:
+                self._err(f'turb: expected KEY=VALUE, got {token!r}')
+                return
+            k, _, v = token.partition('=')
+            try:
+                params[k.strip().upper()] = float(v)
+            except ValueError:
+                self._err(f'turb: {k} 必须是数字,got {v!r}')
+                return
+        if 'I' not in params or 'L' not in params:
+            self._err('turb: 必填 I 和 L (湍流强度 + 特征长度)')
+            return
+        I, L = params['I'], params['L']
+        U = params.get('U', 1.0)
+        # 检测 + 选 preset
+        from .equations import (
+            detect_equations, make_turbulence_preset, TurbulenceModel,
+        )
+        inp = self.session.files[self.session.current].inp
+        rep = detect_equations(inp)
+        if rep.turbulence == TurbulenceModel.LAMINAR:
+            self._err('turb: 当前文件是层流(无湍流方程),不能用 turb preset')
+            return
+        if rep.turbulence == TurbulenceModel.UNKNOWN:
+            self._err(
+                f'turb: 未识别湍流模型 (eqnset_define v4={rep.ntrbst_family},'
+                f' v5={rep.ntrbst_code});手改 eqnset_define 后重试'
+            )
+            return
+        try:
+            preset = make_turbulence_preset(rep.turbulence, I=I, L=L, U_ref=U)
+            applied = preset.apply(inp)
+        except (ValueError, TypeError) as e:
+            self._err(f'turb: {e}')
+            return
+        self.session.files[self.session.current].dirty = True
+        print(f'turb [{rep.turbulence.value}] applied: I={I}, L={L}, U_ref={U}')
+        for k, v in applied.items():
+            print(f'  {k} = {v!r}')
+
+    def do_2t(self, arg):
+        """2t T=300 Tvib=200 — 双温联动:同时设 平动温度 + 振动温度。
+
+        必填:T (T_trans) 和 Tvib (T_vib)
+        会写:physics.tnoneq_numeqns=1, physics.reftem=T, physics.vibtem=Tvib
+        例:2t T=300 Tvib=200
+        """
+        if not self.session.current:
+            self._err('2t: no file is current. use `load <path>` first.')
+            return
+        if not arg.strip():
+            self._err('2t: 需要参数,如 `2t T=300 Tvib=200`')
+            return
+        params = {}
+        for token in arg.split():
+            if '=' not in token:
+                self._err(f'2t: expected KEY=VALUE, got {token!r}')
+                return
+            k, _, v = token.partition('=')
+            try:
+                params[k.strip().lower()] = float(v)
+            except ValueError:
+                self._err(f'2t: {k} 必须是数字,got {v!r}')
+                return
+        T = params.get('t')
+        Tv = params.get('tvib')
+        if T is None or Tv is None:
+            self._err('2t: 必填 T (平动温度) 和 Tvib (振动温度)')
+            return
+        from .equations import TwoTemperaturePreset, TwoTemperatureError
+        inp = self.session.files[self.session.current].inp
+        try:
+            preset = TwoTemperaturePreset(T_trans=T, T_vib=Tv)
+            applied = preset.apply(inp)
+        except (TwoTemperatureError, ValueError) as e:
+            self._err(f'2t: {e}')
+            return
+        self.session.files[self.session.current].dirty = True
+        print(f'2t applied: T_trans={T} K, T_vib={Tv} K')
+        for k, v in applied.items():
+            print(f'  {k} = {v!r}')
 
 
 def main(preload: Optional[List[str]] = None) -> int:

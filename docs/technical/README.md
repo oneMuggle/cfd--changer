@@ -37,6 +37,7 @@
 | [15-ux-friendly-cli](15-ux-friendly-cli.md) | UX 友好 CLI 设计 | REPL 启动面板 / i18n / wizard 任务流 / 交互细节 | 当前主线 |
 | [16-sweep-flexible](16-sweep-flexible.md) | sweep 灵活化 (cases/groups/CSV) | v0.7.0 模式:笛卡尔+显式列表+分组继承+CSV+混合 | 已归档 |
 | [**17-sweep-case-dir**](17-sweep-case-dir.md) | **sweep 整算例目录 (v0.8.0)** | source_dir / CopyStrategy / per_dir 模式 / 排除规则 / smoke 验证 | **当前主线** |
+| [**18-equation-aware-config**](18-equation-aware-config.md) | **方程感知配置 (v0.9.0/0.9.1)** | eqnset_define 9 个位置 + 5 湍流模型 + 3 气体类型 + 4 preset + 7 文件实测固化 | **当前主线** |
 
 ---
 

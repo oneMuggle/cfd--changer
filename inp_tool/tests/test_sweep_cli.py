@@ -55,24 +55,29 @@ def sweep_config(tmp_path, template_inp):
     return cfg
 
 
-def _run_cli(*args):
-    """通过 python -m inp_tool.cli 调用,返回 (returncode, stdout, stderr)"""
+def _run_cli(*args, cwd=None):
+    """通过 python -m inp_tool.cli 调用,返回 (returncode, stdout, stderr)
+
+    cwd: 默认 None(用 pytest 当前 cwd)。建议传 tmp_path 避免在仓库根
+    跑 subprocess 时 Python 把外层 `./inp_tool/` 当 namespace package。
+    """
     proc = subprocess.run(
         [sys.executable, "-m", "inp_tool.cli", *args],
         capture_output=True,
         text=True,
+        cwd=str(cwd) if cwd is not None else None,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
 
 class TestSweepCLI:
-    def test_sweep_help_shows_subcommand(self):
-        rc, out, err = _run_cli("--help")
+    def test_sweep_help_shows_subcommand(self, tmp_path):
+        rc, out, err = _run_cli("--help", cwd=tmp_path)
         assert rc == 0
         assert "sweep" in out
 
     def test_sweep_runs_with_config_file(self, sweep_config, tmp_path):
-        rc, out, err = _run_cli("sweep", str(sweep_config))
+        rc, out, err = _run_cli("sweep", str(sweep_config), cwd=tmp_path)
         assert rc == 0
         out_dir = tmp_path / "cases"
         assert out_dir.is_dir()
@@ -80,7 +85,7 @@ class TestSweepCLI:
         assert len(inps) == 4  # 2 alpha * 2 mach
 
     def test_sweep_dry_run_does_not_write(self, sweep_config, tmp_path):
-        rc, out, err = _run_cli("sweep", str(sweep_config), "--dry-run")
+        rc, out, err = _run_cli("sweep", str(sweep_config), "--dry-run", cwd=tmp_path)
         assert rc == 0
         out_dir = tmp_path / "cases"
         # dry-run 不应写盘
@@ -99,6 +104,7 @@ class TestSweepCLI:
             "--t-inf", "288.15",
             "--p-inf", "101325.0",
             "--out", out_dir,
+            cwd=tmp_path,
         )
         assert rc == 0, f"stderr: {err}"
         inps = list((tmp_path / "quick").glob("*.inp"))
@@ -112,7 +118,7 @@ class TestSweepCLI:
             "output_dir": str(tmp_path / "out"),
             "sweeps": {"alpha": [0]},
         }))
-        rc, out, err = _run_cli("sweep", str(cfg))
+        rc, out, err = _run_cli("sweep", str(cfg), cwd=tmp_path)
         assert rc != 0
         assert "not found" in err.lower() or "no such" in err.lower()
 
@@ -121,6 +127,7 @@ class TestSweepCLI:
         rc, out, err = _run_cli(
             "sweep", str(sweep_config),
             "--manifest", str(manifest),
+            cwd=tmp_path,
         )
         assert rc == 0
         assert manifest.is_file()
@@ -131,7 +138,7 @@ class TestSweepCLI:
     def test_sweep_invalid_json_returns_nonzero(self, tmp_path):
         bad = tmp_path / "bad.json"
         bad.write_text("{not valid json")
-        rc, out, err = _run_cli("sweep", str(bad))
+        rc, out, err = _run_cli("sweep", str(bad), cwd=tmp_path)
         assert rc != 0
 
     def test_sweep_bare_template_requires_sweeps(self, template_inp, tmp_path):
@@ -139,6 +146,7 @@ class TestSweepCLI:
         rc, out, err = _run_cli(
             "sweep", str(template_inp),
             "--out", str(tmp_path / "out"),
+            cwd=tmp_path,
         )
         # 缺少 sweeps 应该报错
         assert rc != 0
@@ -172,6 +180,7 @@ class TestSweepCLI:
             "sweep", str(template),
             "--alpha", "0,10",
             "--out", str(out_dir),
+            cwd=tmp_path,
         )
         assert rc == 0, f"stderr={err}"
         # 检查生成的 case_10.0.inp: aero_ma 必须仍是 0.8

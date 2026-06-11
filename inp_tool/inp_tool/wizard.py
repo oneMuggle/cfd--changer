@@ -237,6 +237,7 @@ class WizardModifyFile(WizardBase):
 
     steps = [
         "step_1_select_file",
+        "step_1a_detect",      # v0.9.1:加载后立即展示方程系统检测报告
         "step_2_select_fields",
         "step_3_enter_values",
         "step_4_preview",
@@ -251,7 +252,7 @@ class WizardModifyFile(WizardBase):
             _print(f"  当前已加载: {cur_path}")
             ans = confirm(f"  使用当前已加载文件?", default=True)
             if ans:
-                return ("step_2_select_fields", {"file": cur_path})
+                return ("step_1a_detect", {"file": cur_path})
         while True:
             path_str = input_text("文件路径(可拖入)")
             if not path_str:
@@ -260,7 +261,61 @@ class WizardModifyFile(WizardBase):
             if not p.is_file():
                 _print(f"  文件不存在: {p}")
                 continue
-            return ("step_2_select_fields", {"file": str(p)})
+            return ("step_1a_detect", {"file": str(p)})
+
+    def step_1a_detect(self, data: dict):
+        """v0.9.1:解析 .inp 并展示方程系统/湍流模型/气体类型检测报告。
+
+        纯展示步骤,无用户输入。让用户在选字段前了解当前文件配置 — 例如
+        看到 "2T + multi-temp" 就知道改 reftem 时还要配 vibtem。
+        """
+        from .parser import parse_file
+        from .equations import detect_equations
+        is_zh = get_lang() == "zh"
+        file_path = data.get("file")
+        if not file_path:
+            return ("step_2_select_fields", {})
+        try:
+            inp = parse_file(file_path)
+            rep = detect_equations(inp)
+        except Exception as e:
+            if is_zh:
+                _print(f"  ⚠ 检测失败(跳过):{e}")
+            else:
+                _print(f"  ⚠ Detection failed (skipping): {e}")
+            return ("step_2_select_fields", {})
+        if is_zh:
+            _print(f"  方程系统检测:")
+            _print(f"    能量模型 : {rep.energy.value}"
+                   f"  (physics.tnoneq_numeqns)")
+            _print(f"    湍流模型 : {rep.turbulence.value}"
+                   f"  (eqnset_define v4={rep.ntrbst_family}, v5={rep.ntrbst_code})")
+            _print(f"    气体类型 : {rep.gas.value}"
+                   f"  (eqnset_define v6={rep.gas_code})")
+            _print(f"    物种数   : {rep.n_species}")
+        else:
+            _print(f"  Detection:")
+            _print(f"    Energy  : {rep.energy.value}")
+            _print(f"    Turb    : {rep.turbulence.value}")
+            _print(f"    Gas     : {rep.gas.value} (v6={rep.gas_code})")
+            _print(f"    Species : {rep.n_species}")
+        if rep.notes:
+            if is_zh:
+                _print(f"  ⚠ 告警:")
+            else:
+                _print(f"  ⚠ Warnings:")
+            for n in rep.notes:
+                _print(f"    - {n}")
+        # 推荐字段(让用户对 step_2 有预期)
+        recs = rep.recommended_fields()
+        if recs:
+            if is_zh:
+                _print(f"  推荐改这些字段(根据当前方程系统):")
+            else:
+                _print(f"  Recommended fields (per current equation system):")
+            for f in recs:
+                _print(f"    • {f}")
+        return ("step_2_select_fields", {})
 
     def step_2_select_fields(self, data: dict):
         is_zh = get_lang() == "zh"
@@ -393,6 +448,7 @@ class WizardSweep(WizardBase):
         "step_2_output",
         "step_3_mode",
         "step_4_params",
+        "step_4a_detect",      # v0.9.1:展示 template 的方程系统检测报告
         "step_5_naming",
         "step_5a_pbs",
         "step_6_preview",
@@ -555,6 +611,55 @@ class WizardSweep(WizardBase):
                   "  Naming template (placeholders: {alpha} {beta} {mach} {T} {p} {group})")
         naming = input_text(prompt, default=default)
         return ("step_5a_pbs", {"naming": naming})
+
+    def step_4a_detect(self, data: dict):
+        """v0.9.1:展示 template 的方程系统检测报告,让用户在 naming/pbs 前
+        清楚 template 是层流/湍流/双温,以及推荐应改的字段。
+
+        纯展示步骤,无交互。检测失败不阻断。
+        """
+        from .parser import parse_file
+        from .equations import detect_equations
+        is_zh = get_lang() == "zh"
+        template = data.get("template")
+        if not template:
+            return ("step_5_naming", {})
+        try:
+            inp = parse_file(template)
+            rep = detect_equations(inp)
+        except Exception as e:
+            if is_zh:
+                _print(f"  ⚠ 检测失败(跳过):{e}")
+            else:
+                _print(f"  ⚠ Detection failed (skipping): {e}")
+            return ("step_5_naming", {})
+        if is_zh:
+            _print(f"  Template 方程系统检测:")
+            _print(f"    能量模型 : {rep.energy.value}")
+            _print(f"    湍流模型 : {rep.turbulence.value}"
+                   f"  (v4={rep.ntrbst_family}, v5={rep.ntrbst_code})")
+            _print(f"    气体类型 : {rep.gas.value}  (v6={rep.gas_code})")
+            _print(f"    物种数   : {rep.n_species}")
+        else:
+            _print(f"  Template equation system:")
+            _print(f"    Energy  : {rep.energy.value}")
+            _print(f"    Turb    : {rep.turbulence.value}")
+            _print(f"    Gas     : {rep.gas.value} (v6={rep.gas_code})")
+            _print(f"    Species : {rep.n_species}")
+        if rep.notes:
+            if is_zh:
+                _print(f"  ⚠ 告警:")
+            else:
+                _print(f"  ⚠ Warnings:")
+            for n in rep.notes:
+                _print(f"    - {n}")
+        if is_zh:
+            _print(f"  提示:本 wizard 不写湍流/2T preset(由 sweep YAML 字段"
+                   f" turbulence/two_temperature 或 REPL `turb`/`2t` 命令处理)。")
+        else:
+            _print(f"  Note: this wizard does not write turbulence/2T preset"
+                   f" (use sweep YAML or REPL `turb`/`2t` commands).")
+        return ("step_5_naming", {})
 
     def step_5a_pbs(self, data: dict):
         """v0.9.0 新增:询问 pbs 生成 + 任务名模板。"""
