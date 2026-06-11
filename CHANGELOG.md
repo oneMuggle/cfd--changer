@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `2t T=<x> Tvib=<y>` — 双温联动写 `physics.tnoneq_numeqns=1`、`reftem`、`vibtem`,缺一抛 `TwoTemperatureError`
 - **`docs/technical/18-equation-aware-config.md`**(参数表固化):eqnset_define 31 个 values 中 9 个语义位置 + 5 湍流模型 × 3 气体类型实测真值表 + 4 个常见误区(`gasnam` / `ntrbst` / `dfceli` / `ifwfne` / `infsets`)。
 - **测试 +20**:5 个 v6 单元(`TestDetectGas`)+ 1 个 multi_temp suanli 端到端 + 1 个 two_temperature_layered + 2 个 `info --detect` CLI + 13 个 REPL equations(`test_repl_equations.py`)。
+- **WizardModifyFile 加 `step_1a_detect`**(加载文件后立即展示方程系统/湍流/气体检测报告 + 推荐字段)。
+- **WizardSweep 加 `step_4a_detect`**(展示 template 的方程系统报告,让用户在 naming/pbs 前清楚 template 配置)。
+- **CaseSweep YAML/JSON 字段 `turbulence` / `two_temperature`**:`from_dict` 解析 + `generate()` 末尾应用 preset
+  - YAML 例:`turbulence: {enabled: true, I: 0.01, L: 0.01, U_ref: 204}`
+  - YAML 例:`two_temperature: {T_trans: 300, T_vib: 200}`
+  - 自动检测 template 湍流模型选 preset(SST/k-ε/SA/Goldberg);层流 template 启用 turbulence 时抛 `ValueError`
+- **集成测试 +14**(`test_sweep_equations_integration.py`):覆盖 `from_dict` 解析 / `generate()` apply / wizard step 注册 + 烟测。
 
 ### Changed
 - **`detect_equations()` 改用 eqnset_define v6 判别 GasModel**(替代 v0.9.0 的 gasnam 启发式 — 实测 7 个 compare/ 文件全部 gasnam=Air,旧逻辑误判)。

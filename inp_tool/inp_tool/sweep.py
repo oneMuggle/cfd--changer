@@ -505,6 +505,52 @@ class CaseSweep:
             from .pbs import PbsConfig  # 局部 import 避免循环
             pbs_cfg = PbsConfig.from_dict(pbs_d)
 
+        # v0.9.1:turbulence preset 解析
+        # YAML 例:turbulence: {enabled: true, I: 0.01, L: 0.01, U_ref: 100}
+        # 检测 template 的湍流模型,选对应 preset(SST/k-ε/SA/Goldberg)
+        turbulence_preset = None
+        turb_d = d.get("turbulence")
+        if isinstance(turb_d, dict) and turb_d.get("enabled", True):
+            from .equations import (
+                detect_equations, make_turbulence_preset, TurbulenceModel,
+            )
+            from .parser import parse_file as _parse_file
+            _inp = _parse_file(d["template"])
+            _rep = detect_equations(_inp)
+            if _rep.turbulence in (TurbulenceModel.LAMINAR, TurbulenceModel.UNKNOWN):
+                raise ValueError(
+                    f"sweep config turbulence.enabled=true, but template "
+                    f"is {_rep.turbulence.value}; cannot apply turbulence preset"
+                )
+            I = turb_d.get("I")
+            L = turb_d.get("L")
+            U_ref = turb_d.get("U_ref", turb_d.get("U", 1.0))
+            if I is None or L is None:
+                raise KeyError(
+                    "sweep config turbulence: 'I' and 'L' are required"
+                )
+            turbulence_preset = make_turbulence_preset(
+                _rep.turbulence, I=float(I), L=float(L), U_ref=float(U_ref)
+            )
+
+        # v0.9.1:two_temperature preset 解析
+        # YAML 例:two_temperature: {enabled: true, T_trans: 300, T_vib: 200}
+        two_temperature_preset = None
+        twot_d = d.get("two_temperature")
+        if isinstance(twot_d, dict) and twot_d.get("enabled", True):
+            from .equations import TwoTemperaturePreset
+            T_trans = twot_d.get("T_trans")
+            T_vib = twot_d.get("T_vib")
+            if T_trans is None or T_vib is None:
+                raise KeyError(
+                    "sweep config two_temperature: 'T_trans' and 'T_vib' are required"
+                )
+            two_temperature_preset = TwoTemperaturePreset(
+                T_trans=float(T_trans),
+                T_vib=float(T_vib),
+                set_numeqns=bool(twot_d.get("set_numeqns", True)),
+            )
+
         return cls(
             template=d["template"],
             output_dir=d["output_dir"],
@@ -519,6 +565,8 @@ class CaseSweep:
             copy_strategy=copy_strategy,
             exclude=exclude,
             pbs=pbs_cfg,
+            turbulence=turbulence_preset,
+            two_temperature=two_temperature_preset,
         )
 
     def materialize(self) -> List[ExplicitCase]:
@@ -985,6 +1033,15 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
         applied: Dict[str, Any] = {}
         if sweep.freestream is not None:
             applied.update(sweep.freestream.apply(inp, params))
+
+        # v0.9.1:应用 turbulence preset(每个 case 同样 I/L/U,
+        # 但因 deepcopy template,字段需重写)
+        if sweep.turbulence is not None:
+            applied.update(sweep.turbulence.apply(inp))
+
+        # v0.9.1:应用 two_temperature preset(联动写 tnoneq_numeqns + 温度)
+        if sweep.two_temperature is not None:
+            applied.update(sweep.two_temperature.apply(inp))
 
         # 应用 overrides
         _apply_overrides(inp, sweep.overrides)
