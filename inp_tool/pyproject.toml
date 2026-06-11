@@ -43,16 +43,26 @@ build = [
     # 升级动机: v0.4.2 修复 onedir 模式(5.13.2 + Py3.8 + Linux 的 _MEI/libpython bug)
     "pyinstaller==6.16.0",
 ]
+gui = [
+    # PySide2 5.15.2.1: Qt for Python 的最后稳定版,Qt 5.15 是 Qt 公司承诺支持 Win7
+    # 的最后版本(2020-12 EOL);LGPL,商业友好;支持 Python 3.8-3.11
+    "PySide2==5.15.2.1",
+]
+gui-build = [
+    "pyinstaller==6.16.0",
+    "PySide2==5.15.2.1",
+]
 
 [project.scripts]
 inp-tool = "inp_tool.cli:main"
 inp-tool-api = "inp_tool.api:main"
+inp-tool-gui = "inp_tool_gui.app:main"   # v0.10 新增
 
 [project.urls]
 "Source" = "https://example.invalid/cfd++changer"
 
 [tool.setuptools]
-packages = ["inp_tool"]
+packages = ["inp_tool", "inp_tool_gui"]
 
 [tool.setuptools.dynamic]
 version = {attr = "inp_tool.__version__"}
