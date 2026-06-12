@@ -176,4 +176,4 @@ inp-tool sweep ...
 
 - 用法见 [03-快速开始](../basics/03-quickstart.md) / [05-配置文件](../sweep/02-config-files.md)
 - 出错见 [10-FAQ](../sweep/07-faq.md)
-- 想理解 binary 怎么打的见 [../technical/release/01-cli-packaging.md](../technical/release/01-cli-packaging.md)
+- 想理解 binary 怎么打的见 [../technical/release/01-cli-packaging.md](../../technical/release/01-cli-packaging.md)
