@@ -32,6 +32,31 @@ class WizardCancel(Exception):
 
 
 # ============================================================
+# v0.10.0+:helper 函数
+# ============================================================
+def _read_template_value(
+    template_path: str, block_name: str, key: str, default: float,
+) -> float:
+    """从 template .inp 读 guiopts.x 或 physics.x,转 float,失败用 default。
+
+    任何异常(missing file / parse error / missing block / unparseable value)
+    都静默回退到 default — wizard 不因默认值读取失败而中断流程。
+    """
+    try:
+        from .parser import parse_file
+        inp = parse_file(template_path)
+        b = inp.get_block(block_name)
+        if b is None:
+            return default
+        v = b.get(key)
+        if v is None:
+            return default
+        return float(v)
+    except Exception:
+        return default
+
+
+# ============================================================
 # 通用组件(走 i18n)
 # ============================================================
 def _print(s: str) -> None:
@@ -117,6 +142,83 @@ def menu(
             _print(f"  无效选择: {raw!r},请重试。")
         else:
             _print(f"  Invalid choice: {raw!r}, please retry.")
+
+
+def multi_menu(
+    prompt: str,
+    choices: List[Tuple[str, str, str]],
+) -> List[str]:
+    """v0.10.0+ 多选菜单(单行 token 输入)。
+
+    输入约定(任选其一,空格或逗号分隔 token):
+      - 数字 key:"1 3" 或 "1,3" → 选 [1, 3]
+      - value 串:"sst sa" → 选 [sst, sa](case-insensitive 匹配)
+    空输入 / 纯空格 → [] (等于跳过该 axis)。
+    任一 token 无效 → 整行重输(不静默丢弃)。
+
+    choices: [(key, "label_zh", "label_en"), ...]
+    返回:选中的 key 对应 choice 第 4 元素 value 的列表(保序去重)。
+    """
+    is_zh = get_lang() == "zh"
+    key_to_value: Dict[str, str] = {}
+    value_to_key: Dict[str, str] = {}
+    for key, _, _, value in _iter_choice4(choices):
+        key_to_value[key.upper()] = value
+        value_to_key[value.lower()] = key
+    _print(prompt)
+    for key, label_zh, label_en, _ in _iter_choice4(choices):
+        label = label_zh if is_zh else label_en
+        _print(f"  [{key}] {label}")
+    while True:
+        try:
+            raw = input("> (空格/逗号分隔,空=跳过): ")
+        except (EOFError, KeyboardInterrupt):
+            raise WizardCancel()
+        # 规范化:替换逗号为空格,再 split
+        tokens = raw.replace(",", " ").split()
+        if not tokens:
+            return []  # 空 → 跳过
+        # 检查每个 token 是否有效
+        invalid = []
+        for tok in tokens:
+            t_upper = tok.upper()
+            t_lower = tok.lower()
+            if t_upper not in key_to_value and t_lower not in value_to_key:
+                invalid.append(tok)
+        if invalid:
+            if is_zh:
+                _print(f"  无效 token: {invalid!r},请重试。")
+            else:
+                _print(f"  Invalid token(s): {invalid!r}, please retry.")
+            continue
+        # 收集 value(去重保序)
+        seen = set()
+        result: List[str] = []
+        for tok in tokens:
+            t_upper = tok.upper()
+            t_lower = tok.lower()
+            if t_upper in key_to_value:
+                value = key_to_value[t_upper]
+            else:
+                value = key_to_value[value_to_key[t_lower]]
+            if value not in seen:
+                seen.add(value)
+                result.append(value)
+        return result
+
+
+def _iter_choice4(choices: List[Tuple[str, str, str]]):
+    """把 3-tuple choices 当作 4-tuple(value 复用 key 当 fallback)迭代。
+
+    允许调用方传 [(key, "zh", "en")] 或 [(key, "zh", "en", "value")];
+    缺 value 时用 key 作 value(给某些复用场景使用)。
+    """
+    for c in choices:
+        if len(c) == 4:
+            yield c
+        else:
+            key, zh, en = c[0], c[1], c[2]
+            yield (key, zh, en, key)
 
 
 # ============================================================
@@ -446,9 +548,11 @@ class WizardSweep(WizardBase):
     steps = [
         "step_1_source_dir",
         "step_2_output",
-        "step_3_mode",
+        "step_3_mode",                 # 用户选 "1"(Cartesian)才进 4b
         "step_4_params",
-        "step_4a_detect",      # v0.9.1:展示 template 的方程系统检测报告
+        "step_4b_equation_axes",       # v0.10.0+:Cartesian 选 turbulence/energy/gas 轴
+        "step_4a_detect",              # v0.9.1 + v0.10.0+:消费 sweeps_equation_warnings
+        "step_4c_equation_overrides",  # v0.10.0+:per-case I/L/U 或温度(4b 选了 axis 才出现)
         "step_5_naming",
         "step_5a_pbs",
         "step_6_preview",
@@ -563,7 +667,7 @@ class WizardSweep(WizardBase):
             except Exception as e:
                 _print(f"  解析失败: {e}")
                 return None
-            return ("step_5_naming", {"sweeps": sweeps})
+            return ("step_4b_equation_axes", {"sweeps": sweeps})
         elif mode == "2":
             _print("  显式列表:每行一个 case,如 {alpha: 10, beta: 5}")
             raw = input_text("  cases(YAML 列表)")
@@ -577,7 +681,7 @@ class WizardSweep(WizardBase):
             except Exception as e:
                 _print(f"  解析失败: {e}")
                 return None
-            return ("step_5_naming", {"cases": cases})
+            return ("step_4b_equation_axes", {"cases": cases})
         elif mode == "3":
             _print("  分组继承:每组共享 common 字段,组内 cases 是列表")
             raw = input_text("  groups(YAML 列表)")
@@ -591,7 +695,7 @@ class WizardSweep(WizardBase):
             except Exception as e:
                 _print(f"  解析失败: {e}")
                 return None
-            return ("step_5_naming", {"groups": groups})
+            return ("step_4b_equation_axes", {"groups": groups})
         elif mode == "4":
             csv_path = input_text("  CSV 文件路径")
             if not csv_path:
@@ -600,7 +704,7 @@ class WizardSweep(WizardBase):
             if not Path(csv_path).is_file():
                 _print(f"  文件不存在: {csv_path}")
                 return None
-            return ("step_5_naming", {"csv": csv_path})
+            return ("step_4b_equation_axes", {"csv": csv_path})
         return None
 
     def step_5_naming(self, data: dict):
@@ -616,6 +720,9 @@ class WizardSweep(WizardBase):
         """v0.9.1:展示 template 的方程系统检测报告,让用户在 naming/pbs 前
         清楚 template 是层流/湍流/双温,以及推荐应改的字段。
 
+        v0.10.0+:把 data["intended_axes"] 传给 detect_equations,末尾消费
+        rep.sweeps_equation_warnings 显示给用户。
+
         纯展示步骤,无交互。检测失败不阻断。
         """
         from .parser import parse_file
@@ -623,16 +730,17 @@ class WizardSweep(WizardBase):
         is_zh = get_lang() == "zh"
         template = data.get("template")
         if not template:
-            return ("step_5_naming", {})
+            return ("step_4c_equation_overrides", {})
         try:
             inp = parse_file(template)
-            rep = detect_equations(inp)
+            intended = data.get("intended_axes")
+            rep = detect_equations(inp, intended_axes=intended)
         except Exception as e:
             if is_zh:
                 _print(f"  ⚠ 检测失败(跳过):{e}")
             else:
                 _print(f"  ⚠ Detection failed (skipping): {e}")
-            return ("step_5_naming", {})
+            return ("step_4c_equation_overrides", {})
         if is_zh:
             _print(f"  Template 方程系统检测:")
             _print(f"    能量模型 : {rep.energy.value}")
@@ -648,18 +756,263 @@ class WizardSweep(WizardBase):
             _print(f"    Species : {rep.n_species}")
         if rep.notes:
             if is_zh:
-                _print(f"  ⚠ 告警:")
+                _print(f"  ⚠ 告警(方程检测自身):")
             else:
-                _print(f"  ⚠ Warnings:")
+                _print(f"  ⚠ Warnings (equation detection):")
             for n in rep.notes:
                 _print(f"    - {n}")
+        # v0.10.0+:消费 sweeps_equation_warnings
+        if rep.sweeps_equation_warnings:
+            if is_zh:
+                _print(f"  ⚠ 你选的 axis 与 template 不兼容:")
+            else:
+                _print(f"  ⚠ Selected axis incompatible with template:")
+            for w in rep.sweeps_equation_warnings:
+                _print(f"    - {w}")
         if is_zh:
             _print(f"  提示:本 wizard 不写湍流/2T preset(由 sweep YAML 字段"
                    f" turbulence/two_temperature 或 REPL `turb`/`2t` 命令处理)。")
         else:
             _print(f"  Note: this wizard does not write turbulence/2T preset"
                    f" (use sweep YAML or REPL `turb`/`2t` commands).")
-        return ("step_5_naming", {})
+        return ("step_4c_equation_overrides", {})
+
+    def step_4b_equation_axes(self, data: dict):
+        """v0.10.0+:引导用户按 turbulence/energy/gas 3 个轴 sweep。
+
+        仅 Cartesian(mode="1")走;其他 mode 静默跳到 step_4a_detect。
+        全 skip → 不注入 sweeps;任一轴选 → 合并到 data["sweeps"](保留 step_4_params
+        已填的 alpha/mach 等)。同时记 intended_axes,供 step_4a_detect 末尾检测
+        与 template 是否不兼容并显示 warning。
+        """
+        is_zh = get_lang() == "zh"
+        # Cartesian gate
+        if data.get("mode") != "1":
+            return ("step_4a_detect", data)
+        # 默认 sweeps(保留 step_4_params 注入的)
+        sweeps: Dict[str, Any] = dict(data.get("sweeps") or {})
+        intended: Dict[str, str] = {}
+
+        # Q1: turbulence
+        if is_zh:
+            q1 = "  要按湍流模型扫吗?"
+        else:
+            q1 = "  Sweep by turbulence?"
+        if confirm(q1, default=False):
+            choices = [
+                ("1", "sst (k-omega-sst)", "sst (k-omega-sst)", "sst"),
+                ("2", "sa (spalart-allmaras)", "sa (spalart-allmaras)", "sa"),
+                ("3", "k-eps (realizable)", "k-eps (realizable)", "keps"),
+                ("4", "goldberg", "goldberg", "goldberg"),
+                ("5", "laminar", "laminar", "laminar"),
+            ]
+            picked = multi_menu("  选湍流模型(空格/逗号分隔多选):", choices)
+            if picked:
+                sweeps["turbulence"] = picked
+                intended["turbulence"] = picked[0]
+
+        # Q2: energy
+        if is_zh:
+            q2 = "  要按能量模型扫吗?"
+        else:
+            q2 = "  Sweep by energy model?"
+        if confirm(q2, default=False):
+            choices = [
+                ("1", "none (完美气体)", "none (perfect gas)", "none"),
+                ("2", "2t (双温)", "2t (two-temp)", "2t"),
+            ]
+            picked = multi_menu("  选能量模型:", choices)
+            if picked:
+                sweeps["energy"] = picked
+                intended["energy"] = picked[0]
+
+        # Q3: gas
+        if is_zh:
+            q3 = "  要按气体类型扫吗?"
+        else:
+            q3 = "  Sweep by gas type?"
+        if confirm(q3, default=False):
+            choices = [
+                ("1", "perfect-gas", "perfect-gas", "perfect-gas"),
+                ("2", "real-gas", "real-gas", "real-gas"),
+                ("3", "multi-temp", "multi-temp", "multi-temp"),
+            ]
+            picked = multi_menu("  选气体类型:", choices)
+            if picked:
+                sweeps["gas"] = picked
+                intended["gas"] = picked[0]
+
+        new_data = dict(data)
+        new_data["sweeps"] = sweeps
+        if intended:
+            new_data["intended_axes"] = intended
+        return ("step_4a_detect", new_data)
+
+    def step_4c_equation_overrides(self, data: dict):
+        """v0.10.0+:per-case 覆盖 I/L/U_ref(turbulence)或温度(energy)。
+
+        触发条件:Cartesian + step_4b 选了至少 1 个 equation axis。
+        Q0: 是否要 per-case 覆盖?Y/n
+          Y → 进入子循环:
+            - 若 sweeps 含 turbulence: 选湍流 model + 输 I/L/U_ref → 再来?
+            - 若 sweeps 含 energy: 选能量 model + 输 T_trans/T_vib 或 reftem
+        Q3: 再来一个湍流覆盖?Y/n(只对 turbulence 循环;YAGNI 不对 energy 循环)
+
+        字段:
+        - data["turbulence"] = {I, L, U_ref, overrides: {<key>: {I, L, U_ref}}}
+        - data["energy_overrides"] = {"2T": {T_trans, T_vib}, "none": {reftem}}
+        """
+        is_zh = get_lang() == "zh"
+        # Gate
+        if data.get("mode") != "1":
+            return ("step_5_naming", data)
+        sweeps = data.get("sweeps") or {}
+        has_turb = bool(sweeps.get("turbulence"))
+        has_energy = bool(sweeps.get("energy"))
+        if not (has_turb or has_energy):
+            return ("step_5_naming", data)
+
+        # Q0
+        if is_zh:
+            q0 = "  要给某些 case 设单独的 I/L/U 或温度吗?"
+        else:
+            q0 = "  Override I/L/U or T for some cases?"
+        if not confirm(q0, default=False):
+            return ("step_5_naming", data)
+
+        template = data.get("template")
+        new_data = dict(data)
+        turb_out: Dict[str, Any] = {}   # {key: {I, L, U_ref}}
+        energy_out: Dict[str, Any] = {}  # {"2T": {T_trans, T_vib}, "none": {reftem}}
+
+        # Turbulence loop
+        if has_turb:
+            tur_choices = [
+                ("1", "sst (k-omega-sst)", "sst (k-omega-sst)"),
+                ("2", "sa (spalart-allmaras)", "sa (spalart-allmaras)"),
+                ("3", "k-eps (realizable)", "k-eps (realizable)"),
+                ("4", "goldberg", "goldberg"),
+            ]
+            tur_value = {"1": "sst", "2": "sa", "3": "keps", "4": "goldberg", "5": "__skip__"}
+            skip_zh = "(跳过湍流覆盖)"
+            skip_en = "(skip turbulence override)"
+            if is_zh:
+                choices = tur_choices + [("5", skip_zh, skip_zh)]
+            else:
+                choices = tur_choices + [("5", skip_en, skip_en)]
+            while True:
+                key = menu("  覆盖哪个湍流模型?", choices, default="5")
+                picked = tur_value[key]
+                if picked == "__skip__":
+                    break
+                # 输 I/L/U_ref
+                default_I = _read_template_value(
+                    template or "", "guiopts", "turbi_tlev", 0.01,
+                )
+                default_L = _read_template_value(
+                    template or "", "guiopts", "turbi_len", 0.01,
+                )
+                default_U = _read_template_value(
+                    template or "", "physics", "refvel", 204.0,
+                )
+                I_str = input_text(
+                    f"    {picked} 湍流强度 I (默认 {default_I})",
+                    default=str(default_I),
+                )
+                L_str = input_text(
+                    f"    {picked} 特征长度 L (默认 {default_L})",
+                    default=str(default_L),
+                )
+                U_str = input_text(
+                    f"    {picked} 参考速度 U_ref (默认 {default_U})",
+                    default=str(default_U),
+                )
+                try:
+                    turb_out[picked] = {
+                        "I": float(I_str),
+                        "L": float(L_str),
+                        "U_ref": float(U_str),
+                    }
+                except ValueError:
+                    if is_zh:
+                        _print(f"  ⚠ 输入非法,跳过 {picked} 覆盖")
+                    else:
+                        _print(f"  ⚠ Invalid input, skip {picked} override")
+                # Q3: 再来?
+                if not confirm(
+                    "  再选一个湍流覆盖?" if is_zh else
+                    "  Another turbulence override?", default=False,
+                ):
+                    break
+
+        # Energy (一次,YAGNI 不循环)
+        if has_energy:
+            energy_choices = [
+                ("1", "2t (双温)", "2t (two-temp)"),
+                ("2", "none (完美气体)", "none (perfect gas)"),
+            ]
+            energy_value = {"1": "2t", "2": "none", "3": "__skip__"}
+            skip_zh = "(跳过能量覆盖)"
+            skip_en = "(skip energy override)"
+            if is_zh:
+                energy_choices.append(("3", skip_zh, skip_zh))
+            else:
+                energy_choices.append(("3", skip_en, skip_en))
+            key = menu("  覆盖哪个能量模型?", energy_choices, default="3")
+            picked = energy_value[key]
+            if picked != "__skip__":
+                if picked == "2t":
+                    default_T = _read_template_value(
+                        template or "", "physics", "reftem", 300.0,
+                    )
+                    T_trans = input_text(
+                        f"    2T 平动温度 T_trans (默认 {default_T})",
+                        default=str(default_T),
+                    )
+                    T_vib = input_text(
+                        "    2T 振动温度 T_vib (默认 300.0)",
+                        default="300.0",
+                    )
+                    try:
+                        energy_out["2T"] = {
+                            "T_trans": float(T_trans),
+                            "T_vib": float(T_vib),
+                        }
+                    except ValueError:
+                        if is_zh:
+                            _print("  ⚠ 输入非法,跳过 2T 覆盖")
+                        else:
+                            _print("  ⚠ Invalid input, skip 2T override")
+                elif picked == "none":
+                    default_T = _read_template_value(
+                        template or "", "physics", "reftem", 300.0,
+                    )
+                    reftem = input_text(
+                        f"    none 平衡温度 reftem (默认 {default_T})",
+                        default=str(default_T),
+                    )
+                    try:
+                        energy_out["none"] = {"reftem": float(reftem)}
+                    except ValueError:
+                        if is_zh:
+                            _print("  ⚠ 输入非法,跳过 none 覆盖")
+                        else:
+                            _print("  ⚠ Invalid input, skip none override")
+
+        # 合并到 data
+        if turb_out:
+            # 顶层默认取第一个(或用 template 默认 — 这里用第一个 override 复制上去)
+            first = next(iter(turb_out.values()))
+            new_data["turbulence"] = {
+                "I": first["I"],
+                "L": first["L"],
+                "U_ref": first["U_ref"],
+                "overrides": turb_out,
+            }
+        if energy_out:
+            new_data["energy_overrides"] = energy_out
+
+        return ("step_5_naming", new_data)
 
     def step_5a_pbs(self, data: dict):
         """v0.9.0 新增:询问 pbs 生成 + 任务名模板。"""

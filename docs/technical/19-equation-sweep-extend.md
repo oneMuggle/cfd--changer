@@ -158,7 +158,73 @@ energy_overrides:
 
 ---
 
-## 19.7 实现位置(代码索引)
+## 19.7 v0.10.0+ Wizard 集成(方程感知步骤)
+
+v0.10.0+ `WizardSweep` 在 `step_4` 与 `step_4a_detect` 之间插 2 个新步骤,
+让用户**向导式**地构造 `sweeps: {turbulence/energy/gas: [...]}` 块,无需手写 YAML。
+
+### 步骤顺序(新 10 步)
+
+```
+step_1_source_dir
+step_2_output
+step_3_mode                # 选 "1"(Cartesian)才进 4b
+step_4_params              # 现有 — alpha/mach 等 sweeps
+step_4b_equation_axes      # 新(Cartesian only)— 选 3 个 axis
+step_4a_detect             # 现有 — 消费 sweeps_equation_warnings
+step_4c_equation_overrides # 新(4b 选了 axis 才出现)— per-case I/L/U 或温度
+step_5_naming
+step_5a_pbs
+step_6_preview
+```
+
+### `step_4b_equation_axes` 三个子问题
+
+每个"Y/n + 多选菜单"模式,合并到 `data["sweeps"]`:
+
+- Q1 turbulence: `sst` / `sa` / `keps` / `goldberg` / `laminar`(可多选)
+- Q2 energy: `none` / `2t`(可多选)
+- Q3 gas: `perfect-gas` / `real-gas` / `multi-temp`(可多选)
+
+Cartesian gate:非 Cartesian 模式静默跳到 `step_4a_detect`,不动 `sweeps`。
+全 skip → 不注入 axis key(等价 v0.10.0 老路径)。
+至少选 1 axis → 同时存 `data["intended_axes"]` 供 `step_4a_detect` 末尾消费。
+
+### `step_4a_detect` 消费 sweeps_equation_warnings
+
+`detect_equations(inp, intended_axes=None)` 在 v0.10.0+ 接受 `intended_axes` 参数,
+比对用户选的 axis 与 template 的 `eqnset_define` v4/v5/v6,发现冲突追加
+`rep.sweeps_equation_warnings` 列表(独立于 `notes`,不污染方程检测自身告警):
+
+| 用户选 | template 状态 | 警告 |
+|---|---|---|
+| `turbulence: sst` | LAMINAR | "SST 选但 template 是 laminar — preset 会被跳过" |
+| `energy: 2t` | `tnoneq_numeqns=0` | "2T 选但 template tnoneq=0 — set_energy_model 会强制设 1" |
+| `gas: multi-temp` | v6=0 | "multi-temp 选但 template v6=0 — set_gas_type 会写 v6=11" |
+
+`step_4a_detect` 末尾新增 `⚠ 你选的 axis 与 template 不兼容:` 段,把 warnings 展示给用户。
+
+### `step_4c_equation_overrides` per-case 覆盖
+
+触发条件:Cartesian + step_4b 选了至少 1 axis。
+- Q0: 要给某些 case 设单独的 I/L/U 或温度?Y/n
+- Q1(选了 turbulence):选湍流 model + 输 I/L/U_ref → 循环
+- Q2(选了 energy):选能量 model + 输 T_trans/T_vib 或 reftem
+
+输出:
+- `data["turbulence"] = {I, L, U_ref, overrides: {<key>: {I, L, U_ref}}}`
+- `data["energy_overrides"] = {"2T": {T_trans, T_vib}, "none": {reftem}}`
+
+下游 `step_6_preview` 喂给 `CaseSweep.from_dict`,与 YAML 手写完全等效。
+
+### 设计文档
+
+详细 spec 见 `docs/superpowers/specs/2026-06-11-wizard-equation-axes-design.md`
+(Status: ✅ 已批准 → v0.10.0 后续 PR)。
+
+---
+
+## 19.8 实现位置(代码索引)
 
 | 概念 | 文件 | 关键符号 |
 |---|---|---|

@@ -118,6 +118,9 @@ class EquationSystemReport:
     # 气体原始索引(v0.9.1 新增,从 eqnset_define 第 2 行第 0 位 v6 取)
     gas_code: Optional[int] = None            # 0=理想 / 1=真实 / 11=双温
     notes: List[str] = field(default_factory=list)  # 警告/说明
+    # v0.10.0+:Wizard step_4b/4c 选的 axis 与 template 不兼容时追加,
+    # 由 step_4a_detect 末尾消费显示。独立于 notes,避免污染方程检测自身的告警。
+    sweeps_equation_warnings: List[str] = field(default_factory=list)
 
     def summary_zh(self) -> str:
         """给 wizard / REPL 显示的简短中文摘要"""
@@ -206,7 +209,42 @@ def _get_values_lines(eqnset_stmt: Stmt) -> List[Stmt]:
 # ============================================================
 
 
-def detect_equations(inp: InpFile) -> EquationSystemReport:
+def _alias_to_enum_str(enum_cls, value: str) -> Optional[str]:
+    """通过 _ENUM_ALIASES(在 sweep.py 注册)把短名转规范名,失败返回 None。
+
+    v0.10.0+:wizard step_4b/4c 接受短名('sst' / '2t' / 'multi-temp'),
+    detect_equations 需要宽容地识别。避免此处重复实现 alias 表,直接
+    复用 sweep._ENUM_ALIASES(同 package,允许循环 import 内部处理)。
+    """
+    if not isinstance(value, str):
+        return None
+    # 1) 直接是规范值
+    try:
+        enum_cls(value)
+        return value
+    except ValueError:
+        pass
+    # 2) 查 alias 表
+    try:
+        from .sweep import _ENUM_ALIASES
+    except ImportError:
+        return None
+    aliases = _ENUM_ALIASES.get(enum_cls, {})
+    canonical = aliases.get(value)
+    if canonical is None:
+        return None
+    # 3) alias → 验证能转成 enum
+    try:
+        enum_cls(canonical)
+    except ValueError:
+        return None
+    return canonical
+
+
+def detect_equations(
+    inp: InpFile,
+    intended_axes: Optional[Dict[str, str]] = None,
+) -> EquationSystemReport:
     """扫描 InpFile 推断:
     1) 能量模型:physics.tnoneq_numeqns(0/1/2)
     2) 湍流模型:顶层 seq.# eqnset_define 块第 1 行 values 101 1 1 v4 v5
@@ -215,6 +253,16 @@ def detect_equations(inp: InpFile) -> EquationSystemReport:
        (v6: 0=PERFECT_GAS / 1=REAL_GAS / 11=MULTI_TEMP)
        NOTE: 不再用 physics.gasnam 判别 — 实测 7 文件全部 gasnam=Air,会误判
     4) 物种数:顶层 infsets(实测 v0.9.1 简化,具体物种枚举留 v0.10+)
+
+    v0.10.0+ 新增 intended_axes(可选):
+        wizard step_4b/4c 收集用户选的 axis 值(短名或规范名),与 template
+        检测结果对比,不兼容时追加 warning 到 rep.sweeps_equation_warnings。
+        规则:
+          - turbulence ≠ LAMINAR 但 template 是 LAMINAR → warn(preset 会跳过)
+          - energy=TWO_TEMP 但 template tnoneq_numeqns=0 → warn(set_energy_model 会强制设 1)
+          - energy=NONE 但 template tnoneq_numeqns=1 → warn(反向冲突)
+          - gas=MULTI_TEMP 但 template v6≠11 → warn(set_gas_type 会写 v6=11)
+          - gas=REAL_GAS 但 template v6=0 → warn(会写 v6=1)
     """
     rep = EquationSystemReport(
         energy=EnergyModel.UNKNOWN,
@@ -309,7 +357,67 @@ def detect_equations(inp: InpFile) -> EquationSystemReport:
             # 若 v0.10+ 引入 species 显式声明(顶层 species_*.Mwt1_*),
             # 则把 gas 从 REAL_GAS 升级为 MIXTURE — v0.9.1 不做(infsets 不等于 species)
 
+    # 5) v0.10.0+:用户选的 axis 与 template 不兼容检查
+    if intended_axes:
+        _check_intended_axes(rep, intended_axes, pb)
+
     return rep
+
+
+def _check_intended_axes(
+    rep: EquationSystemReport,
+    intended_axes: Dict[str, Any],
+    pb: Optional["Block"],
+) -> None:
+    """对比用户选的 axis 与 rep 推断结果,追加 sweeps_equation_warnings。
+
+    只 append,不修改 rep 主体(避免污染 wizard 后续 step 的检测结果)。
+    """
+    # turbulence:非 laminar 选 + template laminar → preset 会被跳过
+    t_user = intended_axes.get("turbulence")
+    if t_user is not None:
+        canonical = _alias_to_enum_str(TurbulenceModel, str(t_user))
+        if canonical is not None and canonical != TurbulenceModel.LAMINAR.value \
+                and rep.turbulence == TurbulenceModel.LAMINAR:
+            rep.sweeps_equation_warnings.append(
+                f"湍流={t_user} 选但 template 是 laminar "
+                f"— preset 会被跳过,SST/SA/k-ε/Goldberg 均不会生效"
+            )
+
+    # energy:TWO_TEMP 选 + template tnoneq=0 → set_energy_model 会强制改 tnoneq=1
+    e_user = intended_axes.get("energy")
+    if e_user is not None:
+        canonical = _alias_to_enum_str(EnergyModel, str(e_user))
+        if canonical is not None:
+            tnoneq_val = pb.get("tnoneq_numeqns") if pb is not None else None
+            if canonical == EnergyModel.TWO_TEMP.value \
+                    and tnoneq_val == 0:
+                rep.sweeps_equation_warnings.append(
+                    f"能量=2T 选但 template tnoneq_numeqns=0 "
+                    f"— set_energy_model 会强制设 1 + 写 vibtem"
+                )
+            elif canonical == EnergyModel.NONE.value \
+                    and tnoneq_val == 1:
+                rep.sweeps_equation_warnings.append(
+                    f"能量=none 选但 template tnoneq_numeqns=1 "
+                    f"— set_energy_model 会改回 0,可能丢失振动温度"
+                )
+
+    # gas:MULTI_TEMP / REAL_GAS 选 + template v6 不一致
+    g_user = intended_axes.get("gas")
+    if g_user is not None:
+        canonical = _alias_to_enum_str(GasModel, str(g_user))
+        if canonical is not None and rep.gas_code is not None:
+            if canonical == GasModel.MULTI_TEMP.value and rep.gas_code != 11:
+                rep.sweeps_equation_warnings.append(
+                    f"气体=multi-temp 选但 template v6={rep.gas_code} "
+                    f"— set_gas_type 会写 v6=11 + 联动 tnoneq=1"
+                )
+            elif canonical == GasModel.REAL_GAS.value and rep.gas_code == 0:
+                rep.sweeps_equation_warnings.append(
+                    f"气体=real-gas 选但 template v6=0(完美气体) "
+                    f"— set_gas_type 会写 v6=1"
+                )
 
 
 # ============================================================

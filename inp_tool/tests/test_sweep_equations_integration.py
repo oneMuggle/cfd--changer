@@ -254,4 +254,4 @@ def test_wizard_sweep_step_4a_detect_prints_report(capsys):
     captured = capsys.readouterr()
     out = captured.out
     assert "k-omega-sst" in out
-    assert result == ("step_5_naming", {})
+    assert result == ("step_4c_equation_overrides", {})
