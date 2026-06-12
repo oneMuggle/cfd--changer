@@ -1,6 +1,6 @@
 # cfd--changer 技术手册(总览)
 
-> **审计:** 2026-06-04 · 章节与 v0.4.2 同步 · 全部示例通过 · 全部链接有效
+> **审计:** 2026-06-12 · 章节与 v0.11.0 同步 · 全部示例通过 · 全部链接有效
 > 本目录是项目各功能模块的**架构/API/实现细节**文档,面向开发者(读代码、改代码、写扩展)。
 
 ---
@@ -10,9 +10,9 @@
 - **总览(本文件)** — 索引 + 选读指南
 - **章节文件** — 每个独立模块/主题一个文件,聚焦单一话题(50-200 行)
 - **命名:** `XX-topic-name.md`,`XX` 是两位数编号
-  - `01-` / `02-` 早期 CFD++ GUI 调研文档
   - `03-` 起的 sweep 模块是当前主线
-  - 后续模块(如有)接 `10-` / `11-` 继续编号
+  - 后续模块(如有)接 `20-` 继续编号
+- **cfd-gui 调研材料**([`../cfd-gui/`](../cfd-gui/))独立成目录,不在本目录收录
 
 ---
 
@@ -20,8 +20,6 @@
 
 | # | 标题 | 内容简介 | 状态 |
 |---|---|---|---|
-| [01-cfd-gui-engineering-handbook](../cfd-gui/CFD_GUI_Engineering_Handbook.md) | CFD++ GUI 工程手册 | CFD++ GUI 控件树 / 接口 / 调用关系(从老项目继承) | 静态 |
-| [02-cfd-gui-call-graph](../cfd-gui/CFD_GUI_CallGraph_v2.md) | CFD++ GUI 调用图 v2 | call graph 详细(从老项目继承) | 静态 |
 | [**03-sweep-overview**](03-sweep-overview.md) | **sweep 模块总览** | 背景 / 目标 / 三入口 / 关键能力 / 风险速览 / 子文档索引 | **当前主线** |
 | [04-sweep-architecture](04-sweep-architecture.md) | sweep 架构 & 数据模型 | 流程图 / 5 个 dataclass / `generate()` 主流程 / overrides / 命名 / manifest / 性能 | 当前主线 |
 | [05-sweep-usage](05-sweep-usage.md) | sweep 三入口详细用法 | Python API / CLI / FastAPI 完整示例 + 配置 schema + 错误处理 | 当前主线 |
