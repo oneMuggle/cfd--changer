@@ -4,6 +4,8 @@
 
 ---
 
+> **速查定位:** 5 个最常用 REPL 命令(快速开始)。REPL 全功能见 [02-repl-tour](02-repl-tour.md),3 个任务向导见 [03-wizard-tasks](03-wizard-tasks.md)。
+
 ## 第 1 步:启动 REPL
 
 ```bash

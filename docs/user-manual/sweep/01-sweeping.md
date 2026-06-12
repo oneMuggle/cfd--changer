@@ -1,6 +1,9 @@
 # 04 — 扫描参数
 
 > **审计:** 2026-06-04 · 章节与 v0.4.2 同步 · 全部示例通过 · 全部链接有效
+
+> **视角定位:** 用户视角(扫哪些字段)。完整 API(Python / CLI / FastAPI)见 [technical/sweep/03-sweep-usage](../../technical/sweep/03-sweep-usage.md)。
+
 ## 1. 什么是"扫描"
 
 `inp_tool` 接受**多个**扫描轴,每个轴有一组值。它会把所有轴**笛卡尔积**展开成 N 个 case:

@@ -9,6 +9,8 @@
 
 ---
 
+> **视角定位:** 用户使用 standalone 版本。打包构建过程见 [technical/release/01-cli-packaging](../../technical/release/01-cli-packaging.md)。
+
 ## 1. 下载
 
 | 平台 | 文件 | 大小 |
