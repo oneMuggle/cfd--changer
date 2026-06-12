@@ -1104,6 +1104,12 @@ class WizardSweep(WizardBase):
                 cfg["naming"] = data["naming"]
             if data.get("manifest_path"):
                 cfg["manifest"] = {"path": data["manifest_path"]}
+            # v0.10.0+:step_4c 产出必须接入(C1)— 否则用户在 wizard 输的
+            # I/L/U_ref / 温度覆盖被静默丢弃
+            if data.get("turbulence"):
+                cfg["turbulence"] = data["turbulence"]
+            if data.get("energy_overrides"):
+                cfg["energy_overrides"] = data["energy_overrides"]
             cs = CaseSweep.from_dict(cfg)
         # v0.8.2:source_dir 必填,直接注入 per_dir 模式
         cs.source_dir = data["source_dir"]
