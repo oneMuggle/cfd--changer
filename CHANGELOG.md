@@ -11,14 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **equations.py**: `set_turbulence_model` / `set_energy_model` / `set_gas_type` 3 个新写函数,改 `eqnset_define` v4/v5/v6 + 联动 `physics.tnoneq_numeqns` / `vibtem` / `reftem`
 - **equations.py**: `EquationRewriteError` 异常 + `EquationRewriteIssue` 数据类
 - **equations.py**: `TurbulencePresetBase.clear_incompatible_fields: bool` 字段 + `apply(inp, model=...)` 签名
+- **equations.py**: `EquationSystemReport.sweeps_equation_warnings: List[str]` 字段(wizard 消费,独立于 notes)
+- **equations.py**: `detect_equations(inp, intended_axes=None)` 接受可选 axis 参数,比对用户选 vs template 状态
 - **sweep.py**: SweepSpec 枚举轴识别(`turbulence` / `energy` / `gas` 三个 key 名)+ 短名 alias(`sst` / `sa` / `2t` / `none` 等)
 - **sweep.py**: `CaseSweep.equation_switches` 字段(opt-out 开关)
 - **sweep.py**: `TurbulenceInit` dataclass + `_resolve_turb_init()` + `turbulence.overrides` per-case 覆盖
 - **sweep.py**: `CaseSweep.energy_overrides` 字段(per-case 温度覆盖)
 - **sweep.py**: `generate()` 末尾循环重排:先切模型 → 选 preset → 应用
 - **cli.py**: `sweep` 子命令加 `--strict-equations` / `--no-switch-turbulence` / `--no-switch-energy` / `--no-switch-gas` flag
-- **tests/**: `test_equation_rewrite.py`(20+ 个单元测试) + `test_sweep_equation_axes.py`(集成测试)
-- **docs/**: `technical/19-equation-sweep-extend.md`(API/YAML/错误表)
+- **wizard.py**: `step_4b_equation_axes` — 向导式选择 turbulence/energy/gas 3 个 axis(仅 Cartesian,8→10 步)
+- **wizard.py**: `step_4c_equation_overrides` — per-case 覆盖 I/L/U_ref 或温度(4b 选了 axis 才出现)
+- **wizard.py**: `_read_template_value` / `multi_menu` helper(模板默认值读取 + 多选菜单)
+- **wizard.py**: `step_4a_detect` 末尾新增 "你选的 axis 与 template 不兼容" 段
+- **tests/**: `test_equation_rewrite.py` / `test_sweep_equation_axes.py` + 8 个 wizard 集成/单元测试文件
+- **docs/**: `technical/19-equation-sweep-extend.md` §19.7 增 "Wizard 集成" 小节
 
 ## [v0.9.1] - 2026-06-11
 

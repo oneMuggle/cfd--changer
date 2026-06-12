@@ -71,6 +71,7 @@ class TestSweepModeCartesian:
             "n",
             "1",
             "{alpha: [0, 5], mach: [0.6, 0.8]}",
+            "n", "n", "n",  # step_4b: 3 axis confirms (全 skip)
             "case_{alpha}_ma{mach}",
             "y",
             "n",
@@ -164,6 +165,7 @@ class TestSweepModeCSV:
             "n",
             "1",
             "{alpha: [0, 4]}",
+            "n", "n", "n",  # step_4b: 3 axis confirms (全 skip)
             "case_{alpha}",
             "y",
             "n",
@@ -205,6 +207,7 @@ class TestSweepSourceDirRequired:
             "n",
             "1",
             "{alpha: [0]}",
+            "n", "n", "n",  # step_4b: 3 axis confirms
             "case_{alpha}",
             "y",
             "n",
@@ -228,6 +231,7 @@ class TestSweepSourceDirRequired:
             "n",
             "1",
             "{alpha: [0]}",
+            "n", "n", "n",  # step_4b: 3 axis confirms
             "case_{alpha}",
             "y",
             "n",
