@@ -113,7 +113,7 @@ conda run -n cfdchanger pip install -e .[yaml]
 inp-tool sweep examples/sweep_demo.yaml --out ./cases
 ```
 
-详见 [07-sweep-friendly-uis.md §1](07-sweep-friendly-uis.md)。
+详见 [05-sweep-friendly-uis.md §1](05-sweep-friendly-uis.md)。
 
 ### 2.4 交互式(-i)
 
@@ -121,7 +121,7 @@ inp-tool sweep examples/sweep_demo.yaml --out ./cases
 inp-tool sweep -i
 ```
 
-走 prompt 序列,所有字段有 default,回车接受。详见 [07-sweep-friendly-uis.md §2](07-sweep-friendly-uis.md)。
+走 prompt 序列,所有字段有 default,回车接受。详见 [05-sweep-friendly-uis.md §2](05-sweep-friendly-uis.md)。
 
 ### 2.5 输出示例
 

@@ -81,7 +81,7 @@ inp-tool sweep examples/mcfd_v2_modified.inp sweep.json --out /tmp/my_sweep
 inp-tool sweep -i
 ```
 
-按提示一步步回答,回车接受默认。详见 [08-多入口 §3](../sweep/08-multiple-uis.md)。
+按提示一步步回答,回车接受默认。详见 [08-多入口 §3](../sweep/05-multiple-uis.md)。
 
 ## 看看生成结果
 
@@ -110,7 +110,7 @@ inp-tool sweep examples/mcfd_v2_modified.inp sweep.json --out /tmp/my_sweep --dr
 
 ## 下一步
 
-- 想扫更多参数,见 [04-扫描参数](../sweep/04-sweeping.md)
-- 想用 YAML 写配置,见 [05-配置文件 §YAML](../sweep/05-config-files.md)
-- 想改其他字段(不只是 alpha/beta/mach),见 [07-字段覆盖](../sweep/07-overrides.md)
-- 出错了?看 [10-常见问题](../sweep/10-faq.md)
+- 想扫更多参数,见 [04-扫描参数](../sweep/01-sweeping.md)
+- 想用 YAML 写配置,见 [05-配置文件 §YAML](../sweep/02-config-files.md)
+- 想改其他字段(不只是 alpha/beta/mach),见 [07-字段覆盖](../sweep/04-overrides.md)
+- 出错了?看 [10-常见问题](../sweep/07-faq.md)

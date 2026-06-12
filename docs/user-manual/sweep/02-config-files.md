@@ -124,7 +124,7 @@ inp-tool sweep mcfd.inp sweep.yaml
 | `output_dir` | ✅ | string | 输出目录,不存在则自动创建 |
 | `sweeps` | ✅ | dict | {字段名: [值列表]} |
 | `naming` | ⬜ | string | 命名模板,空则自动生成 |
-| `overrides` | ⬜ | dict | 字段覆盖规则(详见 [07](./07-overrides.md)) |
+| `overrides` | ⬜ | dict | 字段覆盖规则(详见 [07](./04-overrides.md)) |
 | `freestream` | ⬜ | dict | 来流 preset 配置 |
 | `manifest.path` | ⬜ | string | 索引文件输出路径 |
 | `naming_ext` | ⬜ | string | 文件扩展名,默认 `.inp` |
@@ -140,11 +140,11 @@ sweeps:
 
 ### 4.2 `naming` 字段
 
-Python `str.format(**params)` 风格,**占位符 = sweep 字段名**。详见 [06-命名规则](./06-naming.md)。
+Python `str.format(**params)` 风格,**占位符 = sweep 字段名**。详见 [06-命名规则](./03-naming.md)。
 
 ### 4.3 `overrides` 字段
 
-两种风格,详见 [07-字段覆盖](./07-overrides.md):
+两种风格,详见 [07-字段覆盖](./04-overrides.md):
 
 ```json
 // 风格 1:嵌套
@@ -208,4 +208,4 @@ inp-tool sweep mcfd.inp sweep.yaml --dry-run
 | `JSON parse error` | JSON 语法错(逗号、引号) | 用 `python -m json.tool < sweep.json` 校验 |
 | `template not found` | 路径不对 | 用绝对路径或 cd 到正确目录 |
 
-下一步:[06-命名规则](./06-naming.md) — 怎么让生成的文件名有意义。
+下一步:[06-命名规则](./03-naming.md) — 怎么让生成的文件名有意义。

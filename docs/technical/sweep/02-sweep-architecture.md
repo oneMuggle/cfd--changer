@@ -60,7 +60,7 @@ class FreestreamPreset:
     update_physics: bool = True
 ```
 
-详见 [06-sweep-freestream.md](06-sweep-freestream.md)。
+详见 [04-sweep-freestream.md](04-sweep-freestream.md)。
 
 ### 2.3 CaseSweep(配置聚合)
 

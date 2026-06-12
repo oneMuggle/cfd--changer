@@ -1,6 +1,6 @@
 # 19. 方程感知扩展（v0.10.0）
 
-> **前置章节:** [18-equation-aware-config.md](18-equation-aware-config.md) — v0.9.1 方程感知(检测 + 初始化)
+> **前置章节:** [11-equation-aware-config.md](11-equation-aware-config.md) — v0.9.1 方程感知(检测 + 初始化)
 > **本章目标:** 让 sweep 能 **按 case 切换** 能量/湍流/气体模型,并支持 per-case 初始化参数覆盖。
 
 ---
@@ -241,7 +241,7 @@ Cartesian gate:非 Cartesian 模式静默跳到 `step_4a_detect`,不动 `sweeps`
 ## 19.8 相关文档
 
 - 设计文档(implementation plan,实施中,完成后并入并删除):`docs/plans/2026-06-11_equation-sweep-extend.md`
-- 前置章节:[18-equation-aware-config.md](18-equation-aware-config.md)
-- Sweep 整体架构:[04-sweep-architecture](04-sweep-architecture.md)
-- Sweep YAML schema:[05-sweep-usage](05-sweep-usage.md)
-- 核心模块设计:[13-core-modules](../architecture/13-core-modules.md)
+- 前置章节:[11-equation-aware-config.md](11-equation-aware-config.md)
+- Sweep 整体架构:[02-sweep-architecture](02-sweep-architecture.md)
+- Sweep YAML schema:[03-sweep-usage](03-sweep-usage.md)
+- 核心模块设计:[02-core-modules](../architecture/02-core-modules.md)

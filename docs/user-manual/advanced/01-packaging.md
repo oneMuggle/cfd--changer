@@ -157,7 +157,7 @@ inp-tool sweep --help
 
 ### 7.2 出错信息
 
-binary 报错信息和 Python 版一样(因为代码一样),见 [10-常见问题](../sweep/10-faq.md)。
+binary 报错信息和 Python 版一样(因为代码一样),见 [10-常见问题](../sweep/07-faq.md)。
 
 ### 7.3 与 Python 版对比
 
@@ -174,6 +174,6 @@ inp-tool sweep ...
 
 ## 8. 下一步
 
-- 用法见 [03-快速开始](../basics/03-quickstart.md) / [05-配置文件](../sweep/05-config-files.md)
-- 出错见 [10-FAQ](../sweep/10-faq.md)
-- 想理解 binary 怎么打的见 [../technical/release/10-cli-packaging.md](../technical/release/10-cli-packaging.md)
+- 用法见 [03-快速开始](../basics/03-quickstart.md) / [05-配置文件](../sweep/02-config-files.md)
+- 出错见 [10-FAQ](../sweep/07-faq.md)
+- 想理解 binary 怎么打的见 [../technical/release/01-cli-packaging.md](../technical/release/01-cli-packaging.md)

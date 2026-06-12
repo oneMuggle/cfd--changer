@@ -8,7 +8,7 @@
 
 ## 1. 背景
 
-`05-sweep-usage.md` 覆盖了三入口（Python API / CLI / FastAPI）的**完整 schema**。
+`03-sweep-usage.md` 覆盖了三入口（Python API / CLI / FastAPI）的**完整 schema**。
 本章聚焦 2026-06-09 实际跑过的一次端到端验证：从 0 基础开始、用 CLI 验证能力、
 用 1D/2D sweep 跑出 11 个 case、做物理量手算交叉验证、定位 1 个隐藏 bug
 （`naming_ext` 硬编码）、产出本套流程的固化脚本（`scripts/run_sweep.sh`）。

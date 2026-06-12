@@ -157,7 +157,7 @@ template.inp ───┐
 
 **关键设计:** 每个 case 独立 `copy.deepcopy` 模板,保证不污染源,允许并行/中断/重跑。
 
-详见 [04-sweep-architecture.md](../sweep/04-sweep-architecture.md)。
+详见 [02-sweep-architecture.md](../sweep/02-sweep-architecture.md)。
 
 ---
 
@@ -165,10 +165,10 @@ template.inp ───┐
 
 | 入口 | 触发方式 | 对应源码 | 文档 |
 |---|---|---|---|
-| **Python API** | `from inp_tool import parse, write, diff, generate, ...` | `inp_tool/__init__.py` | [05-sweep-usage.md §1](../sweep/05-sweep-usage.md) |
-| **CLI** | `inp-tool <subcmd> ...`(安装后)/ `python -m inp_tool` | `inp_tool/cli.py:main` | [05-sweep-usage.md §2](../sweep/05-sweep-usage.md) |
-| **FastAPI** | `inp-tool-api` / `python -m inp_tool.api` | `inp_tool/api.py:main` | [05-sweep-usage.md §3](../sweep/05-sweep-usage.md) |
-| **Web GUI** | `inp-tool-api` 启动后访问 `/` | `inp_tool/web/index.html` | [07-sweep-friendly-uis.md §3](../sweep/07-sweep-friendly-uis.md) |
+| **Python API** | `from inp_tool import parse, write, diff, generate, ...` | `inp_tool/__init__.py` | [03-sweep-usage.md §1](../sweep/03-sweep-usage.md) |
+| **CLI** | `inp-tool <subcmd> ...`(安装后)/ `python -m inp_tool` | `inp_tool/cli.py:main` | [03-sweep-usage.md §2](../sweep/03-sweep-usage.md) |
+| **FastAPI** | `inp-tool-api` / `python -m inp_tool.api` | `inp_tool/api.py:main` | [03-sweep-usage.md §3](../sweep/03-sweep-usage.md) |
+| **Web GUI** | `inp-tool-api` 启动后访问 `/` | `inp_tool/web/index.html` | [05-sweep-friendly-uis.md §3](../sweep/05-sweep-friendly-uis.md) |
 
 ### 5.1 console_script 声明(pyproject.toml)
 
@@ -254,9 +254,9 @@ pip install .[build] && pyinstaller inp_tool_onedir.spec
 | 版本 | 新增 | 章节文档 |
 |---|---|---|
 | v0.2 | parser / writer / model / diff + CLI | 本章 §2-§4 |
-| v0.3 | Python 包工程化(pyproject / pytest / FastAPI) | [11-ci-cd.md](../release/11-ci-cd.md) |
-| v0.4.2 | sweep 批量生成 + 三入口 | [03-09 sweep 全章节](../sweep/03-sweep-overview.md) |
-| v0.4.x | onedir 打包 + preserve_format(后续小版本) | [10-cli-packaging.md §4](../release/10-cli-packaging.md) |
+| v0.3 | Python 包工程化(pyproject / pytest / FastAPI) | [02-ci-cd.md](../release/02-ci-cd.md) |
+| v0.4.2 | sweep 批量生成 + 三入口 | [03-09 sweep 全章节](../sweep/01-sweep-overview.md) |
+| v0.4.x | onedir 打包 + preserve_format(后续小版本) | [01-cli-packaging.md §4](../release/01-cli-packaging.md) |
 
 ---
 
@@ -264,12 +264,12 @@ pip install .[build] && pyinstaller inp_tool_onedir.spec
 
 | 文件 | 主题 |
 |---|---|
-| [03-sweep-overview](../sweep/03-sweep-overview.md) | sweep 总览(背景/三入口/风险) |
-| [04-sweep-architecture](../sweep/04-sweep-architecture.md) | sweep 数据模型 + 主流程 |
-| [05-sweep-usage](../sweep/05-sweep-usage.md) | 三入口详细用法 |
-| [10-cli-packaging](../release/10-cli-packaging.md) | CLI 设计与 PyInstaller 打包 |
-| [11-ci-cd](../release/11-ci-cd.md) | CI/CD matrix + environment.yml |
-| [13-core-modules](13-core-modules.md) | parser / writer / model / diff 4 模块详细 |
+| [01-sweep-overview](../sweep/01-sweep-overview.md) | sweep 总览(背景/三入口/风险) |
+| [02-sweep-architecture](../sweep/02-sweep-architecture.md) | sweep 数据模型 + 主流程 |
+| [03-sweep-usage](../sweep/03-sweep-usage.md) | 三入口详细用法 |
+| [01-cli-packaging](../release/01-cli-packaging.md) | CLI 设计与 PyInstaller 打包 |
+| [02-ci-cd](../release/02-ci-cd.md) | CI/CD matrix + environment.yml |
+| [02-core-modules](02-core-modules.md) | parser / writer / model / diff 4 模块详细 |
 
 ---
 

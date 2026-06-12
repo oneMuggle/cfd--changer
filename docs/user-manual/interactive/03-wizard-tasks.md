@@ -269,5 +269,5 @@ inp> wizard diff
 
 ## 下一步
 
-- [16-repl-quickstart.md](./16-repl-quickstart.md) — 5 分钟快速跑通
-- [17-repl-tour.md](./17-repl-tour.md) — REPL 全功能
+- [01-repl-quickstart.md](./01-repl-quickstart.md) — 5 分钟快速跑通
+- [02-repl-tour.md](./02-repl-tour.md) — REPL 全功能

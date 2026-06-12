@@ -70,11 +70,11 @@
 | `inp_tool/tests/test_sweep_case_dir.py` (新) | per-case 目录模式全套测试 | +220 |
 | `inp_tool/tests/test_sweep_copy_strategy.py` (新) | copy / hardlink / symlink 三模式 | +180 |
 | `inp_tool/tests/test_sweep_backward.py` | 加断言:`source_dir=None` 时输出仍是扁平 .inp 文件 | +20 |
-| `docs/technical/sweep/04-sweep-architecture.md` | 加 §9 整算例目录模式 + 流程图 | +60 |
-| `docs/technical/sweep/05-sweep-usage.md` | 加 §7 实战案例(基于 `reference/suanli`) | +100 |
-| `docs/user-manual/interactive/18-wizard-tasks.md` | wizard 章节加源目录步骤 | +30 |
+| `docs/technical/sweep/02-sweep-architecture.md` | 加 §9 整算例目录模式 + 流程图 | +60 |
+| `docs/technical/sweep/03-sweep-usage.md` | 加 §7 实战案例(基于 `reference/suanli`) | +100 |
+| `docs/user-manual/interactive/03-wizard-tasks.md` | wizard 章节加源目录步骤 | +30 |
 | `CHANGELOG.md` | v0.8.0 段 | +15 |
-| **本计划文档** | 实施完成后归档到 `docs/technical/sweep/17-sweep-case-dir.md`,**删除** plans 版 | +300 |
+| **本计划文档** | 实施完成后归档到 `docs/technical/sweep/10-sweep-case-dir.md`,**删除** plans 版 | +300 |
 
 净代码 +450(含测试),文档 +200。
 
@@ -294,15 +294,15 @@ def _match_any(name: str, patterns: List[str]) -> bool:
 - [ ] 7.3 smoke:对 `reference/suanli` 真实跑(因含 544MB,需 gitignore 输出)
 
 ### 阶段 8 — 文档与收尾
-- [ ] 8.1 `04-sweep-architecture.md` 加 §9
-- [ ] 8.2 `05-sweep-usage.md` 加 §7 实战
-- [ ] 8.3 `user-manual/18-wizard-tasks.md` wizard 步骤
+- [ ] 8.1 `02-sweep-architecture.md` 加 §9
+- [ ] 8.2 `03-sweep-usage.md` 加 §7 实战
+- [ ] 8.3 `user-manual/03-wizard-tasks.md` wizard 步骤
 - [ ] 8.4 `CHANGELOG.md` v0.8.0 段
 - [ ] 8.5 覆盖率 ≥ 80%
 - [ ] 8.6 `simplify` + `code-review` agent
 - [ ] 8.7 commit + push + PR
 - [ ] 8.8 监控 CI + merge + 清理分支
-- [ ] 8.9 归档本计划 → `docs/technical/sweep/17-sweep-case-dir.md`,**删除** plans 版
+- [ ] 8.9 归档本计划 → `docs/technical/sweep/10-sweep-case-dir.md`,**删除** plans 版
 
 ## 7. 风险
 

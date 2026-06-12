@@ -145,7 +145,7 @@ end
 
 ### 3.4 `options` 块
 
-> 167 条语句,数值方法 / 输出频率 / 隐式 / 多重网格 的"大杂烩"。sweep 不直接改这里;但 `07-overrides.md` 里的"高级字段覆盖"经常涉及(`ntplto` / `limtvd` / `mg_*` / `fg_*`)。下面分组列。
+> 167 条语句,数值方法 / 输出频率 / 隐式 / 多重网格 的"大杂烩"。sweep 不直接改这里;但 `04-overrides.md` 里的"高级字段覆盖"经常涉及(`ntplto` / `limtvd` / `mg_*` / `fg_*`)。下面分组列。
 
 #### 3.4.1 输出频率(IO)
 
@@ -406,7 +406,7 @@ end
 
 ## 4. sweep 关注的字段
 
-下表在 [04-sweeping.md §2](../sweep/04-sweeping.md) 基础上,给每个 `aero_*` 字段加了"对应 sweep 轴"列。`sweep` 真正改的字段是 §3.6 中加粗的 8 个,加 §3.5 中的 7 个 `ref*` 字段:
+下表在 [01-sweeping.md §2](../sweep/01-sweeping.md) 基础上,给每个 `aero_*` 字段加了"对应 sweep 轴"列。`sweep` 真正改的字段是 §3.6 中加粗的 8 个,加 §3.5 中的 7 个 `ref*` 字段:
 
 ### 4.1 主 sweep 轴(几何分解后写进 `guiopts`)
 
@@ -441,7 +441,7 @@ end
 | `aero_altid` | 高度 / 湍流强度 | m 或 % | `altid` | 改这个需手动 `overrides.guiopts.aero_altid` |
 | `aero_deltat` | 温差 | K | `deltat` | 改这个需手动 `overrides.guiopts.aero_deltat` |
 
-详见 [07-overrides.md](../sweep/07-overrides.md)。
+详见 [04-overrides.md](../sweep/04-overrides.md)。
 
 ---
 
@@ -570,7 +570,7 @@ for stmt in guiopts.stmts:
     print(stmt.keyword, stmt.values)
 ```
 
-详见 [08-multiple-uis.md §4](../sweep/08-multiple-uis.md) Python API 段;CLI / FastAPI 速查见本目录兄弟章节(13-cli-api-reference.md,计划中)。
+详见 [05-multiple-uis.md §4](../sweep/05-multiple-uis.md) Python API 段;CLI / FastAPI 速查见本目录兄弟章节(02-cli-api-reference.md,计划中)。
 
 ---
 
@@ -589,4 +589,4 @@ for stmt in guiopts.stmts:
 >
 > `iofiles` 行的差异主要来自"14+14 类文件 fn 字段被合并展示";`options` / `physics` 的几行差异是同一字段多次出现被合并。若发现本章有遗漏,提 issue。
 
-下一步:CLI / FastAPI / Python API 三套入口的速查 — 见本目录兄弟章节(13-cli-api-reference.md,计划中)。
+下一步:CLI / FastAPI / Python API 三套入口的速查 — 见本目录兄弟章节(02-cli-api-reference.md,计划中)。
