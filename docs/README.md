@@ -31,6 +31,10 @@
 → [`technical/README.md`](technical/README.md) — 5 子目录索引 + 选读指南
 → [`../CLAUDE.md`](../CLAUDE.md) — 项目硬约束(conda / Win7 / Py3.8)
 
+### 不知道从哪读起?
+
+→ [INDEX.md](INDEX.md) — 跨维度导航(按主题 / 按受众 / 按任务 三种方式)
+
 ### 想跟进进行中的设计
 
 → [`superpowers/specs/README.md`](superpowers/specs/README.md) — spec 列表 + STATUS
