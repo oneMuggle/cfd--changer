@@ -4,7 +4,7 @@
 >
 > 关注:**怎么用** / **怎么用好**,不涉及内部架构、源码、测试。
 >
-> 想了解**为什么这样设计**、**怎么实现的**,看 [../technical/](../technical/)。
+> 想了解**为什么这样设计**、**怎么实现的**,看 [`../technical/`](../technical/)。
 
 ---
 
@@ -12,73 +12,60 @@
 
 | 你的时间 | 读什么 |
 |---|---|
-| 5 分钟 | [03-快速开始](basics/03-quickstart.md) — 跑通第一个批量生成 |
-| 30 分钟 | [04-扫描参数](sweep/01-sweeping.md) + [05-配置文件](sweep/02-config-files.md) |
-| 1 小时 | 完整读 01-06,熟悉所有概念 |
-| 1 周 | 加上 07-10,处理所有边界情况 |
+| 5 分钟 | [`basics/03-快速开始`](basics/03-quickstart.md) — 跑通第一个批量生成 |
+| 30 分钟 | [`sweep/01-扫描参数`](sweep/01-sweeping.md) + [`sweep/02-配置文件`](sweep/02-config-files.md) |
+| 1 小时 | 完整读 basics/ + sweep/ ,熟悉所有概念 |
+| 1 周 | 加上 interactive/ + reference/ + advanced/ ,处理所有边界情况 |
 
-## 2. 章节目录
+## 2. 子目录索引
 
-| # | 标题 | 内容简介 | 阅读时间 |
+| 子目录 | 主题 | 章节数 | 起点章节 |
 |---|---|---|---|
-| [01-introduction](basics/01-introduction.md) | 介绍:这是给谁用的 | `inp_tool` 是什么 / 解决什么 / 不解决什么 | 3 分钟 |
-| [02-installation](basics/02-installation.md) | 安装 | 系统要求 / conda 环境 / 离线安装 / 验证 | 5 分钟 |
-| [03-quickstart](basics/03-quickstart.md) | 快速开始 | 5 分钟跑通第一个批量生成,三种姿势 | 5 分钟 |
-| [01-sweeping](sweep/01-sweeping.md) | 扫描参数 | 可扫哪些字段 / 笛卡尔积 / 来流参数 / 几何分解 | 15 分钟 |
-| [02-config-files](sweep/02-config-files.md) | 配置文件 | JSON vs YAML vs CLI 怎么选 / 字段详解 | 15 分钟 |
-| [03-naming](sweep/03-naming.md) | 命名规则 | `str.format` 模板 / 格式说明符 / 校验规则 | 10 分钟 |
-| [04-overrides](sweep/04-overrides.md) | 字段覆盖 | 改 alpha/ma 之外的字段(时间步、输出频率等) | 15 分钟 |
-| [05-multiple-uis](sweep/05-multiple-uis.md) | 多入口使用 | CLI / Python / Web GUI / 交互式 / Shell 补全 怎么选 | 15 分钟 |
-| [06-examples](sweep/06-examples.md) | 完整示例 | 6 个端到端真实场景 | 20 分钟 |
-| [07-faq](sweep/07-faq.md) | 常见问题 | 安装/运行/几何分解/路径/性能/Web GUI/调试 | 边用边查 |
-| [01-packaging](advanced/01-packaging.md) | 打包与分发 | PyInstaller onedir / standalone CLI / cross-platform | 10 分钟 |
-| [01-mcfd-inp-field-reference](reference/01-mcfd-inp-field-reference.md) | mcfd.inp 完整字段参考 | 10 块 × 全部字段, sweep 字段映射 | 30 分钟 |
-| [02-cli-api-reference](reference/02-cli-api-reference.md) | CLI / FastAPI / Python 速查 | 7 子命令 + 12 端点 + 24 符号 | 10 分钟 |
-| [02-software-tutorial](advanced/02-software-tutorial.md) | 端到端教程 | 5 个真实工作流 (alpha-Mach / Web GUI / CI / 单文件 / SLURM) | 30 分钟 |
-| [03-glossary](reference/03-glossary.md) | 术语表 | A-Z 80+ 词条 | 边用边查 |
-| [01-repl-quickstart](interactive/01-repl-quickstart.md) | REPL 快速开始 (v0.7.x+) | 5 个最常用 REPL 命令 + 直接命令行模式 | 5 分钟 |
-| [02-repl-tour](interactive/02-repl-tour.md) | REPL 全功能指南 | 全部命令分组 + 会话变量 + Tab 补全 + 历史 + i18n | 20 分钟 |
-| [03-wizard-tasks](interactive/03-wizard-tasks.md) | 任务向导 (3 个 wizard) | `wizard modify-file` / `wizard sweep` / `wizard diff` 步骤详解 | 15 分钟 |
+| [`basics/`](basics/README.md) | 入门(介绍 / 安装 / 快速开始) | 3 | [01-introduction](basics/01-introduction.md) |
+| [`sweep/`](sweep/README.md) | sweep 入门到精通(含 FAQ) | 7 | [01-sweeping](sweep/01-sweeping.md) |
+| [`interactive/`](interactive/README.md) | REPL + Wizard | 3 | [01-repl-quickstart](interactive/01-repl-quickstart.md) |
+| [`reference/`](reference/README.md) | 字段参考 + CLI/API 速查 + 术语表 | 3 | [01-mcfd-inp-field-reference](reference/01-mcfd-inp-field-reference.md) |
+| [`advanced/`](advanced/README.md) | 打包 + 端到端教程 | 2 | [01-packaging](advanced/01-packaging.md) |
 
 ## 3. 选读指南
 
 ### 3.1 我是工程师,想扫一组参数
 
-→ [03-快速开始](basics/03-quickstart.md) 跑通第一个
-→ [04-扫描参数](sweep/01-sweeping.md) 看能扫什么字段
-→ [05-配置文件](sweep/02-config-files.md) 写 JSON / YAML
-→ [09-例 1](sweep/06-examples.md) 直接抄模板
+→ [`basics/03-快速开始`](basics/03-quickstart.md) 跑通第一个
+→ [`sweep/01-扫描参数`](sweep/01-sweeping.md) 看能扫什么字段
+→ [`sweep/02-配置文件`](sweep/02-config-files.md) 写 JSON / YAML
+→ [`sweep/06-例`](sweep/06-examples.md) 直接抄模板
 
 ### 3.2 我想改 alpha/ma 之外的字段
 
-→ [07-字段覆盖](sweep/04-overrides.md)
+→ [`sweep/04-字段覆盖`](sweep/04-overrides.md)
 → 看 `inp-tool parse tpl.inp -b tsteps -f` 拿模板字段名
 
 ### 3.3 我想集成到自己代码(Python)
 
-→ [08-多入口 §4](sweep/05-multiple-uis.md) Python API
-→ [09-例 4 / 例 5](sweep/06-examples.md) 端到端模板
+→ [`sweep/05-多入口 §4`](sweep/05-multiple-uis.md) Python API
+→ [`sweep/06-例 4 / 例 5`](sweep/06-examples.md) 端到端模板
 
 ### 3.4 老板/同事不爱用命令行
 
-→ [08-多入口 §5](sweep/05-multiple-uis.md) Web GUI
+→ [`sweep/05-多入口 §5`](sweep/05-multiple-uis.md) Web GUI
 → 启动 `python run_server.py`,浏览器开 `http://127.0.0.1:8765/`
 
 ### 3.5 出错了
 
-→ [10-FAQ](sweep/07-faq.md) 90% 的问题都有
+→ [`sweep/07-FAQ`](sweep/07-faq.md) 90% 的问题都有
 → 实在不行提 issue: <https://github.com/oneMuggle/cfd--changer/issues>
 
 ### 3.6 我想查某个 .inp 字段是什么意思
 
-→ [01-mcfd-inp-field-reference](reference/01-mcfd-inp-field-reference.md) 完整字段表(10 块 × 全部字段)
+→ [`reference/01-mcfd-inp-field-reference`](reference/01-mcfd-inp-field-reference.md) 完整字段表(10 块 × 全部字段)
 → §4 节专列 sweep 关注的字段(对应 sweep 轴)
 
 ### 3.7 我想用交互式 REPL / wizard(不爱记命令)
 
-→ [01-repl-quickstart](interactive/01-repl-quickstart.md) 5 个最常用 REPL 命令
-→ [02-repl-tour](interactive/02-repl-tour.md) REPL 全功能
-→ [03-wizard-tasks](interactive/03-wizard-tasks.md) 3 个任务向导(modify-file / sweep / diff)
+→ [`interactive/01-repl-quickstart`](interactive/01-repl-quickstart.md) 5 个最常用 REPL 命令
+→ [`interactive/02-repl-tour`](interactive/02-repl-tour.md) REPL 全功能
+→ [`interactive/03-wizard-tasks`](interactive/03-wizard-tasks.md) 3 个任务向导(modify-file / sweep / diff)
 
 ## 4. 与其他文档的关系
 
@@ -93,18 +80,18 @@
 ## 5. 文档维护规则
 
 - **不保留历史版本** — 过期内容直接覆盖
-- **新功能加章节** — 从下一个可用编号继续(当前已用到 `18-`)
+- **新功能加章节** — 选主题所属子目录,编号接子目录内下一个可用号
 - **示例代码必须能跑** — 用户复制粘贴就跑不通会很挫败
 - **截图 / 录屏** — 当前无(待加);如有 v0.4 之后的 GUI 更新,加 `screenshots/` 子目录
 - **英文版** — 当前仅中文;如有需求,起 `docs/user-manual-en/`
 
 ## 6. 快速跳转
 
-- **安装:** [02-安装](basics/02-installation.md)
-- **5 分钟上手:** [03-快速开始](basics/03-quickstart.md) 或 [16-REPL-快速开始](interactive/01-repl-quickstart.md)
-- **用 REPL / wizard:** [02-repl-tour](interactive/02-repl-tour.md) + [03-wizard-tasks](interactive/03-wizard-tasks.md)
-- **看示例:** [09-完整示例](sweep/06-examples.md)
-- **查 .inp 字段:** [01-mcfd-inp-field-reference](reference/01-mcfd-inp-field-reference.md)
-- **用 CLI / API:** [02-cli-api-reference](reference/02-cli-api-reference.md)
-- **遇到问题:** [10-FAQ](sweep/07-faq.md)
-- **想理解内部:** [../technical/](../technical/)
+- **安装:** [`basics/02-安装`](basics/02-installation.md)
+- **5 分钟上手:** [`basics/03-快速开始`](basics/03-quickstart.md) 或 [`interactive/01-REPL-快速开始`](interactive/01-repl-quickstart.md)
+- **用 REPL / wizard:** [`interactive/02-repl-tour`](interactive/02-repl-tour.md) + [`interactive/03-wizard-tasks`](interactive/03-wizard-tasks.md)
+- **看示例:** [`sweep/06-完整示例`](sweep/06-examples.md)
+- **查 .inp 字段:** [`reference/01-mcfd-inp-field-reference`](reference/01-mcfd-inp-field-reference.md)
+- **用 CLI / API:** [`reference/02-cli-api-reference`](reference/02-cli-api-reference.md)
+- **遇到问题:** [`sweep/07-FAQ`](sweep/07-faq.md)
+- **想理解内部:** [`../technical/`](../technical/)
