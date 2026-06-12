@@ -244,4 +244,4 @@ Cartesian gate:非 Cartesian 模式静默跳到 `step_4a_detect`,不动 `sweeps`
 - 前置章节:[18-equation-aware-config.md](18-equation-aware-config.md)
 - Sweep 整体架构:[04-sweep-architecture](04-sweep-architecture.md)
 - Sweep YAML schema:[05-sweep-usage](05-sweep-usage.md)
-- 核心模块设计:[13-core-modules](13-core-modules.md)
+- 核心模块设计:[13-core-modules](../architecture/13-core-modules.md)

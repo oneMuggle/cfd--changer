@@ -21,7 +21,7 @@
 
 | # | 标题 | 内容简介 | 阅读时间 |
 |---|---|---|---|
-| [01-introduction](01-introduction.md) | 介绍:这是给谁用的 | `inp_tool` 是什么 / 解决什么 / 不解决什么 | 3 分钟 |
+| [01-introduction](basics/01-introduction.md) | 介绍:这是给谁用的 | `inp_tool` 是什么 / 解决什么 / 不解决什么 | 3 分钟 |
 | [02-installation](basics/02-installation.md) | 安装 | 系统要求 / conda 环境 / 离线安装 / 验证 | 5 分钟 |
 | [03-quickstart](basics/03-quickstart.md) | 快速开始 | 5 分钟跑通第一个批量生成,三种姿势 | 5 分钟 |
 | [04-sweeping](sweep/04-sweeping.md) | 扫描参数 | 可扫哪些字段 / 笛卡尔积 / 来流参数 / 几何分解 | 15 分钟 |

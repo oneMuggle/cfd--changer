@@ -342,7 +342,7 @@ v0.4+ 引入三个字段,使 `write_preserve` 能还原原文件缩进:
 | `same` | keyword+values+children 全等 | 值 | 值 |
 
 > 注意:任务描述说"4 种类型 (added/removed/changed/moved)",**实际实现没有 `moved` 类型**。同一位置的内容不变 → `same`;内容变 → `modify`;行号变了但内容不变(被新行挤出)→ 仍判为 `same`。
-> 这是已知的设计简化(见 [`09-sweep-risks-roadmap`](09-sweep-risks-roadmap.md) 风险登记)。
+> 这是已知的设计简化(见 [`09-sweep-risks-roadmap`](../sweep/09-sweep-risks-roadmap.md) 风险登记)。
 
 ### 4.3 配对策略
 
@@ -437,7 +437,7 @@ except OSError as e:
     logger.error("parse_file failed: %s", e)
 ```
 
-**CLI / API 层**会进一步包装(见 [`inp_tool/cli.py`](../../inp_tool/inp_tool/cli.py) 与 [`05-sweep-usage`](05-sweep-usage.md) §3)。
+**CLI / API 层**会进一步包装(见 [`inp_tool/cli.py`](../../inp_tool/inp_tool/cli.py) 与 [`05-sweep-usage`](../sweep/05-sweep-usage.md) §3)。
 
 ### 5.4 错误处理速查表
 
@@ -473,7 +473,7 @@ except OSError as e:
 | `test_sweep_yaml.py` | ~4 KB | sweep YAML | YAML 解析/校验 |
 | `conftest.py` | ~1.5 KB | fixtures | 路径注入、examples / external_inp_dir |
 
-> **关于 "11 个文件"**:任务描述里说 "11 个文件",实际统计为 13 个 `test_*.py` + 1 个 `conftest.py` = 14 个文件;`test_*.py` 中 4 个专门覆盖核心模块(`test_parser` / `test_writer` / `test_diff` / `test_api`),其他 9 个是 sweep 相关的。详见 [`08-sweep-testing`](08-sweep-testing.md)。
+> **关于 "11 个文件"**:任务描述里说 "11 个文件",实际统计为 13 个 `test_*.py` + 1 个 `conftest.py` = 14 个文件;`test_*.py` 中 4 个专门覆盖核心模块(`test_parser` / `test_writer` / `test_diff` / `test_api`),其他 9 个是 sweep 相关的。详见 [`08-sweep-testing`](../sweep/08-sweep-testing.md)。
 
 ### 6.2 公共 fixture(`conftest.py`)
 
@@ -524,6 +524,6 @@ conda run -n cfdchanger pytest inp_tool/tests/test_parser.py \
 ## §7 进一步阅读
 
 - 整体架构(包结构图、数据流):[`12-architecture-overview`](12-architecture-overview.md)
-- sweep 模块怎么用这些核心模块:[`04-sweep-architecture`](04-sweep-architecture.md) §3
+- sweep 模块怎么用这些核心模块:[`04-sweep-architecture`](../sweep/04-sweep-architecture.md) §3
 - CLI / API 速查(用户视角):[`../user-manual/reference/13-cli-api-reference`](../user-manual/reference/13-cli-api-reference.md)
 - mcfd.inp 字段参考(数据视角):[`../user-manual/reference/12-mcfd-inp-field-reference`](../user-manual/reference/12-mcfd-inp-field-reference.md)

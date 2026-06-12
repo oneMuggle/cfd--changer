@@ -170,4 +170,4 @@ inp-tool info tpl.inp
 inp-tool parse tpl.inp -b tsteps -f
 ```
 
-下一步:[08-多入口使用](08-multiple-uis.md) — CLI / Python / Web GUI 怎么选。
+下一步:[08-多入口使用](./08-multiple-uis.md) — CLI / Python / Web GUI 怎么选。

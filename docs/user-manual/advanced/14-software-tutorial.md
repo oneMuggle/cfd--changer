@@ -37,7 +37,7 @@
 
 | 项 | 值 | 备注 |
 |---|---|---|
-| `inp-tool` | 已装,`conda run -n cfdchanger inp-tool --version` 输出 `inp-tool v0.4.0` | 见 [02-安装](02-installation.md) |
+| `inp-tool` | 已装,`conda run -n cfdchanger inp-tool --version` 输出 `inp-tool v0.4.0` | 见 [02-安装](../basics/02-installation.md) |
 | 模板文件 | `inp_tool/examples/mcfd_v2_modified.inp`(随项目提供,~43 KB) | 路径相对仓库根 |
 | 工作目录 | 任意空目录(本教程用 `out_aero`) | `mkdir -p out_aero` |
 | 配置工具 | 三选一:CLI 快捷 / YAML / JSON | 本教程用 CLI 快捷(最快) |
@@ -146,7 +146,7 @@ conda run -n cfdchanger inp-tool-api
 | 1 | 浏览器开 `http://127.0.0.1:8765/` | 左侧"inp 文件路径"输入框 | 把模板的**绝对路径**粘进去(Windows 写 `D:\...`,Linux 写 `/home/...`),点"加载" |
 | 2 | 左侧块列表点 `guiopts` | 主区出现所有 aero_* / cfl* 等字段 | 确认要扫的字段(`aero_alpha` / `aero_ma` / `aero_temp`)存在 |
 | 3 | 顶栏点 **Sweep** 切到扫描视图 | "扫描参数" 表单 | 填 alpha = `0, 4, 8`,mach = `0.6, 0.8`,输出目录 = `./sweep_cases`,命名 = `case_aoa{alpha:02.0f}_ma{mach:.2f}.inp` |
-| 4 | 点 **生成** | 弹窗显示 `generated 6 cases -> ./sweep_cases` | 如果 4xx/5xx 看 [10-FAQ §Web GUI](10-faq.md) |
+| 4 | 点 **生成** | 弹窗显示 `generated 6 cases -> ./sweep_cases` | 如果 4xx/5xx 看 [10-FAQ §Web GUI](../sweep/10-faq.md) |
 | 5 | 文件管理器去 `./sweep_cases/` | 取走 6 个 `.inp` + `manifest.json` | 邮件 / 飞书 / 共享盘都行 |
 
 ### 3.3 预期输出
@@ -255,7 +255,7 @@ git add ci/ .github/ && git commit -m "ci: baseline sweep" && git push origin ma
 
 **目标:** 教程 1 教了"扫多个 case",但实际工作里也常需要"就改一个值",比如把 baseline 的 `cflbot` 从 0.005 改成 0.001(收敛出问题先降 CFL)。本教程用 `inp-tool set` 改一个值,用 `inp-tool diff` 验证只动了那一处。
 
-> [04-扫描参数](04-sweeping.md) 详述了"扫多个 case"姿势,本教程聚焦"单文件原地改"。
+> [04-扫描参数](../sweep/04-sweeping.md) 详述了"扫多个 case"姿势,本教程聚焦"单文件原地改"。
 
 ### 5.1 准备
 
@@ -436,15 +436,15 @@ jobs.json                    # 本教程产物(case_id -> job_id 映射)
 
 | # | 入口 | 产物 | 用时 | 失败时看 |
 |---|---|---|---|---|
-| 1 | CLI `sweep` | 6 个 .inp + manifest | 5 分钟 | [03-快速开始](03-quickstart.md) §姿势 A |
-| 2 | Web GUI | 同上 | 10 分钟(含讲解) | [10-FAQ §Web GUI](10-faq.md) |
-| 3 | GitHub Actions | artifact zip | 15 分钟(配 CI) | [10-FAQ §CI](10-faq.md) |
-| 4 | CLI `set` + `diff` | 1 个新 .inp | 2 分钟 | [03-快速开始](03-quickstart.md) §姿势 A 之后 |
-| 5 | Python API + sbatch | 6 个 job_id | 30 分钟(集群需排队) | [10-FAQ §集群](10-faq.md) |
+| 1 | CLI `sweep` | 6 个 .inp + manifest | 5 分钟 | [03-快速开始](../basics/03-quickstart.md) §姿势 A |
+| 2 | Web GUI | 同上 | 10 分钟(含讲解) | [10-FAQ §Web GUI](../sweep/10-faq.md) |
+| 3 | GitHub Actions | artifact zip | 15 分钟(配 CI) | [10-FAQ §CI](../sweep/10-faq.md) |
+| 4 | CLI `set` + `diff` | 1 个新 .inp | 2 分钟 | [03-快速开始](../basics/03-quickstart.md) §姿势 A 之后 |
+| 5 | Python API + sbatch | 6 个 job_id | 30 分钟(集群需排队) | [10-FAQ §集群](../sweep/10-faq.md) |
 
 ---
 
 ## 8. 关联章节
 
-- 配置写法:[05-配置文件](05-config-files.md) · 字段覆盖:[07-字段覆盖](07-overrides.md) · CLI/API:[13-CLI 与 API 速查](13-cli-api-reference.md)
-- 真实场景:[09-完整示例](09-examples.md) · 排错:[10-FAQ](10-faq.md) · 内部:[../technical/](../technical/)
+- 配置写法:[05-配置文件](../sweep/05-config-files.md) · 字段覆盖:[07-字段覆盖](../sweep/07-overrides.md) · CLI/API:[13-CLI 与 API 速查](../reference/13-cli-api-reference.md)
+- 真实场景:[09-完整示例](../sweep/09-examples.md) · 排错:[10-FAQ](../sweep/10-faq.md) · 内部:[../technical/](../technical/)

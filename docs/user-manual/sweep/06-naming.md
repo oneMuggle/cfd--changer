@@ -159,4 +159,4 @@ naming: "案例_{alpha:02.0f}.inp"
 | 文件名太长(>255) | naming 拼太长了 |
 | 多个 case 名字一样 | 命名缺多值字段;被 `inp_tool` 自动加 `_1` 后缀解决 |
 
-下一步:[07-字段覆盖](07-overrides.md) — 想改 alpha/mach 之外的字段怎么办。
+下一步:[07-字段覆盖](./07-overrides.md) — 想改 alpha/mach 之外的字段怎么办。

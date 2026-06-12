@@ -406,7 +406,7 @@ end
 
 ## 4. sweep 关注的字段
 
-下表在 [04-sweeping.md §2](04-sweeping.md) 基础上,给每个 `aero_*` 字段加了"对应 sweep 轴"列。`sweep` 真正改的字段是 §3.6 中加粗的 8 个,加 §3.5 中的 7 个 `ref*` 字段:
+下表在 [04-sweeping.md §2](../sweep/04-sweeping.md) 基础上,给每个 `aero_*` 字段加了"对应 sweep 轴"列。`sweep` 真正改的字段是 §3.6 中加粗的 8 个,加 §3.5 中的 7 个 `ref*` 字段:
 
 ### 4.1 主 sweep 轴(几何分解后写进 `guiopts`)
 
@@ -441,7 +441,7 @@ end
 | `aero_altid` | 高度 / 湍流强度 | m 或 % | `altid` | 改这个需手动 `overrides.guiopts.aero_altid` |
 | `aero_deltat` | 温差 | K | `deltat` | 改这个需手动 `overrides.guiopts.aero_deltat` |
 
-详见 [07-overrides.md](07-overrides.md)。
+详见 [07-overrides.md](../sweep/07-overrides.md)。
 
 ---
 
@@ -570,7 +570,7 @@ for stmt in guiopts.stmts:
     print(stmt.keyword, stmt.values)
 ```
 
-详见 [08-multiple-uis.md §4](08-multiple-uis.md) Python API 段;CLI / FastAPI 速查见本目录兄弟章节(13-cli-api-reference.md,计划中)。
+详见 [08-multiple-uis.md §4](../sweep/08-multiple-uis.md) Python API 段;CLI / FastAPI 速查见本目录兄弟章节(13-cli-api-reference.md,计划中)。
 
 ---
 

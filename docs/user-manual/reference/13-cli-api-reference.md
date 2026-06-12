@@ -231,7 +231,7 @@ print(r.unified("orig", "new"))
 ## 4. 选择哪种入口
 
 > 选错了不致命(三种入口底层都走同一套 parser/writer),但工作流匹配能省一半配置时间。
-> 详细对比见 [08-多入口使用](08-multiple-uis.md)。
+> 详细对比见 [08-多入口使用](../sweep/08-multiple-uis.md)。
 
 | 场景 | 首选 | 备选 | 理由 |
 |---|---|---|---|
@@ -242,7 +242,7 @@ print(r.unified("orig", "new"))
 | CI / 自动化(shell 调用) | CLI | FastAPI(若已有服务) | CLI 易嵌入 shell 脚本 |
 | 集成到自家 Python 框架 | Python `import` | CLI `subprocess` | 性能/可控性更好 |
 | 动态生成(运行时决定字段) | Python `import` | FastAPI | 用 `if/else` 构造 `CaseSweep` |
-| 给非命令行同事用 | FastAPI + 自家前端 | — | 浏览器即可,见 [08-多入口 §5](08-multiple-uis.md) |
+| 给非命令行同事用 | FastAPI + 自家前端 | — | 浏览器即可,见 [08-多入口 §5](../sweep/08-multiple-uis.md) |
 | 教学 / 交互式尝试 | FastAPI Swagger(`/docs`) | CLI `--help` | Swagger 可点可填 |
 | 出错时排错 | CLI `-i/--interactive` | FastAPI `/docs` | `sweep -i` 走 prompt 序列 |
 
@@ -263,15 +263,15 @@ print(r.unified("orig", "new"))
 | FastAPI `404 file_id` | `file_id` 只在内存中,服务重启后失效;重新 `POST /files/load` |
 | FastAPI `400 parse failed` | 同 CLI `exit 2`,检查 `.inp` 语法或 sweep 配置 |
 | Python `KeyError` / `IndexError` | 块不存在 / 同名块索引搞错 → 用 `inp.block_list` 遍历确认 |
-| 其它 | 见 [10-FAQ](10-faq.md) |
+| 其它 | 见 [10-FAQ](../sweep/10-faq.md) |
 
 ---
 
 ## 5. 关联章节
 
-- 想用 CLI 跑通第一个扫描:[03-快速开始](03-quickstart.md)
-- 想知道 `sweep` 配置怎么写:[05-配置文件](05-config-files.md)
-- 想知道能扫哪些字段:[04-扫描参数](04-sweeping.md)
+- 想用 CLI 跑通第一个扫描:[03-快速开始](../basics/03-quickstart.md)
+- 想知道 `sweep` 配置怎么写:[05-配置文件](../sweep/05-config-files.md)
+- 想知道能扫哪些字段:[04-扫描参数](../sweep/04-sweeping.md)
 - 字段值含义速查:[12-mcfd.inp 字段参考](12-mcfd-inp-field-reference.md)
-- 多种入口横向对比:[08-多入口使用](08-multiple-uis.md)
+- 多种入口横向对比:[08-多入口使用](../sweep/08-multiple-uis.md)
 - 内部架构与 API 实现细节:[../technical/](../technical/)

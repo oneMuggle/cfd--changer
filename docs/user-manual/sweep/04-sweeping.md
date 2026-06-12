@@ -104,7 +104,7 @@ sweeps:
   p_inf: [101325.0] # 自动写进 guiopts.aero_pres 和 physics.refpre
 ```
 
-> 如果你的样例里这些字段位置不一样,见 [07-字段覆盖](07-overrides.md) 手动指定。
+> 如果你的样例里这些字段位置不一样,见 [07-字段覆盖](./07-overrides.md) 手动指定。
 
 ## 6. 速度分量的自动计算(几何分解)
 
@@ -117,7 +117,7 @@ V = Ma · a · sin(β)     # 侧滑
 W = Ma · a · sin(α) · cos(β)   # 垂直(法向)
 ```
 
-> ⚠️ **方向假设:** 默认 `α` 影响垂直(W),`β` 影响侧滑(V)。如果你的 CFD++ 版本不是这个约定,看 [07-字段覆盖 §关闭 preset](07-overrides.md) 手动给 `aero_u/v/w`。
+> ⚠️ **方向假设:** 默认 `α` 影响垂直(W),`β` 影响侧滑(V)。如果你的 CFD++ 版本不是这个约定,看 [07-字段覆盖 §关闭 preset](./07-overrides.md) 手动给 `aero_u/v/w`。
 
 ### 关闭 preset(纯手动模式)
 
@@ -180,4 +180,4 @@ sweeps:
 # 7 × 4 × 3 = 84 个 case
 ```
 
-下一步:[05-配置文件](05-config-files.md) — JSON vs YAML vs CLI 快捷 怎么选。
+下一步:[05-配置文件](./05-config-files.md) — JSON vs YAML vs CLI 快捷 怎么选。

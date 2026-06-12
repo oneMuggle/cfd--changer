@@ -20,7 +20,7 @@
 
 | # | 标题 | 内容简介 | 状态 |
 |---|---|---|---|
-| [**03-sweep-overview**](03-sweep-overview.md) | **sweep 模块总览** | 背景 / 目标 / 三入口 / 关键能力 / 风险速览 / 子文档索引 | **当前主线** |
+| [**03-sweep-overview**](sweep/03-sweep-overview.md) | **sweep 模块总览** | 背景 / 目标 / 三入口 / 关键能力 / 风险速览 / 子文档索引 | **当前主线** |
 | [04-sweep-architecture](sweep/04-sweep-architecture.md) | sweep 架构 & 数据模型 | 流程图 / 5 个 dataclass / `generate()` 主流程 / overrides / 命名 / manifest / 性能 | 当前主线 |
 | [05-sweep-usage](sweep/05-sweep-usage.md) | sweep 三入口详细用法 | Python API / CLI / FastAPI 完整示例 + 配置 schema + 错误处理 | 当前主线 |
 | [06-sweep-freestream](sweep/06-sweep-freestream.md) | FreestreamPreset 几何分解 | 公式 / 默认参数 / 字段映射 / 方向假设 / 数值稳定性 | 当前主线 |
@@ -49,13 +49,13 @@
 
 ### 3.1 我是新用户,想用 sweep
 
-→ [03-sweep-overview](03-sweep-overview.md) (5 分钟)
+→ [03-sweep-overview](sweep/03-sweep-overview.md) (5 分钟)
 → [05-sweep-usage](sweep/05-sweep-usage.md) 选你要的入口
 → [inp_tool/README.md](../../inp_tool/README.md) 安装与快速开始
 
 ### 3.2 我想理解 sweep 内部怎么工作
 
-→ [03-sweep-overview](03-sweep-overview.md) 整体流程
+→ [03-sweep-overview](sweep/03-sweep-overview.md) 整体流程
 → [04-sweep-architecture](sweep/04-sweep-architecture.md) 数据模型 + `generate()` 主流程
 → [06-sweep-freestream](sweep/06-sweep-freestream.md) 公式细节
 → [源码 `inp_tool/inp_tool/sweep.py`](../../inp_tool/inp_tool/sweep.py) 234 行

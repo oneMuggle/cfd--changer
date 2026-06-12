@@ -118,8 +118,8 @@ conda run -n cfdchanger pip install -e .[api,yaml] --upgrade
 ## 遇到问题?
 
 - **`pip: command not found`** — conda 环境没激活
-- **`python 3.8 not found`** — conda 装的 Python 版本不对,看 [01-介绍 §系统要求](01-introduction.md)
+- **`python 3.8 not found`** — conda 装的 Python 版本不对,看 [01-介绍 §系统要求](./01-introduction.md)
 - **Web GUI 起不来** — 检查 8765 端口没被占用;`netstat -ano | grep 8765`(Win) / `lsof -i:8765`(Linux)
 - **其它** — 提 issue 或联系项目维护者
 
-下一步:[03-快速开始](03-quickstart.md) — 5 分钟跑通第一个批量生成。
+下一步:[03-快速开始](./03-quickstart.md) — 5 分钟跑通第一个批量生成。

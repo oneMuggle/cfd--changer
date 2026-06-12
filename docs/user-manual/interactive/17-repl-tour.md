@@ -167,4 +167,4 @@ INP_TOOL_LANG=en inp-tool shell
 
 ## 下一步
 
-- [18-wizard-tasks.md](18-wizard-tasks.md) — 3 个任务向导
+- [18-wizard-tasks.md](./18-wizard-tasks.md) — 3 个任务向导
