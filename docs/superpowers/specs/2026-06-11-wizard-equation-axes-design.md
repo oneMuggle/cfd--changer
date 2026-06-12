@@ -2,7 +2,7 @@
 
 **日期**: 2026-06-11
 **作者**: brainstorming with user
-**Status:** ✅ 已实现(`feat/wizard-equation-axes`,v0.10.0 后续 PR)
+**Status:** ✅ 已实现 v0.11.0 (commit 62101d6, PR #18)
 **目标版本**: inp-tool v0.10.0 后续 PR(或 v0.10.1 视情况)
 **前置**:
 - v0.10.0 方程感知扩展(PR #17,merge 后)— 提供 `set_*_model` 写函数、SweepSpec 枚举轴、`TurbulenceInit` overrides
