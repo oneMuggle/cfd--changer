@@ -1,6 +1,6 @@
 # docs/ 结构重整 Phase 1 — 拆子目录 + 子目录内重设编号
 
-**Status:** 待实施
+**Status:** ✅ 已完成 (branch docs/restruct-phase1, commits 037308d/74fd817/e11f03d/d706173/07079ff;PR 编号待开)
 **Date:** 2026-06-12
 **Phase:** 1 of 2(Phase 2 见末尾 §8)
 
