@@ -4,6 +4,8 @@
 
 ---
 
+> **视角定位:** 字段全表(参考手册)。配置文件(JSON / YAML)写法见 [sweep/02-config-files](../sweep/02-config-files.md)。
+
 ## 1. 文件结构速记
 
 `mcfd.inp` 是 **块结构 + 自由格式**的 ASCII 文本,每行一条语句,语句类型有 3 种:

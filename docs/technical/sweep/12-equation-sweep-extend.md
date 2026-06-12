@@ -5,6 +5,8 @@
 
 ---
 
+> **视角定位:** v0.10.0 sweep 扩展(per-case 覆盖 + alias)。v0.9.x 方程感知背景见 [11-equation-aware-config](11-equation-aware-config.md)。
+
 ## 19.1 三大新写函数
 
 `inp_tool/equations.py` 新增:

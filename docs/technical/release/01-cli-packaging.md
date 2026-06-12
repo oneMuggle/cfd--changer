@@ -5,6 +5,8 @@
 
 ---
 
+> **视角定位:** 开发者视角(PyInstaller 配置 + 构建过程)。用户使用 standalone 见 [user-manual/advanced/01-packaging](../../user-manual/advanced/01-packaging.md)。
+
 ## 1. 一句话
 
 把 `inp-tool` Python 包打包成 **单文件 standalone 可执行**,用户下载双击就能用,**无需 Python 环境**。

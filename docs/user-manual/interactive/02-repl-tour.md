@@ -4,6 +4,8 @@
 
 ---
 
+> **速查定位:** REPL 全功能。5 命令速查见 [01-repl-quickstart](01-repl-quickstart.md),3 个任务向导见 [03-wizard-tasks](03-wizard-tasks.md)。
+
 ## 启动
 
 ```bash

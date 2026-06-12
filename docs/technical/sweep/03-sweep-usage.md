@@ -5,6 +5,8 @@
 
 ---
 
+> **视角定位:** 开发者视角(Python / CLI / FastAPI 完整 API)。用户视角的扫哪些字段见 [user-manual/sweep/01-sweeping](../../user-manual/sweep/01-sweeping.md),4 种入口速览见 [user-manual/sweep/05-multiple-uis](../../user-manual/sweep/05-multiple-uis.md)。
+
 ## 1. Python API
 
 ### 1.1 最简示例

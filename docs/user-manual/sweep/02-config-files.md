@@ -208,4 +208,10 @@ inp-tool sweep mcfd.inp sweep.yaml --dry-run
 | `JSON parse error` | JSON 语法错(逗号、引号) | 用 `python -m json.tool < sweep.json` 校验 |
 | `template not found` | 路径不对 | 用绝对路径或 cd 到正确目录 |
 
+## 关联
+
+> **字段全表见:** [reference/01-mcfd-inp-field-reference](../reference/01-mcfd-inp-field-reference.md) — 10 块 × 全部字段,sweep 字段映射
+>
+> **整算例目录模式(per_dir)见:** [technical/sweep/10](../../technical/sweep/10-sweep-case-dir.md) — source_dir 字段与 CopyStrategy 实现
+
 下一步:[06-命名规则](./03-naming.md) — 怎么让生成的文件名有意义。

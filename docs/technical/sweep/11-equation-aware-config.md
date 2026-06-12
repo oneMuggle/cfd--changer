@@ -7,6 +7,8 @@
 
 ---
 
+> **视角定位:** v0.9.0/0.9.1 方程感知(检测 + 初始化)。v0.10.0 sweep 扩展(per-case 覆盖)见 [12-equation-sweep-extend](12-equation-sweep-extend.md)。
+
 ## 1. 模块目标
 
 CFD++ 的 `mcfd.inp` 把"方程系统 + 湍流模型 + 物性"耦合在 3 处不同 block 里,且字段语义不直观(全是 X/Y 整数码)。本模块负责:

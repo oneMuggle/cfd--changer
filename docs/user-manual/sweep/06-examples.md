@@ -1,6 +1,9 @@
 # 09 — 完整示例
 
 > **审计:** 2026-06-04 · 章节与 v0.4.2 同步 · 全部示例通过 · 全部链接有效
+
+> **视角定位:** 6 个端到端真实场景。物理量校验见 [technical/sweep/08-sweep-case-study](../../technical/sweep/08-sweep-case-study.md)。
+
 ## 例 1:典型气动参数扫描(项目自带)
 
 **目标:** 翼型/小展弦比机翼,6 个 alpha × 2 个 mach = 12 个 case。

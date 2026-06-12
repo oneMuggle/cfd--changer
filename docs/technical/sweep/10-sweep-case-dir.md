@@ -7,6 +7,8 @@
 
 ---
 
+> **视角定位:** 开发者视角(source_dir / CopyStrategy / per_dir 实现)。用户视角的 source_dir 字段用法见 [user-manual/sweep/02-config-files](../../user-manual/sweep/02-config-files.md) §1 JSON 配置 + §2 YAML 配置(找 source_dir 字段说明)。
+
 ## 1. 背景
 
 当前 `inp_tool.sweep.generate()` **只写 `mcfd.inp` 一个文件**,但实际算例是一个**完整目录**:

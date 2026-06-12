@@ -4,6 +4,8 @@
 
 ---
 
+> **速查定位:** 3 个 wizard(modify-file / sweep / diff)。REPL 基础见 [02-repl-tour](02-repl-tour.md),5 命令快速开始见 [01-repl-quickstart](01-repl-quickstart.md)。
+
 ## 概述
 
 `wizard` 提供 3 个任务导向的向导。每个向导是**完成具体工作的工具**,带步骤提示和选择菜单,无需记命令。
@@ -220,6 +222,8 @@ inp> wizard sweep
   5,0
   10,0
 ```
+
+> v0.11.0 wizard sweep 涉及的"step_4b 选 axis + step_4c per-case 覆盖"细节见 [technical/sweep/11](../../technical/sweep/11-equation-aware-config.md) + [technical/sweep/12](../../technical/sweep/12-equation-sweep-extend.md)。
 
 ## 3. `wizard diff`(比较两个 .inp 文件)
 

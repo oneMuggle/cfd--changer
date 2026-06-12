@@ -5,6 +5,8 @@
 
 ---
 
+> **视角定位:** 开发者视角(YAML / 交互式 / Web GUI 实现)。用户视角的 4 种入口速览见 [user-manual/sweep/05-multiple-uis](../../user-manual/sweep/05-multiple-uis.md)。
+
 ## 1. YAML 配置
 
 ### 1.1 安装

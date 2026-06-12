@@ -6,6 +6,8 @@
 
 ---
 
+> **视角定位:** 案例研究(1D/2D 物理量校验)。完整可跑示例见 [user-manual/sweep/06-examples](../../user-manual/sweep/06-examples.md)。
+
 ## 1. 背景
 
 `03-sweep-usage.md` 覆盖了三入口（Python API / CLI / FastAPI）的**完整 schema**。

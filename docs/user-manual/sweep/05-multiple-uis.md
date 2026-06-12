@@ -1,6 +1,9 @@
 # 08 — 多入口使用
 
 > **审计:** 2026-06-04 · 章节与 v0.4.2 同步 · 全部示例通过 · 全部链接有效
+
+> **视角定位:** 用户视角(4 种入口速览)。开发者视角的 YAML / 交互式 / Web GUI 实现细节见 [technical/sweep/05-sweep-friendly-uis](../../technical/sweep/05-sweep-friendly-uis.md)。完整 API 见 [technical/sweep/03-sweep-usage](../../technical/sweep/03-sweep-usage.md)。
+
 ## 1. 四种入口速览
 
 | 入口 | 适合谁 | 复杂度 |
