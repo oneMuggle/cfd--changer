@@ -18,7 +18,7 @@ mcfd.inp 是 CFD++ 求解器的输入文件格式。本工具提供:
 
 不想装 Python?到 [GitHub Releases](https://github.com/oneMuggle/cfd--changer/releases) 下载 standalone 可执行(~24 MB,Linux / Windows / macOS)。
 
-详见 [docs/user-manual/11-packaging.md](../user-manual/11-packaging.md) 与 [docs/technical/10-cli-packaging.md](../technical/10-cli-packaging.md)。
+详见 [docs/user-manual/advanced/11-packaging.md](../user-manual/advanced/11-packaging.md) 与 [docs/technical/release/10-cli-packaging.md](../technical/release/10-cli-packaging.md)。
 
 ## 测试 & CI
 
@@ -416,7 +416,7 @@ pbs:
 }
 ```
 
-详见 [`docs/technical/04-sweep-architecture.md`](../technical/04-sweep-architecture.md) §10 + [`docs/user-manual/18-wizard-tasks.md`](../user-manual/18-wizard-tasks.md) §2。
+详见 [`docs/technical/sweep/04-sweep-architecture.md`](../technical/sweep/04-sweep-architecture.md) §10 + [`docs/user-manual/interactive/18-wizard-tasks.md`](../user-manual/interactive/18-wizard-tasks.md) §2。
 
 ### v0.9.0 测试覆盖
 

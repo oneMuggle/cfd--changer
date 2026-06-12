@@ -45,8 +45,8 @@
 | `inp_tool/tests/test_sweep_csv.py` (新) | CSV loader | +80 |
 | `inp_tool/tests/test_sweep_mixed.py` (新) | sweeps + cases 混合 | +60 |
 | `inp_tool/tests/test_sweep_backward.py` (新) | 显式断言老 YAML 行为锁死 | +40 |
-| `docs/technical/04-sweep-architecture.md` | 加 §1.5 CaseSpec 抽象 | +40 |
-| `docs/technical/05-sweep-usage.md` | 加 §6 三种新模式 + 4 个完整示例 | +80 |
+| `docs/technical/sweep/04-sweep-architecture.md` | 加 §1.5 CaseSpec 抽象 | +40 |
+| `docs/technical/sweep/05-sweep-usage.md` | 加 §6 三种新模式 + 4 个完整示例 | +80 |
 | `CHANGELOG.md` | 加 v0.7.0 段 | +10 |
 | **本计划文档** | 归档 | +200 |
 

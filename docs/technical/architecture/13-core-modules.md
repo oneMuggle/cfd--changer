@@ -525,5 +525,5 @@ conda run -n cfdchanger pytest inp_tool/tests/test_parser.py \
 
 - 整体架构(包结构图、数据流):[`12-architecture-overview`](12-architecture-overview.md)
 - sweep 模块怎么用这些核心模块:[`04-sweep-architecture`](04-sweep-architecture.md) §3
-- CLI / API 速查(用户视角):[`../user-manual/13-cli-api-reference`](../user-manual/13-cli-api-reference.md)
-- mcfd.inp 字段参考(数据视角):[`../user-manual/12-mcfd-inp-field-reference`](../user-manual/12-mcfd-inp-field-reference.md)
+- CLI / API 速查(用户视角):[`../user-manual/reference/13-cli-api-reference`](../user-manual/reference/13-cli-api-reference.md)
+- mcfd.inp 字段参考(数据视角):[`../user-manual/reference/12-mcfd-inp-field-reference`](../user-manual/reference/12-mcfd-inp-field-reference.md)

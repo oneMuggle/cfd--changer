@@ -53,11 +53,11 @@ PR #2 解决这些:**中文化 + 增强 help + 错误引导 + 任务向导**。
 | `inp_tool/tests/test_wizard_diff.py` (新) | diff 3 步走通 | +50 |
 | `inp_tool/tests/test_wizard_menu.py` (新) | `wizard` 菜单 + 退出 | +40 |
 | `docs/user-manual/README.md` (新) | 总览 + 章节目录 | +40 |
-| `docs/user-manual/16-repl-quickstart.md` (新) | 5 命令快速上手 | +120 |
-| `docs/user-manual/17-repl-tour.md` (新) | REPL 全功能指南 | +150 |
-| `docs/user-manual/18-wizard-tasks.md` (新) | 3 个 wizard 详细用法 | +200 |
-| `docs/technical/13-core-modules.md` | 加 i18n + wizard 模块说明 | +30 |
-| `docs/technical/05-sweep-usage.md` | 加 wizard sweep 一节 | +40 |
+| `docs/user-manual/interactive/16-repl-quickstart.md` (新) | 5 命令快速上手 | +120 |
+| `docs/user-manual/interactive/17-repl-tour.md` (新) | REPL 全功能指南 | +150 |
+| `docs/user-manual/interactive/18-wizard-tasks.md` (新) | 3 个 wizard 详细用法 | +200 |
+| `docs/technical/architecture/13-core-modules.md` | 加 i18n + wizard 模块说明 | +30 |
+| `docs/technical/sweep/05-sweep-usage.md` | 加 wizard sweep 一节 | +40 |
 | `CHANGELOG.md` | 加 v0.7.1 段 | +15 |
 | **本计划文档** | 归档用 | +260 |
 | **总计** | | **+2450 行** |
@@ -124,11 +124,11 @@ PR #2 解决这些:**中文化 + 增强 help + 错误引导 + 任务向导**。
 ### 阶段 8 — 文档
 
 - [ ] 8.1 `docs/user-manual/README.md`(总览 + 章节目录)
-- [ ] 8.2 `docs/user-manual/16-repl-quickstart.md`(5 命令快速上手)
-- [ ] 8.3 `docs/user-manual/17-repl-tour.md`(REPL 全功能)
-- [ ] 8.4 `docs/user-manual/18-wizard-tasks.md`(3 个 wizard 详细)
-- [ ] 8.5 `docs/technical/13-core-modules.md` 加 i18n + wizard
-- [ ] 8.6 `docs/technical/05-sweep-usage.md` 加 wizard sweep 一节
+- [ ] 8.2 `docs/user-manual/interactive/16-repl-quickstart.md`(5 命令快速上手)
+- [ ] 8.3 `docs/user-manual/interactive/17-repl-tour.md`(REPL 全功能)
+- [ ] 8.4 `docs/user-manual/interactive/18-wizard-tasks.md`(3 个 wizard 详细)
+- [ ] 8.5 `docs/technical/architecture/13-core-modules.md` 加 i18n + wizard
+- [ ] 8.6 `docs/technical/sweep/05-sweep-usage.md` 加 wizard sweep 一节
 - [ ] 8.7 `CHANGELOG.md` 加 v0.7.1 段
 
 ### 阶段 9 — 归档 + 收尾

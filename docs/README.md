@@ -26,7 +26,7 @@
 
 ### 想理解架构 / 改代码
 
-→ [`technical/12-architecture-overview.md`](technical/12-architecture-overview.md) — 10 分钟过架构
+→ [`technical/architecture/12-architecture-overview.md`](technical/architecture/12-architecture-overview.md) — 10 分钟过架构
 → [`technical/README.md`](technical/README.md) — 17 章索引 + 选读指南
 → [`../CLAUDE.md`](../CLAUDE.md) — 项目硬约束（conda / Win7 / Py3.8）
 
