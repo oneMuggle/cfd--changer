@@ -13,7 +13,7 @@ def test_main_version(capsys):
         cli.main(["--version"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
-    assert "0.10.0" in captured.out
+    assert "0.11.0" in captured.out
 
 
 # ========== info ==========
@@ -118,7 +118,7 @@ def test_python_dash_m_inp_tool(tmp_path):
         cwd=str(tmp_path),
     )
     assert r.returncode == 0
-    assert "0.10.0" in r.stdout
+    assert "0.11.0" in r.stdout
 
 
 # ========== shell (Task 16) ==========

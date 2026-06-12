@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added (v0.10.0 unreleased)
+## [v0.11.0] - 2026-06-12
+
+### Added
+- **wizard.py**: `step_4b_equation_axes` — 向导式选择 turbulence/energy/gas 3 个 axis(仅 Cartesian,8→10 步) [PR #18]
+- **wizard.py**: `step_4c_equation_overrides` — per-case 覆盖 I/L/U_ref 或温度(4b 选了 axis 才出现) [PR #18]
+- **wizard.py**: `_read_template_value` / `multi_menu` helper(模板默认值读取 + 多选菜单) [PR #18]
+- **wizard.py**: `step_4a_detect` 末尾新增 "你选的 axis 与 template 不兼容" 段 [PR #18]
+- **equations.py**: `EquationSystemReport.sweeps_equation_warnings: List[str]` 字段(wizard 消费,独立于 notes) [PR #18]
+- **equations.py**: `detect_equations(inp, intended_axes=None)` 接受可选 axis 参数,比对用户选 vs template 状态 [PR #18]
+
+### Fixed
+- **wizard.py**: `step_6_preview` 未把 `data["turbulence"]` / `data["energy_overrides"]` 喂给 `CaseSweep.from_dict`,导致 step_4c 的 per-case 覆盖是死端(C1 修复) [PR #18]
 - **equations.py**: `set_turbulence_model` / `set_energy_model` / `set_gas_type` 3 个新写函数,改 `eqnset_define` v4/v5/v6 + 联动 `physics.tnoneq_numeqns` / `vibtem` / `reftem`
 - **equations.py**: `EquationRewriteError` 异常 + `EquationRewriteIssue` 数据类
 - **equations.py**: `TurbulencePresetBase.clear_incompatible_fields: bool` 字段 + `apply(inp, model=...)` 签名
