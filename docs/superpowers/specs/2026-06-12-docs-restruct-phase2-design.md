@@ -1,6 +1,6 @@
 # docs/ 结构重整 Phase 2 — 内容去重 + 跨维度导航
 
-**Status:** 待实施
+**Status:** ✅ 已完成 (PR #21, commits a92b2f4/6660078, branch docs/restruct-phase2)
 **Date:** 2026-06-12
 **Phase:** 2 of 2(Phase 1: 子目录拆分 + 重设编号,commit 037308d/74fd817/e11f03d/d706173/07079ff,PR #20 已 merge)
 **前置:** docs/ 现状(Phase 1 后)— 35 章节,13 个 README
