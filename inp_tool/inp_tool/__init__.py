@@ -54,6 +54,11 @@ from .cluster import (     # v0.14.0 新增
     LocalDryRunClient,
     probe_scheduler,
 )
+from .batch import (       # v0.14.0 新增(Phase 2)
+    PbsSubmission,
+    PbsBatchResult,
+    submit_sweep,
+)
 
 __all__ = [
     'InpFile', 'Block', 'Stmt', 'Value', 'infer_type',
@@ -77,5 +82,7 @@ __all__ = [
     'TorqueAdapter', 'SlurmAdapter',
     'SshClusterClient', 'LocalDryRunClient',
     'probe_scheduler',
+    # v0.14.0 batch
+    'PbsSubmission', 'PbsBatchResult', 'submit_sweep',
 ]
 __version__ = '0.13.0'

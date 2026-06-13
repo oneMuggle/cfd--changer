@@ -741,6 +741,97 @@ def cmd_cluster_test(args):
     return 0
 
 
+# ============================================================================
+# v0.14.0:pbs submit 子命令(Phase 2)
+# ============================================================================
+
+def cmd_pbs_submit(args):
+    """``inp-tool pbs submit`` — 批量提交 sweep_report.json 中所有 case。"""
+    from pathlib import Path
+    from .cluster import ClusterConfig, SshClusterClient, LocalDryRunClient
+    from .batch import submit_sweep
+
+    # 1. 解析 sweep_report 路径
+    sweep_path = args.sweep_report
+    if not sweep_path:
+        print("❌ 缺少 sweep_report.json 路径(用法: inp-tool pbs submit <sweep_report.json>)", file=sys.stderr)
+        return 1
+    sweep_p = Path(sweep_path)
+    if args.from_sweep_dir or sweep_p.is_dir():
+        # 自动找 manifest.json
+        if sweep_p.is_dir():
+            manifest = sweep_p / "manifest.json"
+        else:
+            manifest = sweep_p / "manifest.json"
+        if not manifest.is_file():
+            print(f"❌ {sweep_p} 下找不到 manifest.json", file=sys.stderr)
+            return 1
+        sweep_p = manifest
+    if not sweep_p.is_file():
+        print(f"❌ sweep_report.json 不存在: {sweep_p}", file=sys.stderr)
+        return 1
+
+    # 2. 加载 cluster config + 覆盖
+    cfg = ClusterConfig.load()
+    if args.host:
+        cfg.host = args.host
+    if args.user:
+        cfg.user = args.user
+    if args.ssh_key:
+        cfg.ssh_key = args.ssh_key
+        cfg.auth_method = "ssh-key"
+    if args.max_concurrent_jobs is not None:
+        cfg.max_concurrent_jobs = args.max_concurrent_jobs
+
+    # 3. dry-run 用 LocalDryRunClient,否则 SshClusterClient
+    if args.dry_run:
+        print("🏃 dry-run 模式:不真提交,只记录命令")
+        client = LocalDryRunClient(cfg)
+    else:
+        client = SshClusterClient(cfg)
+
+    # 4. pbs_overrides
+    pbs_overrides: Dict[str, str] = {}
+    if args.queue:
+        pbs_overrides["-q"] = args.queue
+    if args.walltime:
+        pbs_overrides["-l walltime"] = args.walltime
+    if args.nodes or args.ppn:
+        nodes = args.nodes or cfg.default_nodes
+        ppn = args.ppn or cfg.default_ppn
+        pbs_overrides["-l nodes"] = f"{nodes}:ppn={ppn}"
+
+    # 5. submit
+    print(f"提交 {sweep_p} 到 {cfg.user}@{cfg.host} ...")
+    result = submit_sweep(
+        sweep_p,
+        client,
+        dry_run=args.dry_run,
+        limit=args.limit,
+        skip_existing=args.skip_existing,
+        pbs_overrides=pbs_overrides or None,
+        respect_concurrency=args.respect_concurrency,
+    )
+
+    # 6. 报告
+    print(f"\n📊 提交结果(用时 {result.elapsed_seconds:.1f}s):")
+    print(f"   ✅ 成功: {len(result.submissions)}")
+    for s in result.submissions:
+        print(f"      {s.case_name} → job_id={s.job_id} (queue={s.queue})")
+    print(f"   ⏭ 跳过: {len(result.skipped)}")
+    for sk in result.skipped[:5]:  # 最多 5 条
+        print(f"      {sk}")
+    if len(result.skipped) > 5:
+        print(f"      ... ({len(result.skipped) - 5} more)")
+    print(f"   ❌ 失败: {len(result.failed)}")
+    for case_dir, err in result.failed:
+        print(f"      {case_dir}: {err}")
+
+    if result.failed:
+        return 1
+    return 0
+
+
 def main(argv=None):
     # v0.7.1:--lang 顶层 flag(必须最早解析,因为 i18n 影响后续所有 help/description)
     pre_parser = argparse.ArgumentParser(add_help=False)
@@ -926,6 +1017,57 @@ def main(argv=None):
     sct.add_argument('--user', help='覆盖 user')
     sct.add_argument('--ssh-key', dest='ssh_key', help='SSH 私钥路径')
     sct.set_defaults(func=cmd_cluster_test)
+
+    # === v0.14.0:pbs submit 子命令(Phase 2) ===
+    spbs = sub.add_parser(
+        'pbs',
+        help='PBS 批量提交 / 状态查询 / 监控(Phase 2+)',
+    )
+    spbs_sub = spbs.add_subparsers(dest='pbs_cmd', required=True)
+
+    # pbs submit — 批量提交 sweep_report.json 中所有 case
+    spbs_submit = spbs_sub.add_parser(
+        'submit',
+        help='批量提交 sweep_report.json 中所有 case 到 PBS 集群',
+    )
+    spbs_submit.add_argument(
+        'sweep_report', nargs='?',
+        help='sweep_report.json 路径(或 sweep 目录,自动找 manifest.json)',
+    )
+    spbs_submit.add_argument(
+        '--from-sweep-dir', dest='from_sweep_dir', action='store_true',
+        help='sweep_report 是 sweep 目录,自动找 manifest.json',
+    )
+    spbs_submit.add_argument('--host', help='覆盖 cluster.json 的 host')
+    spbs_submit.add_argument('--user', help='覆盖 user')
+    spbs_submit.add_argument('--ssh-key', dest='ssh_key', help='SSH 私钥路径')
+    spbs_submit.add_argument('--queue', help='覆盖 -q (PBS queue)')
+    spbs_submit.add_argument('--walltime', help='覆盖 -l walltime')
+    spbs_submit.add_argument('--nodes', type=int, help='覆盖 -l nodes')
+    spbs_submit.add_argument('--ppn', type=int, help='覆盖 -l ppn')
+    spbs_submit.add_argument(
+        '--max-concurrent-jobs', dest='max_concurrent_jobs', type=int,
+        help='覆盖 cluster.json 的 max_concurrent_jobs',
+    )
+    spbs_submit.add_argument(
+        '--dry-run', dest='dry_run', action='store_true',
+        help='不真提交,只记录(配合 LocalDryRunClient)',
+    )
+    spbs_submit.add_argument('--limit', type=int, help='只提交前 N 个 case')
+    spbs_submit.add_argument(
+        '--skip-existing', dest='skip_existing', action='store_true', default=True,
+        help='跳过 manifest 中已存在的 case(默认 True)',
+    )
+    spbs_submit.add_argument(
+        '--no-skip-existing', dest='skip_existing', action='store_false',
+        help='强制重提,即使 manifest 中已有记录',
+    )
+    spbs_submit.add_argument(
+        '--no-respect-concurrency', dest='respect_concurrency',
+        action='store_false', default=True,
+        help='Q3: 忽略 max_concurrent_jobs 限流,直接提交',
+    )
+    spbs_submit.set_defaults(func=cmd_pbs_submit)
 
     args = p.parse_args(argv)
     return args.func(args)
