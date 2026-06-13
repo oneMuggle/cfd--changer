@@ -96,6 +96,7 @@ class TestRenderPbsName:
             params={"alpha": 4, "beta": 0, "mach": 0.6},
             multi_value_axes=["alpha", "mach"],
             base_basename="Marspath",
+            max_len=200,  # v0.14.0: 显式避开集群 15 字符约束,保留旧行为断言
         )
         assert name == "Marspath_a04_m0.60"
 

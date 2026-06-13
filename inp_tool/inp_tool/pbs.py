@@ -1,6 +1,12 @@
 """PBS 脚本解析 / 校验 / 生成工具模块。
 
 零运行时依赖(纯 stdlib: re / pathlib / fnmatch / dataclasses)。
+
+v0.14.0 变更:
+- ``render_pbs_name`` 默认 ``max_len`` 从 200 改为 15(集群硬约束)
+- ``extract_pbs_basename`` 默认 ``max_len`` 从 8 改为 14(留 1 给 suffix)
+- 新增 ``validate_pbs_name()`` 校验名字符合 Torque 任务名规范
+- 新增 ``PbsValidationError`` 异常;``write_pbs`` 写出前自动校验
 """
 from __future__ import annotations
 
@@ -9,6 +15,16 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+
+class PbsValidationError(ValueError):
+    """PBS 任务名或参数不符合集群硬约束时抛出。"""
+
+
+# 集群硬约束(来自 reference/docs/1.md §5.2)
+# -N name: 作业名, 限 15 个字符, 首字符为字母, 无空格
+PBS_NAME_MAX_LEN = 15
+_PBS_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*$")
 
 
 @dataclass
@@ -114,7 +130,7 @@ def render_pbs_name(
     multi_value_axes: List[str],
     base_basename: str,
     user_template: str = "",
-    max_len: int = 200,
+    max_len: int = PBS_NAME_MAX_LEN,  # v0.14.0: 200 → 15(集群硬约束)
 ) -> str:
     """渲染 pbs 任务名。
 
@@ -255,6 +271,70 @@ def validate_base_case_dir(
 _PBS_N_PATTERN = re.compile(r"^[ \t]*#PBS[ \t]+-N[ \t]+\S+", re.MULTILINE)
 
 
+def validate_pbs_name(name: str) -> List["PbsIssue"]:
+    """校验 PBS 任务名是否满足集群硬约束。
+
+    规则(来自 reference/docs/1.md §5.2):
+    - 长度 ≤ 15 字符
+    - 首字符为字母
+    - 仅含 ``[A-Za-z0-9_.-]``(无空格,无特殊字符)
+
+    Returns:
+        ``list[PbsIssue]`` — 空 list 表示合法。
+        有 issue 时每条都是 ``severity="error"``(集群会拒收)。
+
+    Examples:
+        >>> validate_pbs_name("Mars_a04")
+        []
+        >>> validate_pbs_name("1abc")
+        [PbsIssue(code='PBS_NAME_BAD_FIRST_CHAR', ...)]
+    """
+    issues: List["PbsIssue"] = []
+    if not name:
+        issues.append(PbsIssue(
+            code="PBS_NAME_EMPTY",
+            severity="error",
+            path="<pbs_name>",
+            message="PBS 任务名不能为空",
+        ))
+        return issues
+    if len(name) > PBS_NAME_MAX_LEN:
+        issues.append(PbsIssue(
+            code="PBS_NAME_TOO_LONG",
+            severity="error",
+            path="<pbs_name>",
+            message=(f"PBS 任务名长度 {len(name)} 超过 {PBS_NAME_MAX_LEN} 字符限制"
+                     f": {name!r}"),
+        ))
+    if " " in name or "\t" in name:
+        issues.append(PbsIssue(
+            code="PBS_NAME_HAS_WHITESPACE",
+            severity="error",
+            path="<pbs_name>",
+            message=f"PBS 任务名不能含空格(space)或制表符: {name!r}",
+        ))
+    if name and not name[0].isalpha():
+        issues.append(PbsIssue(
+            code="PBS_NAME_BAD_FIRST_CHAR",
+            severity="error",
+            path="<pbs_name>",
+            message=(f"PBS 任务名首字符必须为字母(A-Z/a-z),"
+                     f"实际是 {name[0]!r}: {name!r}"),
+        ))
+    if not _PBS_NAME_PATTERN.match(name):
+        # 仅当上面没报字符集问题时,这条会触发(空串/特殊字符)
+        # 长度+首字符+空白已分别检测,这里只补"其他非法字符"
+        if not any(i.code == "PBS_NAME_BAD_FIRST_CHAR" for i in issues):
+            issues.append(PbsIssue(
+                code="PBS_NAME_BAD_CHARS",
+                severity="error",
+                path="<pbs_name>",
+                message=(f"PBS 任务名只能含 [A-Za-z0-9_.-],"
+                         f"含非法字符: {name!r}"),
+            ))
+    return issues
+
+
 def write_pbs(
     template_path: str,
     output_path: str,
@@ -266,9 +346,19 @@ def write_pbs(
     规则:
     - 若模板含 #PBS -N → 原地替换(保留缩进/格式)
     - 若模板不含 → 在 shebang 之后追加一行 #PBS -N job_name
-    - job_name 会先过 sanitization
-    - 若传 template_text(已读好的 in-memory 内容)→ 优先用,避免 hardlink 副作用下重复读源
+    - **v0.14.0**: ``job_name`` 写出前自动过 :func:`validate_pbs_name`,
+      有 error 级别 issue 时抛 :class:`PbsValidationError`(避免 qsub 提交被拒)
+    - 字符兜底:非 ``[A-Za-z0-9_.-]`` 替换为 ``_``
+    - 若传 ``template_text``(已读好的 in-memory 内容)→ 优先用,避免 hardlink 副作用下重复读源
     """
+    # v0.14.0: 先校验名字是否符合集群硬约束
+    issues = validate_pbs_name(job_name)
+    if issues:
+        msg = "; ".join(i.message for i in issues)
+        raise PbsValidationError(
+            f"PBS 任务名校验失败({job_name!r}): {msg}"
+        )
+
     if template_text is not None:
         text = template_text
     else:
@@ -295,7 +385,7 @@ def write_pbs(
     Path(output_path).write_text(new_text)
 
 
-def extract_pbs_basename(template_path: str, max_len: int = 8) -> str:
+def extract_pbs_basename(template_path: str, max_len: int = 14) -> str:  # v0.14.0: 8 → 14(留 1 给 suffix)
     """(pbs.py 公开版本,同 sweep.py 实现)从 pbs 模板里读 #PBS -N 截到 max_len。"""
     p = Path(template_path)
     if not p.is_file():
