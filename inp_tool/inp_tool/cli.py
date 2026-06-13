@@ -610,6 +610,137 @@ def _apply_v100_equation_overrides(cs, args):
     _ = getattr(args, "strict_equations", False)
 
 
+# ============================================================================
+# v0.14.0:cluster 子命令(PBS 集群配置 / 探测 / 测试)
+# ============================================================================
+
+def cmd_cluster_probe(args):
+    """``inp-tool cluster probe`` — ssh 远端探测调度器类型。"""
+    from .cluster import ClusterConfig, SshClusterClient
+
+    cfg = ClusterConfig.load()
+    if args.host:
+        cfg.host = args.host
+    if args.user:
+        cfg.user = args.user
+    if args.ssh_key:
+        cfg.ssh_key = args.ssh_key
+        cfg.auth_method = "ssh-key"
+    if args.port:
+        cfg.port = args.port
+
+    print(f"Probing {cfg.user}@{cfg.host}:{cfg.port} ...")
+    try:
+        client = SshClusterClient(cfg)
+        info = client.probe()
+    except Exception as e:
+        print(f"❌ 探测失败: {e}", file=sys.stderr)
+        return 1
+
+    # 探测成功 → 自动写回 cluster.json
+    cfg.detected_scheduler = info.scheduler.value
+    cfg.save()
+    print(f"✅ scheduler: {info.scheduler.value}")
+    print(f"   queues: {', '.join(info.queues) or '(未列出)'}")
+    print(f"   user: {info.user}")
+    print(f"   配置已写回: {cfg._config_path()}")
+    return 0
+
+
+def cmd_cluster_config(args):
+    """``inp-tool cluster config`` — 读/写 cluster.json。"""
+    from .cluster import ClusterConfig
+
+    cfg_path = ClusterConfig._config_path()
+    cfg = ClusterConfig.load()
+
+    if args.path:
+        print(cfg_path)
+        return 0
+
+    if args.set_kv:
+        # --set key=value 多次
+        for kv in args.set_kv:
+            if "=" not in kv:
+                print(f"❌ --set 格式错误: {kv!r} (期望 KEY=VALUE)", file=sys.stderr)
+                return 1
+            k, v = kv.split("=", 1)
+            k = k.strip()
+            if not hasattr(cfg, k):
+                print(f"❌ 未知字段: {k!r}", file=sys.stderr)
+                return 1
+            # 按字段类型转换(int / bool / list / str)
+            from dataclasses import fields
+            field_types = {f.name: f.type for f in fields(cfg)}
+            type_str = str(field_types.get(k, "str"))
+            if "int" in type_str:
+                v = int(v)
+            elif "bool" in type_str:
+                v = v.lower() in ("true", "1", "yes", "y")
+            elif k == "available_queues" and v.startswith("["):
+                import json as _json
+                v = _json.loads(v)
+            setattr(cfg, k, v)
+        cfg.save()
+        print(f"✅ 已写入 {cfg_path}")
+        return 0
+
+    if args.show or not (args.init or args.set_kv):
+        import json as _json
+        print(_json.dumps(cfg.to_dict(), indent=2, ensure_ascii=False))
+        return 0
+
+    if args.init:
+        # 简化:不真交互,提示用户用 --set
+        print("用 --set KEY=VALUE 配置字段,例:")
+        print("  inp-tool cluster config --set host=10.10.10.251")
+        print("  inp-tool cluster config --set ssh_key=C:/Users/me/.ssh/id_rsa")
+        print("  inp-tool cluster config --set default_queue=q01")
+        print(f"配置文件路径: {cfg_path}")
+        return 0
+
+    return 0
+
+
+def cmd_cluster_test(args):
+    """``inp-tool cluster test`` — ssh + 调度器识别跑通测试。"""
+    from .cluster import ClusterConfig, SshClusterClient
+    from pathlib import Path
+
+    cfg = ClusterConfig.load()
+    if args.host:
+        cfg.host = args.host
+    if args.user:
+        cfg.user = args.user
+    if args.ssh_key:
+        cfg.ssh_key = args.ssh_key
+
+    print(f"Testing SSH to {cfg.user}@{cfg.host}:{cfg.port} ...")
+    try:
+        client = SshClusterClient(cfg)
+        info = client.probe()
+    except Exception as e:
+        print(f"❌ SSH 失败: {e}", file=sys.stderr)
+        return 1
+
+    print(f"✅ scheduler: {info.scheduler.value}")
+    print(f"   queues: {', '.join(info.queues) or '(未列出)'}")
+
+    # 检查 ssh_key 文件存在(若指定)
+    if cfg.ssh_key and not Path(cfg.ssh_key).is_file():
+        print(f"⚠️ ssh_key 不存在: {cfg.ssh_key}", file=sys.stderr)
+        return 1
+    if cfg.ssh_key:
+        print(f"   ssh_key: {cfg.ssh_key} (存在)")
+
+    # 写回 cluster.json
+    cfg.detected_scheduler = info.scheduler.value
+    cfg.save()
+    print(f"✅ 配置已写回: {cfg._config_path()}")
+    print("(本次不真提交,只验证连接 + 调度器识别;用 'inp-tool pbs submit' 提交)")
+    return 0
+
+
 def main(argv=None):
     # v0.7.1:--lang 顶层 flag(必须最早解析,因为 i18n 影响后续所有 help/description)
     pre_parser = argparse.ArgumentParser(add_help=False)
@@ -751,6 +882,50 @@ def main(argv=None):
     )
     ssh.add_argument('files', nargs='*', help='启动时预加载的 .inp 文件(可选)')
     ssh.set_defaults(func=cmd_shell)
+
+    # === v0.14.0:cluster 子命令(PBS 集群配置 + 探测) ===
+    sc = sub.add_parser(
+        'cluster',
+        help='PBS 集群配置 / 探测 / 连接测试',
+    )
+    sc_sub = sc.add_subparsers(dest='cluster_cmd', required=True)
+
+    # cluster probe — 探测远端调度器
+    scp = sc_sub.add_parser(
+        'probe',
+        help='ssh 远端探测调度器类型(自动识别 torque / slurm)',
+    )
+    scp.add_argument('--host', help='覆盖 cluster.json 的 host')
+    scp.add_argument('--user', help='覆盖 user')
+    scp.add_argument('--ssh-key', dest='ssh_key', help='SSH 私钥路径(显式)')
+    scp.add_argument('--port', type=int, help='SSH 端口(默认 22)')
+    scp.set_defaults(func=cmd_cluster_probe)
+
+    # cluster config — 读/写 ~/.inp_tool/cluster.json
+    scc = sc_sub.add_parser(
+        'config',
+        help='集群配置持久化(.inp_tool/cluster.json)',
+    )
+    scc.add_argument('--init', dest='init', action='store_true',
+                    help='交互式生成配置(写到 ~/.inp_tool/cluster.json)')
+    scc.add_argument('--show', dest='show', action='store_true',
+                    help='打印当前配置(JSON)')
+    scc.add_argument('--set', dest='set_kv', action='append', default=[],
+                    metavar='KEY=VALUE',
+                    help='设置单个字段(可多次),如 --set host=10.10.10.251')
+    scc.add_argument('--path', dest='path', action='store_true',
+                    help='打印配置文件路径')
+    scc.set_defaults(func=cmd_cluster_config)
+
+    # cluster test — 真 ssh 跑通连接(暂不提交,只验证)
+    sct = sc_sub.add_parser(
+        'test',
+        help='测试 ssh 连接 + 调度器识别(读/写 cluster.json)',
+    )
+    sct.add_argument('--host', help='覆盖 host')
+    sct.add_argument('--user', help='覆盖 user')
+    sct.add_argument('--ssh-key', dest='ssh_key', help='SSH 私钥路径')
+    sct.set_defaults(func=cmd_cluster_test)
 
     args = p.parse_args(argv)
     return args.func(args)
