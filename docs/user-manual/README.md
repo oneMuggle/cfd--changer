@@ -39,6 +39,7 @@
 | [16-repl-quickstart](16-repl-quickstart.md) | REPL 快速开始 (v0.7.x+) | 5 个最常用 REPL 命令 + 直接命令行模式 | 5 分钟 |
 | [17-repl-tour](17-repl-tour.md) | REPL 全功能指南 | 全部命令分组 + 会话变量 + Tab 补全 + 历史 + i18n | 20 分钟 |
 | [18-wizard-tasks](18-wizard-tasks.md) | 任务向导 (3 个 wizard) | `wizard modify-file` / `wizard sweep` / `wizard diff` 步骤详解 | 15 分钟 |
+| [**19-gui**](19-gui.md) | **桌面 GUI 入门 (v0.10+)** | 启动 / 4 标签页 / Win7 自测 checklist / 故障排查 | 20 分钟 |
 
 ## 3. 选读指南
 

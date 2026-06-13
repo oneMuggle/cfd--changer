@@ -37,6 +37,7 @@
 | [15-ux-friendly-cli](15-ux-friendly-cli.md) | UX 友好 CLI 设计 | REPL 启动面板 / i18n / wizard 任务流 / 交互细节 | 当前主线 |
 | [16-sweep-flexible](16-sweep-flexible.md) | sweep 灵活化 (cases/groups/CSV) | v0.7.0 模式:笛卡尔+显式列表+分组继承+CSV+混合 | 已归档 |
 | [**17-sweep-case-dir**](17-sweep-case-dir.md) | **sweep 整算例目录 (v0.8.0)** | source_dir / CopyStrategy / per_dir 模式 / 排除规则 / smoke 验证 | **当前主线** |
+| [**18-gui-architecture**](18-gui-architecture.md) | **GUI 架构 (v0.10+)** | inp_tool_gui 包结构 / MVC 边界 / signal-slot / 控制器层 / Widgets 层 / 已知简化 | **当前主线** |
 
 ---
 
