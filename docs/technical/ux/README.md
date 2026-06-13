@@ -6,7 +6,7 @@
 
 | # | 标题 | 内容简介 |
 |---|---|---|
-| (暂无) | — | — |
+| [**01-gui-architecture**](01-gui-architecture.md) | **GUI 架构 (v0.12+)** | inp_tool_gui 包结构 / MVC 边界 / signal-slot / 控制器层 / Widgets 层 / 已知简化 |
 
 > **注:** 本目录 Phase 1 误归档了 v0.7.1 计划 `01-ux-friendly-cli.md`。Phase 2 修复:移到 [`../../superpowers/specs/2026-06-09-ux-friendly-cli-design.md`](../../superpowers/specs/2026-06-09-ux-friendly-cli-design.md)。
 >

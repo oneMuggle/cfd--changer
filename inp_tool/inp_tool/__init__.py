@@ -56,4 +56,4 @@ __all__ = [
     'detect_pbs_template', 'validate_base_case_dir',
     'render_pbs_name', 'write_pbs', 'extract_pbs_basename',
 ]
-__version__ = '0.11.0'
+__version__ = '0.12.0'

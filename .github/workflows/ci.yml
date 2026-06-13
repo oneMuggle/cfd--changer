@@ -46,22 +46,48 @@ jobs:
           python-version: ${{ matrix.python-version }}
           use-mamba: true
 
-      - name: Install inp-tool (editable + dev + api deps)
+      - name: Install inp-tool (editable + dev + api + gui deps)
         shell: bash -l {0}
         # v0.4.2: 装全套 extras,代替 environment.yml 里 conda 装的重复项(单一来源:pyproject.toml)
+        # v0.12.0: 加 [gui] 让 CI 跑 99 个 GUI 测试(PySide2 offscreen 平台)
+        # 注:macOS(Apple Silicon M1/M2)runner 上 PySide2 5.15.2.1 没有 arm64 wheel,
+        # 只装 [dev,api,yaml,build] 并跳过 test_gui_*.py(下个 step)
         run: |
-          conda run -n cfdchanger pip install -e ".[dev,api,yaml,build]"
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            echo "macOS runner — skipping [gui] install (PySide2 5.15.2.1 无 arm64 wheel)"
+            conda run -n cfdchanger pip install -e ".[dev,api,yaml,build]"
+          else
+            conda run -n cfdchanger pip install -e ".[dev,api,yaml,build,gui]"
+          fi
 
       - name: Run tests + coverage
         shell: bash -l {0}
         # v0.4.2: Windows cp1252 默认编码遇到中文/unicode 字符会抛 UnicodeEncodeError
         # conda run 捕获 pytest stdout 后用 print 输出到 GitHub runner 终端,
         # 触发 cp1252 encode 失败。设 PYTHONIOENCODING=utf-8 让 pytest/cov 输出 utf-8
+        # v0.12.0: macOS 跳过 test_gui_*.py(PySide2 ARM wheel 缺失)
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
-            --cov=inp_tool --cov-report=term --cov-fail-under=80
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            echo "macOS runner — skipping test_gui_*.py (no PySide2)"
+            conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
+              --ignore=tests/test_gui_smoke.py \
+              --ignore=tests/test_gui_main_window.py \
+              --ignore=tests/test_gui_main_window_integration.py \
+              --ignore=tests/test_gui_file_controller.py \
+              --ignore=tests/test_gui_edit_controller.py \
+              --ignore=tests/test_gui_sweep_controller.py \
+              --ignore=tests/test_gui_detect_controller.py \
+              --ignore=tests/test_gui_detect_panel.py \
+              --ignore=tests/test_gui_diff.py \
+              --ignore=tests/test_gui_value_editor.py \
+              --ignore=tests/test_gui_inp_tree.py \
+              --cov=inp_tool --cov-report=term --cov-fail-under=80
+          else
+            conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
+              --cov=inp_tool --cov-report=term --cov-fail-under=80
+          fi
 
       - name: REPL smoke test
         shell: bash -l {0}
