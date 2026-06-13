@@ -43,6 +43,17 @@ from .pbs import (       # v0.9.0
     PbsValidationError,       # write_pbs 写出前抛
     PBS_NAME_MAX_LEN,         # = 15
 )
+from .cluster import (     # v0.14.0 新增
+    SchedulerType,
+    ClusterConfig,
+    ClusterInfo,
+    PbsJobStatus,
+    TorqueAdapter,
+    SlurmAdapter,
+    SshClusterClient,
+    LocalDryRunClient,
+    probe_scheduler,
+)
 
 __all__ = [
     'InpFile', 'Block', 'Stmt', 'Value', 'infer_type',
@@ -61,5 +72,10 @@ __all__ = [
     'render_pbs_name', 'write_pbs', 'extract_pbs_basename',
     # v0.14.0 pbs 校验
     'validate_pbs_name', 'PbsValidationError', 'PBS_NAME_MAX_LEN',
+    # v0.14.0 cluster
+    'SchedulerType', 'ClusterConfig', 'ClusterInfo', 'PbsJobStatus',
+    'TorqueAdapter', 'SlurmAdapter',
+    'SshClusterClient', 'LocalDryRunClient',
+    'probe_scheduler',
 ]
 __version__ = '0.13.0'
