@@ -55,7 +55,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          conda run -n cfdchanger pip install -e ".[dev,api,yaml,build]"
+          conda run -n cfdchanger pip install -e ".[dev,api,yaml,build,gui]"
           conda run -n cfdchanger python -m pytest tests/ -v --tb=short
 
   # ========== 跨平台打包 ==========

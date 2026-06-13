@@ -46,11 +46,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           use-mamba: true
 
-      - name: Install inp-tool (editable + dev + api deps)
+      - name: Install inp-tool (editable + dev + api + gui deps)
         shell: bash -l {0}
         # v0.4.2: 装全套 extras,代替 environment.yml 里 conda 装的重复项(单一来源:pyproject.toml)
+        # v0.12.0: 加 [gui] 让 CI 跑 99 个 GUI 测试(PySide2 offscreen 平台)
         run: |
-          conda run -n cfdchanger pip install -e ".[dev,api,yaml,build]"
+          conda run -n cfdchanger pip install -e ".[dev,api,yaml,build,gui]"
 
       - name: Run tests + coverage
         shell: bash -l {0}
