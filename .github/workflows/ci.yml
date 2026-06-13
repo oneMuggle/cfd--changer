@@ -70,20 +70,12 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: |
           if [ "$RUNNER_OS" == "macOS" ]; then
-            echo "macOS runner — skipping test_gui_*.py (no PySide2)"
+            echo "macOS runner — skipping test_gui_*.py (no PySide2 ARM wheel)"
+            # v0.13:用 glob 跳过全部 test_gui_*.py(任何新增 GUI 测试都自动跳过)
             conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
-              --ignore=tests/test_gui_smoke.py \
-              --ignore=tests/test_gui_main_window.py \
-              --ignore=tests/test_gui_main_window_integration.py \
-              --ignore=tests/test_gui_file_controller.py \
-              --ignore=tests/test_gui_edit_controller.py \
-              --ignore=tests/test_gui_sweep_controller.py \
-              --ignore=tests/test_gui_detect_controller.py \
-              --ignore=tests/test_gui_detect_panel.py \
-              --ignore=tests/test_gui_diff.py \
-              --ignore=tests/test_gui_value_editor.py \
-              --ignore=tests/test_gui_inp_tree.py \
+              --ignore-glob='tests/test_gui_*.py' \
               --cov=inp_tool --cov-report=term --cov-fail-under=80
+          else
           else
             conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
               --cov=inp_tool --cov-report=term --cov-fail-under=80
