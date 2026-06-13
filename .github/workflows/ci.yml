@@ -76,7 +76,6 @@ jobs:
               --ignore-glob='tests/test_gui_*.py' \
               --cov=inp_tool --cov-report=term --cov-fail-under=80
           else
-          else
             conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
               --cov=inp_tool --cov-report=term --cov-fail-under=80
           fi
