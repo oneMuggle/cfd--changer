@@ -38,6 +38,10 @@ from .pbs import (       # v0.9.0
     render_pbs_name,
     write_pbs,
     extract_pbs_basename,
+    # v0.14.0 新增
+    validate_pbs_name,        # 校验名字符合集群硬约束
+    PbsValidationError,       # write_pbs 写出前抛
+    PBS_NAME_MAX_LEN,         # = 15
 )
 
 __all__ = [
@@ -55,5 +59,7 @@ __all__ = [
     'PbsConfig', 'PbsIssue',
     'detect_pbs_template', 'validate_base_case_dir',
     'render_pbs_name', 'write_pbs', 'extract_pbs_basename',
+    # v0.14.0 pbs 校验
+    'validate_pbs_name', 'PbsValidationError', 'PBS_NAME_MAX_LEN',
 ]
 __version__ = '0.13.0'
