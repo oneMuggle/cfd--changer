@@ -25,15 +25,19 @@ def qapp():
 
 @pytest.fixture
 def sample_inp_path(tmp_path):
-    """写一个含 top_stmt + physics block 的 .inp(用 CFD++ 格式 'physics begin/end')。"""
+    """写一个含 top_stmt + physics block + 顶层 seq.# eqnset_define(SST k-ω)。"""
     p = tmp_path / "test.inp"
     p.write_text(
         textwrap.dedent(
             """\
             title Hello
+            seq.# 1 #vals 31 title eqnset_define
+              values 101 1 1 2 3
+              values 0 0 1 1 1
             physics begin
               reftem 300.0
               reynolds 1.0e6
+              tnoneq_numeqns 0
             physics end
             """
         ),
@@ -88,7 +92,8 @@ def test_detect_action_runs_detection(qapp, sample_inp_path):
         win.file_ctrl.open(sample_inp_path)
         win._on_detect_action()
         assert win.tabs.currentWidget() is win.detect_panel
-        assert "检测到" in win.detect_panel._summary_lbl.text()
+        # v0.13:DetectPanel 摘要用 EquationSystemReport 格式
+        assert "能量=" in win.detect_panel._summary_lbl.text()
     finally:
         win.close()
         win.deleteLater()

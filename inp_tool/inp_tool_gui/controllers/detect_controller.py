@@ -1,115 +1,191 @@
-"""DetectController:GUI 方程/湍流模型检测业务逻辑(Phase 4)。
+"""DetectController:GUI 方程/湍流模型检测业务逻辑(v0.13 升级版)。
 
-**简化版(等 v0.9.1 完整 detect_equations):**
+**v0.13:** 改用真实 :func:`inp_tool.equations.detect_equations`(v0.9.1 + v0.11.0 上线)。
+:data:`DetectionReport` 是 wrap :class:`EquationSystemReport` 的薄 adapter,
+保留 v0.12 GUI 字段(has_reftem / has_reynolds / has_turbulence /
+has_chemistry / is_two_temperature / chemistry_blocks / notes /
+recommended_fields / summary_zh)以便 DetectPanel 兼容。
 
-当下基于关键字扫描推断:
-- 是否含 ``physics.reftem``(参考温度)
-- 是否含 ``physics.reynolds``(雷诺数)
-- 是否含 ``turb`` / ``turbc`` / ``turbk`` / ``turbw``(湍流模型)
-- 是否含 ``chemistry`` block(化学)
-- 是否含 ``vibtem``(振动温度,2T 标志)
-
-v0.9.1 完整版 ``detect_equations()`` 上线后,本 controller 直接调它,API 不变。
+**字段来源切分:**
+- 真实枚举(energy/turbulence/gas/n_species/sweeps_equation_warnings)→ 来自 EquationSystemReport
+- 直接字段扫描(has_reftem/has_reynolds/has_chemistry/chemistry_blocks)→ 来自 InpFile 直扫
+  (detect_equations 不解析这些,它们与方程系统无关)
+- turb_keywords → 直接从 InpFile 提取(``turb*`` 前缀关键字,启发式)
 
 **不**依赖 PySide2;widget 层只调此 controller。
 """
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
+from inp_tool.equations import (
+    EquationSystemReport,
+    GasModel,
+    detect_equations,
+)
 from inp_tool.model import InpFile
+
+
+# ``EquationSystemReport.recommended_fields()`` 字符串 → 4 元组映射表
+# (block, keyword, default_value, note)。PresetDialog 仍按旧 4 元组 API 消费。
+_RECOMMENDED_PARSER: dict = {
+    "tnoneq_numeqns":            ("physics", "tnoneq_numeqns", 1, "非平衡方程数(2T = 1)"),
+    "reftem (T_trans)":          ("physics", "reftem", 300.0, "平动温度(K)"),
+    "vibtem (T_vib)":            ("physics", "vibtem", 300.0, "振动温度(K)"),
+    "turbi_lev (k)":             ("guiopts", "turbi_lev", 0.0, "k 初值"),
+    "turbi_len (L)":             ("guiopts", "turbi_len", 0.0, "L 长度尺度"),
+    "turbi_tlev (k/U²)":         ("guiopts", "turbi_tlev", 0.0, "k/U²"),
+    "turbi_tlen":                ("guiopts", "turbi_tlen", 0.0, "tlen"),
+    "turbi_lev (ν̃)":             ("guiopts", "turbi_lev", 0.0, "ν̃ 初值"),
+    "species 质量分率 (mass/mole)": ("chemistry", "species", {}, "species mass/mole fractions"),
+}
 
 
 @dataclass
 class DetectionReport:
-    """简化版检测报告(取代 v0.9.1 的 EquationSystemReport)。"""
+    """薄 adapter:wrap :class:`EquationSystemReport` + 派生 GUI 友好字段。"""
 
-    has_reftem: bool = False
-    has_reynolds: bool = False
-    has_turbulence: bool = False
-    has_chemistry: bool = False
-    is_two_temperature: bool = False  # 是否有 vibtem
-    turb_keywords: List[str] = field(default_factory=list)
-    chemistry_blocks: int = 0
-    notes: List[str] = field(default_factory=list)
-    recommended_fields: List[Tuple[str, str, object, str]] = field(
-        default_factory=list
-    )
+    _eq: EquationSystemReport
+
+    # --- 新 API(真实)-------------------------------------------------
+
+    @property
+    def turbulence_model(self):
+        """:class:`TurbulenceModel` 枚举(SST_KW / SA / Goldberg / Realizable / 等)。"""
+        return self._eq.turbulence
+
+    @property
+    def energy_model(self):
+        """:class:`EnergyModel` 枚举(NONE / TWO_TEMP / THREE_TEMP)。"""
+        return self._eq.energy
+
+    @property
+    def gas_model(self):
+        """:class:`GasModel` 枚举(PERFECT_GAS / REAL_GAS / MULTI_TEMP / MIXTURE)。"""
+        return self._eq.gas
+
+    @property
+    def n_species(self) -> int:
+        return self._eq.n_species
+
+    @property
+    def gasnam(self) -> Optional[str]:
+        """``physics.gasnam`` 原始字符串(仅参考,不用于判别)。"""
+        return self._eq.gasnam
+
+    @property
+    def sweeps_equation_warnings(self) -> List[str]:
+        """wizard axis 与 template 不兼容的告警。"""
+        return list(self._eq.sweeps_equation_warnings)
+
+    # --- 向后兼容 v0.12 字段 ---------------------------------------
+
+    @property
+    def has_reftem(self) -> bool:
+        """``physics.reftem`` 是否存在(InpFile 直扫)。"""
+        return self._inp_contains_keyword("reftem")
+
+    @property
+    def has_reynolds(self) -> bool:
+        """``physics.reynolds`` 是否存在。"""
+        return self._inp_contains_keyword("reynolds")
+
+    @property
+    def has_turbulence(self) -> bool:
+        """模板含非层流湍流模型(SST/SA/Goldberg/Realizable)。"""
+        t = self._eq.turbulence.value
+        return t not in ("unknown", "laminar")
+
+    @property
+    def has_chemistry(self) -> bool:
+        return self.chemistry_blocks > 0
+
+    @property
+    def chemistry_blocks(self) -> int:
+        """chemistry 块数。"""
+        if self._inp is None:
+            return 0
+        return sum(1 for b in self._inp.block_list if b.name == "chemistry")
+
+    @property
+    def is_two_temperature(self) -> bool:
+        return self._eq.energy.value == "2T"
+
+    @property
+    def turb_keywords(self) -> List[str]:
+        """湍流相关关键字启发式(``turb*`` 前缀)。"""
+        if self._inp is None:
+            return []
+        kw_set = set()
+        for b in self._inp.block_list:
+            for s in b.statements:
+                if "turb" in s.keyword.lower():
+                    kw_set.add(s.keyword)
+        for s in self._inp.top_stmts:
+            if "turb" in s.keyword.lower():
+                kw_set.add(s.keyword)
+        return sorted(kw_set)
+
+    @property
+    def notes(self) -> List[str]:
+        return list(self._eq.notes)
+
+    @property
+    def recommended_fields(self) -> List[Tuple[str, str, object, str]]:
+        """``[(block, keyword, default_value, note), ...]`` 兼容 v0.12。
+
+        解析 :meth:`EquationSystemReport.recommended_fields` 字符串列表;
+        未知字符串退化为 ``(physics, <keyword>, None, <original_str>)``。
+        """
+        out: List[Tuple[str, str, object, str]] = []
+        for f in self._eq.recommended_fields():
+            if f in _RECOMMENDED_PARSER:
+                out.append(_RECOMMENDED_PARSER[f])
+            else:
+                kw = f.split(" ")[0]
+                out.append(("physics", kw, None, f))
+        return out
 
     def summary_zh(self) -> str:
-        """中文摘要(供 DetectPanel 顶部标签显示)。"""
-        flags = []
-        if self.has_reftem:
-            flags.append("✓ 参考温度")
-        if self.has_reynolds:
-            flags.append("✓ 雷诺数")
-        if self.has_turbulence:
-            flags.append(f"✓ 湍流({', '.join(self.turb_keywords[:3])})")
-        if self.has_chemistry:
-            flags.append(f"✓ 化学({self.chemistry_blocks} 块)")
-        if self.is_two_temperature:
-            flags.append("✓ 双温度(2T)")
-        if not flags:
-            return "未检测到方程/湍流模型标志字段"
-        return "检测到: " + " | ".join(flags)
+        """中文摘要(直接透传 EquationSystemReport.summary_zh)。"""
+        return self._eq.summary_zh()
+
+    # --- 内部 ----------------------------------------------------------
+
+    _inp: Optional[InpFile] = None
+
+    def _inp_contains_keyword(self, keyword: str) -> bool:
+        if self._inp is None:
+            return False
+        for b in self._inp.block_list:
+            for s in b.statements:
+                if s.keyword == keyword:
+                    return True
+        return False
 
 
 class DetectController:
-    """GUI 检测控制器。"""
+    """GUI 检测控制器(v0.13 升级版)。"""
 
     def __init__(self) -> None:
         self._report: Optional[DetectionReport] = None
 
     @property
     def last_report(self) -> Optional[DetectionReport]:
-        """最近一次 :meth:`run` 的报告;未 run 返 None。"""
         return self._report
 
-    def run(self, inp: InpFile) -> DetectionReport:
-        """扫 ``inp`` 关键字,生成报告。"""
-        rep = DetectionReport()
+    def run(
+        self,
+        inp: InpFile,
+        *,
+        intended_axes: Optional[Dict[str, str]] = None,
+    ) -> DetectionReport:
+        """扫 ``inp`` → 真实 :func:`detect_equations` → adapter。
 
-        all_kw_by_block: dict = {
-            b.name: [s.keyword for s in b.statements] for b in inp.block_list
-        }
-        all_kw_top = [s.keyword for s in inp.top_stmts]
-
-        physics_kw = all_kw_by_block.get("physics", [])
-        rep.has_reftem = "reftem" in physics_kw
-        rep.has_reynolds = "reynolds" in physics_kw
-        rep.is_two_temperature = "vibtem" in physics_kw
-
-        # 湍流关键字(以 turb 开头的)
-        turb_kws = [k for k in (physics_kw + all_kw_top) if k.startswith("turb")]
-        rep.has_turbulence = bool(turb_kws)
-        rep.turb_keywords = sorted(set(turb_kws))
-
-        rep.chemistry_blocks = sum(
-            1 for b in inp.block_list if b.name == "chemistry"
-        )
-        rep.has_chemistry = rep.chemistry_blocks > 0
-
-        # notes
-        if rep.has_turbulence and not rep.has_reynolds:
-            rep.notes.append(
-                "湍流模型存在但缺 reynolds — SST k-ω 反算需要 Reynolds"
-            )
-        if rep.has_chemistry and rep.chemistry_blocks > 1:
-            rep.notes.append(
-                f"检测到 {rep.chemistry_blocks} 个 chemistry block — "
-                "确认是否多组分 vs 燃烧模型"
-            )
-        if not rep.has_reftem and rep.has_turbulence:
-            rep.notes.append("缺 reftem,湍流参考温度默认 300K")
-
-        # 推荐字段(供 PresetDialog 使用)
-        if not rep.has_reynolds and rep.has_turbulence:
-            rep.recommended_fields.append(
-                ("physics", "reynolds", 1.0e6, "SST k-ω 默认雷诺数")
-            )
-        if not rep.has_reftem:
-            rep.recommended_fields.append(
-                ("physics", "reftem", 300.0, "默认参考温度 300 K")
-            )
-
+        ``intended_axes``(v0.11.0+):wizard step_4b/4c 选的 axis 值;
+        不传则只做单纯方程检测(无 axis 兼容告警)。
+        """
+        eq_rep = detect_equations(inp, intended_axes=intended_axes)
+        rep = DetectionReport(_eq=eq_rep)
+        rep._inp = inp  # type: ignore[attr-defined]
         self._report = rep
         return rep
