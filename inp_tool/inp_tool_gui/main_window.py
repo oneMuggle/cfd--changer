@@ -314,6 +314,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "未打开文件", "请先打开一个 .inp 文件。")
             return
         dlg = PresetDialog(preset_name, self.edit_ctrl, parent=self)
+        dlg.set_inp(self.file_ctrl.inp)  # v0.13:preset 需要 InpFile
         if dlg.exec_() == PresetDialog.Accepted:
             self._refresh_after_edit()
             self.detect_panel.run(self.file_ctrl.inp)

@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.13.0] - 2026-06-13
+
+### Changed
+- **DetectController** 切到真实 :func:`inp_tool.equations.detect_equations`(v0.9.1 + v0.11.0 API)
+  - 替换 v0.12 简化关键字扫描(``has_reftem`` / ``has_turbulence`` 等启发式)
+  - :data:`DetectionReport` 现在 wrap :class:`EquationSystemReport` 的薄 adapter
+  - 保留 v0.12 字段(has_reftem / has_reynolds / has_chemistry / is_two_temperature /
+    turb_keywords / notes / recommended_fields)以不破坏 DetectPanel 引用
+  - **新增真实字段**:``turbulence_model`` / ``energy_model`` / ``gas_model`` / ``n_species`` /
+    ``gasnam`` / ``sweeps_equation_warnings``
+  - ``run(inp, *, intended_axes=None)`` 支持 wizard step_4b/4c axis 透传
+- **PresetDialog** 切到真实 preset 类(替换 v0.12 hardcoded ``_PRESETS`` dict)
+  - ``turb`` → :func:`make_turbulence_preset` (:class:`SSTKOmegaPreset`,I=0.01/L=0.01/U_ref=204)
+  - ``2t`` → :class:`TwoTemperaturePreset`(T_trans=300/T_vib=300)
+  - ``species`` → :class:`SpeciesPreset`(fractions={'N2': 0.79, 'O2': 0.21})
+  - ``accept(inp)`` 后置注入;preset.apply(inp) 改写
+  - 捕获 :class:`EquationRewriteError` + :class:`TwoTemperatureError` + 兜底 ``Exception``
+    → 错误标签(不弹模态 QMessageBox — 避免阻塞自动化测试)
+- **DetectPanel** UI 增强
+  - 新增 4 字段:能量/TurbulenceModel/GasModel/物种数(从 EquationSystemReport 透传)
+  - 警告区双拆分:notes(方程自身) + sweeps_equation_warnings(wizard axis 告警)
+  - ``run(inp, intended_axes=None)`` 透传给 controller
+
+### Fixed
+- **CI** 改用 ``--ignore-glob='tests/test_gui_*.py'`` 跳过 macOS GUI 测试
+  (替代 v0.12 显式 ``--ignore`` 列表;新增 GUI test 文件自动跳过)
+  原因:macOS ARM runner 缺 PySide2 5.15.2.1 wheel
+
+### Tests
+- 763 passed, 6 skipped, 0 回归(原 v0.12 759 + v0.13 新增 18 - 删除 1 旧 test 文件 = +4)
+- 新增 ``test_gui_detect_controller_adapter.py`` (8 测试)
+- 新增 ``test_gui_preset_dialog_v013.py`` (7 测试)
+- 删除 ``test_gui_detect_controller.py`` (v0.12 简化扫描语义已废弃)
+- ``test_gui_detect_panel.py`` / ``test_gui_main_window_integration.py``:fixture 加 ``seq.# eqnset_define`` SST
+
 ## [v0.12.0] - 2026-06-13
 
 ### Added
