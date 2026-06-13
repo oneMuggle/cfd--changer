@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.12.0] - 2026-06-13
+
+### Added
+- **新包 `inp_tool_gui/`**(PySide2 5.15.2.1,Win7 兼容的 Qt 最后稳定版)
+  - 入口:`inp-tool-gui` / `python -m inp_tool_gui`
+  - 中心区 4 标签页 QTabWidget:**文件**(InpTreeWidget 树形) / **检测**(DetectPanel + 3 个 Preset) / **Sweep**(SweepForm + 结果表) / **对比**(DiffViewer 双栏 diff)
+  - 菜单 / 工具栏 / 状态栏齐全;`Ctrl+O/S/Z/Y/Q` 等标准快捷键
+  - undo / redo 栈 + dirty 标志自动管理(走 EditController)
+  - 顶层语句 + 块两层,同名块加 `[N]` 后缀区分
+- **新 extras `[gui]` / `[gui-build]`**(`pyproject.toml`)
+  - `[gui]`:仅 `PySide2==5.15.2.1`(零依赖核心不被污染)
+  - `[gui-build]`:`PySide2` + `pyinstaller`(打包用)
+- **新 console_script `inp-tool-gui`**(`pyproject.toml [project.scripts]`)
+- **`setuptools.packages`** 加 `inp_tool_gui`(并列包,不进 inp_tool core)
+- **`inp_tool_gui.spec`** PyInstaller 配置:hiddenimports 列 PySide2 子模块 + shiboken2 + inp_tool core;`console=False`(Win 避免后台黑窗)
+- **Controllers**(零 PySide2 依赖,纯 Python)
+  - `FileController`:open / save / set_value / get_value / current_path / is_open / inp
+  - `EditController`:set_value + undo/redo 栈 + dirty 标志 + UndoEntry dataclass
+  - `SweepController`:load_from_yaml/json/dict + preview + run + last_report
+  - `DetectController`:run(inp) → DetectionReport(reftem/reynolds/turb/chem/2T 标志 + notes + recommended_fields)
+  - `DiffController`:load_pair(a, b) → DiffReport + unified_text
+- **Widgets**
+  - `InpTreeWidget`:3 层树(顶层语句 / block / stmt / value);populate / refresh_value / value_edit_requested signal
+  - `ValueEditorDialog`:按 typed 推断 kind(bool > int > float > str);重写 accept() 走校验路径(失败保持打开 + 就地错误标签,不弹模态 QMessageBox — 避免阻塞自动化测试)
+  - `DetectPanel`:`run(inp)` 渲染报告 + 警告区 + 推荐字段应用按钮
+  - `PresetDialog`:3 类 preset(turb/2t/species),`accept()` 批量调 EditController.set_value
+  - `SweepForm`:加载 YAML/JSON + 同步运行 + QTableWidget 4 列展示 CaseResult
+  - `DiffViewer`:QTextBrowser 渲染 unified diff,行首 + / - / @@ 加色
+- **文档**:`docs/user-manual/interactive/04-gui.md`(用户)+ `docs/technical/ux/01-gui-architecture.md`(开发者)
+- **测试**:97 个 GUI 测试,全过;Linux + PySide2 5.15.2.1 + cfdchanger (Py3.8) 全部 offscreen 平台跑通
+
+### Notes
+- **重大变更**:在 v0.9.1 + v0.10.0 + v0.11.0 之后,以 v0.12.0 发布 GUI 子系统。DetectController 简化版(基于关键字扫描)作为本次起点;v0.13.x 期间将切换到真实 `detect_equations()` (v0.9.1 已上线) + `TurbulencePresetBase.apply` (v0.11.0 已上线)
+- v0.12 简化版:SweepForm 同步运行(后续可加 QThread);关闭时不弹"未保存"(后续 closeEvent 增强)
+- Win7 物理机自测留给用户(详见 `docs/user-manual/interactive/04-gui.md` §5 自测 checklist)
+
 ## [v0.11.0] - 2026-06-12
 
 ### Added
@@ -70,7 +106,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **API 用户**:`EquationSystemReport` 新增 `gas_code` 字段(向后兼容);`GasModel.MULTI_TEMP` 是新枚举值,既有代码 `== GasModel.PERFECT_GAS` 等比较不受影响。
 - **CLI 用户**:`info` 不传 `--detect` 时输出与 v0.9.0 完全一致。
 - **REPL 用户**:3 个新命令是加法,旧命令零变化。
-
 ## [v0.9.0] - 2026-06-10
 
 ### Added

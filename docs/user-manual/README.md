@@ -23,9 +23,11 @@
 |---|---|---|---|
 | [`basics/`](basics/README.md) | 入门(介绍 / 安装 / 快速开始) | 3 | [01-introduction](basics/01-introduction.md) |
 | [`sweep/`](sweep/README.md) | sweep 入门到精通(含 FAQ) | 7 | [01-sweeping](sweep/01-sweeping.md) |
-| [`interactive/`](interactive/README.md) | REPL + Wizard | 3 | [01-repl-quickstart](interactive/01-repl-quickstart.md) |
+| [`interactive/`](interactive/README.md) | REPL + Wizard + 桌面 GUI | 4 | [01-repl-quickstart](interactive/01-repl-quickstart.md) |
 | [`reference/`](reference/README.md) | 字段参考 + CLI/API 速查 + 术语表 | 3 | [01-mcfd-inp-field-reference](reference/01-mcfd-inp-field-reference.md) |
 | [`advanced/`](advanced/README.md) | 打包 + 端到端教程 | 2 | [01-packaging](advanced/01-packaging.md) |
+
+---
 
 ## 3. 选读指南
 
