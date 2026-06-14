@@ -87,6 +87,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - v0.13 已知 bug: PBS 任务名超 15 字符提交会被集群拒 (#25)
 - 集群配置 hardcoded (`q02` / `10.10.10.251` / `20 jobs` / ssh key 无) → 全可配置 (Phase 1)
+- **CI release workflow** (PR #32): macOS runner 跳过装 `[gui]` extras + 跳过 `test_gui_*.py`
+  - 原因: PySide2 5.15.2.1 没有 arm64 wheel,macOS (Apple Silicon) runner 装 `[gui]` 必爆
+  - 与 ci.yml 的 macOS 分支对齐 (PR #23);不装 `[gui]` 不影响 Linux/Windows artifact(ubuntu + windows 兜底 GUI 测试覆盖)
+  - 影响: v0.14.0 (及后续) tag 触发 release 应能在 3 平台正常产出 binary
 
 ### Notes
 - **真实 mcfd.info0 数据列名与直觉不符**: minfo0.mpf1d 的 `CFL_global` 列实际是
