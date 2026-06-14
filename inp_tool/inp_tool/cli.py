@@ -919,6 +919,104 @@ def _print_status(entries, sweep_p, cfg, args) -> None:
     print(format_status_table(entries))
 
 
+# ============================================================================
+# v0.14.0:pbs watch 子命令(Phase 4)
+# ============================================================================
+
+def cmd_pbs_watch(args):
+    """``inp-tool pbs watch`` — 运行中监控 case 进度。"""
+    from pathlib import Path
+    from .cluster import ClusterConfig, SshClusterClient
+    from .monitor import SweepMonitor, format_progress_table
+
+    # 1. 解析 sweep_report 路径(同 submit/status)
+    sweep_path = args.sweep_report
+    if not sweep_path:
+        print("❌ 缺少 sweep_report.json 路径(用法: inp-tool pbs watch <sweep_report.json>)", file=sys.stderr)
+        return 1
+    sweep_p = Path(sweep_path)
+    if args.from_sweep_dir or sweep_p.is_dir():
+        if sweep_p.is_dir():
+            manifest = sweep_p / "manifest.json"
+        else:
+            manifest = sweep_p / "manifest.json"
+        if not manifest.is_file():
+            print(f"❌ {sweep_p} 下找不到 manifest.json", file=sys.stderr)
+            return 1
+        sweep_p = manifest
+    if not sweep_p.is_file():
+        print(f"❌ sweep_report.json 不存在: {sweep_p}", file=sys.stderr)
+        return 1
+
+    # 2. 加载 cluster config + 覆盖
+    cfg = ClusterConfig.load()
+    if args.host:
+        cfg.host = args.host
+    if args.user:
+        cfg.user = args.user
+    if args.ssh_key:
+        cfg.ssh_key = args.ssh_key
+        cfg.auth_method = "ssh-key"
+    # 列覆盖
+    if args.col_step is not None:
+        cfg.col_step = args.col_step
+    if args.col_time is not None:
+        cfg.col_time = args.col_time
+    if args.col_cfl_global is not None:
+        cfg.col_cfl_global = args.col_cfl_global
+    if args.info_file:
+        cfg.info_file = args.info_file
+    if args.info_meta_file:
+        cfg.info_meta_file = args.info_meta_file
+
+    client = SshClusterClient(cfg)
+
+    # 3. info_meta_path: 远端 meta 文件,本地可读位置(用户事先下载 或用 SSH)
+    # 简化:若 sweep_dir/case_xxx/ 下能找到 minfo0.mpf1d,本地用之;否则用 fallback
+    import json as _json
+    manifest_data = _json.loads(sweep_p.read_text())
+    local_meta_path: str = ""
+    cases = manifest_data.get("cases", [])
+    if cases:
+        first_case = Path(cases[0].get("path", ""))
+        candidate = first_case / cfg.info_meta_file
+        if candidate.is_file():
+            local_meta_path = str(candidate)
+
+    # 4. SweepMonitor.watch 循环
+    monitor = SweepMonitor(
+        sweep_p, client, info_meta_path=local_meta_path or None,
+    )
+
+    def _render(progresses):
+        if args.output_json:
+            import json as _json
+            print(_json.dumps(
+                {
+                    "sweep_report": str(sweep_p),
+                    "host": cfg.host,
+                    "interval": args.interval,
+                    "total": len(progresses),
+                    "cases": [p.to_dict() for p in progresses],
+                },
+                indent=2, ensure_ascii=False,
+            ))
+        else:
+            print(f"\n⏱  监控 {sweep_p} (interval={args.interval}s; {len(progresses)} case):")
+            print(format_progress_table(progresses))
+
+    if args.once:
+        progresses = monitor.refresh_all()
+        _render(progresses)
+    else:
+        # 持续循环(Ctrl-C 退出)
+        try:
+            monitor.watch(interval=args.interval, once=False, callback=_render)
+        except KeyboardInterrupt:
+            print("\n(用户中断)")
+    return 0
+
+
 def main(argv=None):
     # v0.7.1:--lang 顶层 flag(必须最早解析,因为 i18n 影响后续所有 help/description)
     pre_parser = argparse.ArgumentParser(add_help=False)
@@ -1190,6 +1288,61 @@ def main(argv=None):
     )
     spbs_status.add_argument('--no-color', dest='no_color', action='store_true')
     spbs_status.set_defaults(func=cmd_pbs_status)
+
+    # pbs watch — 运行中监控(Phase 4):读 mcfd.info0 显示 step / CFL / 残差
+    spbs_watch = spbs_sub.add_parser(
+        'watch',
+        help='运行中监控 sweep_report.json 中所有 case 的 mcfd.info0(步数/CFL/残差)',
+    )
+    spbs_watch.add_argument(
+        'sweep_report', nargs='?',
+        help='sweep_report.json 路径(或 sweep 目录)',
+    )
+    spbs_watch.add_argument(
+        '--from-sweep-dir', dest='from_sweep_dir', action='store_true',
+        help='sweep_report 是 sweep 目录',
+    )
+    spbs_watch.add_argument('--host', help='覆盖 cluster.json 的 host')
+    spbs_watch.add_argument('--user', help='覆盖 user')
+    spbs_watch.add_argument('--ssh-key', dest='ssh_key', help='SSH 私钥路径')
+    spbs_watch.add_argument(
+        '--interval', dest='interval', type=int, default=30,
+        help='刷新间隔秒(默认 30)',
+    )
+    spbs_watch.add_argument(
+        '--info-file', dest='info_file', default='mcfd.info0',
+        help='mcfd.info0 文件名(默认 mcfd.info0)',
+    )
+    spbs_watch.add_argument(
+        '--info-meta-file', dest='info_meta_file', default='minfo0.mpf1d',
+        help='列名元数据文件名(默认 minfo0.mpf1d)',
+    )
+    spbs_watch.add_argument(
+        '--col-step', dest='col_step', type=int, default=0,
+        help='step# 列索引(默认 0)',
+    )
+    spbs_watch.add_argument(
+        '--col-time', dest='col_time', type=int, default=1,
+        help='time 列索引(默认 1)',
+    )
+    spbs_watch.add_argument(
+        '--col-cfl-global', dest='col_cfl_global', type=int, default=5,
+        help='CFL_global 列索引(默认 5)',
+    )
+    spbs_watch.add_argument(
+        '--res-cols', dest='res_cols', default='3,4',
+        help='要显示的残差列索引(逗号分隔,默认 3,4=RHS_avg,RHS_max)',
+    )
+    spbs_watch.add_argument(
+        '--once', dest='once', action='store_true',
+        help='只跑一次不循环',
+    )
+    spbs_watch.add_argument(
+        '--json', dest='output_json', action='store_true',
+        help='输出 JSON',
+    )
+    spbs_watch.add_argument('--no-color', dest='no_color', action='store_true')
+    spbs_watch.set_defaults(func=cmd_pbs_watch)
 
     args = p.parse_args(argv)
     return args.func(args)

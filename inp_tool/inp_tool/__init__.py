@@ -64,6 +64,15 @@ from .batch import (       # v0.14.0 新增(Phase 2)
     summarize_states,
     format_status_table,
 )
+from .monitor import (      # v0.14.0 / Phase 4 新增
+    Info0Parser,
+    CaseProgress,
+    CaseMonitor,
+    SweepMonitor,
+    parse_info0_meta,
+    format_progress_table,
+    DEFAULT_INFO0_COLUMNS,
+)
 
 __all__ = [
     'InpFile', 'Block', 'Stmt', 'Value', 'infer_type',
@@ -92,5 +101,9 @@ __all__ = [
     # v0.14.0 status (Phase 3)
     'SweepStatusEntry', 'query_sweep_status',
     'summarize_states', 'format_status_table',
+    # v0.14.0 monitor (Phase 4)
+    'Info0Parser', 'CaseProgress', 'CaseMonitor', 'SweepMonitor',
+    'parse_info0_meta', 'format_progress_table',
+    'DEFAULT_INFO0_COLUMNS',
 ]
 __version__ = '0.13.0'
