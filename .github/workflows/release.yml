@@ -52,11 +52,23 @@ jobs:
         # 触发 cp1252 encode 失败。设 PYTHONIOENCODING=utf-8 让 pytest 输出 utf-8
         # v0.4.2: 装全套 extras(包含 [build] 里的 pyinstaller 6.16.0),代替 environment.yml 里
         # conda 装的重复项 + 单独的 pyinstaller 行(单一来源:pyproject.toml)
+        # fix/release-macos-gui-skip: macOS(Apple Silicon M1/M2)runner 上 PySide2 5.15.2.1
+        # 没有 arm64 wheel,装 [gui] extras 必爆;同时跳过全部 test_gui_*.py(offscreen 平台
+        # 依赖 PySide2)。与 ci.yml 的 macOS 分支对齐(PR #23 commit 74107c0 + d9f3455)。
+        # 此前 v0.12.0 / v0.13.0 tag 触发 release.yml 时因这一处遗漏而 macOS test 失败,
+        # 整个 workflow skipped build + Release,导致无任何 artifact。
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          conda run -n cfdchanger pip install -e ".[dev,api,yaml,build,gui]"
-          conda run -n cfdchanger python -m pytest tests/ -v --tb=short
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            echo "macOS runner — skipping [gui] install (PySide2 5.15.2.1 无 arm64 wheel)"
+            conda run -n cfdchanger pip install -e ".[dev,api,yaml,build]"
+            conda run -n cfdchanger python -m pytest tests/ -v --tb=short \
+              --ignore-glob='tests/test_gui_*.py'
+          else
+            conda run -n cfdchanger pip install -e ".[dev,api,yaml,build,gui]"
+            conda run -n cfdchanger python -m pytest tests/ -v --tb=short
+          fi
 
   # ========== 跨平台打包 ==========
   build:
