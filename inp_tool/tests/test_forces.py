@@ -34,8 +34,8 @@ from inp_tool.postprocess.forces import (
 )
 
 REFERENCE_DIR = (
-    Path(__file__).resolve().parent.parent.parent
-    / "reference" / "full_case" / "Case"
+    Path(__file__).resolve().parent
+    / "fixtures" / "reference" / "case"
 )
 REFERENCE_INP = REFERENCE_DIR / "mcfd.inp"
 
@@ -402,7 +402,7 @@ class TestSummarizeForces:
     def test_row_case_name_is_dir_basename(self):
         geom = ReferenceGeometry(Sref=1.0, Lref=1.0)
         report = summarize_forces([REFERENCE_DIR], op_ibd=[1], ref_geom=geom)
-        assert report.rows[0].case == "Case"
+        assert report.rows[0].case == "case"
 
     def test_row_ma_matches_inp(self):
         geom = ReferenceGeometry(Sref=1.0, Lref=1.0)
