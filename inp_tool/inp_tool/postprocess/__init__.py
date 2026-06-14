@@ -34,6 +34,26 @@ from .bc import (
     op_label,
     parse_mcfd_bc,
 )
+from .convergence import (
+    DEFAULT_CV_THRESHOLD,
+    DEFAULT_MIN_WINDOW,
+    DEFAULT_WINDOW_FRACTION,
+    ConvergenceWindow,
+    compute_convergence,
+    format_convergence_report,
+)
+from .forces import (
+    CoefficientRow,
+    ForceReport,
+    ForceSample,
+    ForceSection,
+    ReferenceGeometry,
+    RunParams,
+    build_run_params,
+    compute_coefficients,
+    shift_moment_to_ref,
+    summarize_forces,
+)
 from .info1 import (
     Info1Step,
     find_total_force_file,
@@ -63,4 +83,22 @@ __all__ = [
     "find_total_force_file",
     "is_viscous",
     "read_info1",
+    # forces
+    "CoefficientRow",
+    "ForceReport",
+    "ForceSample",
+    "ForceSection",
+    "ReferenceGeometry",
+    "RunParams",
+    "build_run_params",
+    "compute_coefficients",
+    "shift_moment_to_ref",
+    "summarize_forces",
+    # convergence
+    "DEFAULT_CV_THRESHOLD",
+    "DEFAULT_MIN_WINDOW",
+    "DEFAULT_WINDOW_FRACTION",
+    "ConvergenceWindow",
+    "compute_convergence",
+    "format_convergence_report",
 ]
