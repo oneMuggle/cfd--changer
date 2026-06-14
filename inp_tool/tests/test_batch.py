@@ -450,3 +450,386 @@ class TestSubmitSweepErrors:
         failed_case, err = result.failed[0]
         assert "case_001" in failed_case
         assert "connection refused" in err
+
+
+# ===========================================================================
+# v0.14.0 / Phase 5:cancel
+# ===========================================================================
+
+from inp_tool.batch import (
+    PbsCancelResult,
+    cancel_sweep,
+)
+
+
+class TestPbsCancelResult:
+    def test_empty(self):
+        r = PbsCancelResult()
+        assert r.requested == []
+        assert r.cancelled == []
+        assert r.failed == []
+        assert r.skipped == []
+        assert r.total == 0
+
+    def test_total_counts_all(self):
+        r = PbsCancelResult(
+            requested=["1", "2"],
+            cancelled=["1"],
+            failed=[("2", "err")],
+            skipped=["3"],
+        )
+        assert r.total == 4  # 2+1+1+1
+
+
+def _make_manifest_with_subs_with_state(
+    base_dir: Path,
+    submissions: list,
+) -> Path:
+    """合成 sweep manifest + 每 case 目录(可指定 state)。"""
+    cases = []
+    for s in submissions:
+        case_id = s["case_name"]
+        case_path = base_dir / case_id
+        case_path.mkdir(parents=True, exist_ok=True)
+        (case_path / "mcfd.inp").write_text("# m\n")
+        pbs_name = s.get("pbs_name", f"Mars_{case_id[-3:]}")
+        (case_path / f"run_{pbs_name}.pbs").write_text(
+            f"#!/bin/bash\n#PBS -N {pbs_name}\nls\n"
+        )
+        cases.append({
+            "case_id": case_id,
+            "path": str(case_path),
+            "params": {},
+            "applied": {},
+            "pbs_name": pbs_name,
+            "pbs_template": f"run_{pbs_name}.pbs",
+        })
+    manifest = {
+        "template": str(base_dir / "t.inp"),
+        "total": len(submissions),
+        "cases": cases,
+        "layout": "per_dir",
+        "generated_at": "2026-06-13T10:00:00",
+        "pbs_submissions": submissions,
+    }
+    p = base_dir / "manifest.json"
+    p.write_text(json.dumps(manifest))
+    return p
+
+
+class TestCancelSweepHappyPath:
+    def test_no_subs_returns_empty(self, tmp_path):
+        manifest = {"template": str(tmp_path / "t"), "total": 0, "cases": []}
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+        from inp_tool.cluster import LocalDryRunClient
+        client = LocalDryRunClient(ClusterConfig())
+        result = cancel_sweep(manifest_path, client)
+        assert isinstance(result, PbsCancelResult)
+        assert result.total == 0
+
+    def test_cancels_all_active(self, tmp_path):
+        subs = [
+            {"case_dir": str(tmp_path / "c0"), "case_name": "c0",
+             "job_id": "100", "pbs_name": "M_c0", "submit_time": "...",
+             "state": "R", "host": "h", "queue": "q02"},
+            {"case_dir": str(tmp_path / "c1"), "case_name": "c1",
+             "job_id": "101", "pbs_name": "M_c1", "submit_time": "...",
+             "state": "Q", "host": "h", "queue": "q02"},
+        ]
+        manifest = _make_manifest_with_subs_with_state(tmp_path, subs)
+        from inp_tool.cluster import ClusterClient
+        cancel_calls = []
+        class MockClient(ClusterClient):
+            def __init__(self, config):
+                super().__init__(config)
+            def cancel(self, job_id, *, force=False):
+                cancel_calls.append((job_id, force))
+                return True
+            def probe(self): pass
+            def submit(self, **kw): return "x"
+            def status(self, job_id): return PbsJobStatus(job_id, "", "u", "R", "q")
+            def status_many(self, jids): return [self.status(j) for j in jids]
+            def list_user_jobs(self, user): return []
+            def tail(self, p, n=50): return ""
+            def rsync_to(self, ld, rd, *, exclude=()): pass
+            def rsync_from(self, rp, lp): pass
+            def check_concurrency(self, user): return 0
+
+        client = MockClient(ClusterConfig())
+        result = cancel_sweep(manifest, client)
+        # R + Q → 都取消
+        assert len(result.cancelled) == 2
+        assert "100" in result.cancelled
+        assert "101" in result.cancelled
+        assert len(result.skipped) == 0
+        # 调了 2 次 cancel
+        assert len(cancel_calls) == 2
+
+    def test_skip_completed_default(self, tmp_path):
+        """默认 skip_completed=True:state=C/E 的不取消"""
+        subs = [
+            {"case_dir": str(tmp_path / "c0"), "case_name": "c0",
+             "job_id": "100", "pbs_name": "M_c0", "submit_time": "...",
+             "state": "C", "host": "h", "queue": "q02"},     # 已完成
+            {"case_dir": str(tmp_path / "c1"), "case_name": "c1",
+             "job_id": "101", "pbs_name": "M_c1", "submit_time": "...",
+             "state": "R", "host": "h", "queue": "q02"},     # 运行中
+        ]
+        manifest = _make_manifest_with_subs_with_state(tmp_path, subs)
+        from inp_tool.cluster import ClusterClient
+        cancel_calls = []
+        class MockClient(ClusterClient):
+            def __init__(self, config):
+                super().__init__(config)
+            def cancel(self, job_id, *, force=False):
+                cancel_calls.append(job_id)
+                return True
+            def probe(self): pass
+            def submit(self, **kw): return "x"
+            def status(self, job_id): return PbsJobStatus(job_id, "", "u", "R", "q")
+            def status_many(self, jids): return [self.status(j) for j in jids]
+            def list_user_jobs(self, user): return []
+            def tail(self, p, n=50): return ""
+            def rsync_to(self, ld, rd, *, exclude=()): pass
+            def rsync_from(self, rp, lp): pass
+            def check_concurrency(self, user): return 0
+
+        client = MockClient(ClusterConfig())
+        result = cancel_sweep(manifest, client)
+        # C 跳过,R 取消
+        assert len(result.cancelled) == 1
+        assert "101" in result.cancelled
+        assert "100" in result.skipped or any("c0" in s for s in result.skipped)
+
+    def test_job_ids_filter(self, tmp_path):
+        """--job-ids 指定只取消这几个"""
+        subs = [
+            {"case_dir": str(tmp_path / f"c{i}"), "case_name": f"c{i}",
+             "job_id": str(100 + i), "pbs_name": f"M_c{i}",
+             "submit_time": "...", "state": "R", "host": "h", "queue": "q02"}
+            for i in range(3)
+        ]
+        manifest = _make_manifest_with_subs_with_state(tmp_path, subs)
+        from inp_tool.cluster import ClusterClient
+        cancel_calls = []
+        class MockClient(ClusterClient):
+            def __init__(self, config):
+                super().__init__(config)
+            def cancel(self, job_id, *, force=False):
+                cancel_calls.append(job_id)
+                return True
+            def probe(self): pass
+            def submit(self, **kw): return "x"
+            def status(self, job_id): return PbsJobStatus(job_id, "", "u", "R", "q")
+            def status_many(self, jids): return [self.status(j) for j in jids]
+            def list_user_jobs(self, user): return []
+            def tail(self, p, n=50): return ""
+            def rsync_to(self, ld, rd, *, exclude=()): pass
+            def rsync_from(self, rp, lp): pass
+            def check_concurrency(self, user): return 0
+
+        client = MockClient(ClusterConfig())
+        result = cancel_sweep(manifest, client, job_ids=["100", "102"])
+        # 只取消 100 + 102
+        assert len(result.cancelled) == 2
+        assert "100" in result.cancelled
+        assert "102" in result.cancelled
+        assert "101" not in result.cancelled
+
+    def test_force_passes_force_to_cancel(self, tmp_path):
+        """--force 调 cluster.cancel(force=True)"""
+        subs = [
+            {"case_dir": str(tmp_path / "c0"), "case_name": "c0",
+             "job_id": "100", "pbs_name": "M_c0", "submit_time": "...",
+             "state": "R", "host": "h", "queue": "q02"},
+        ]
+        manifest = _make_manifest_with_subs_with_state(tmp_path, subs)
+        from inp_tool.cluster import ClusterClient
+        cancel_calls = []
+        class MockClient(ClusterClient):
+            def __init__(self, config):
+                super().__init__(config)
+            def cancel(self, job_id, *, force=False):
+                cancel_calls.append((job_id, force))
+                return True
+            def probe(self): pass
+            def submit(self, **kw): return "x"
+            def status(self, job_id): return PbsJobStatus(job_id, "", "u", "R", "q")
+            def status_many(self, jids): return [self.status(j) for j in jids]
+            def list_user_jobs(self, user): return []
+            def tail(self, p, n=50): return ""
+            def rsync_to(self, ld, rd, *, exclude=()): pass
+            def rsync_from(self, rp, lp): pass
+            def check_concurrency(self, user): return 0
+
+        client = MockClient(ClusterConfig())
+        cancel_sweep(manifest, client, force=True)
+        assert cancel_calls[0] == ("100", True)
+
+    def test_cancel_failure_collected(self, tmp_path):
+        """cancel 失败时,job_id 进 failed"""
+        subs = [
+            {"case_dir": str(tmp_path / "c0"), "case_name": "c0",
+             "job_id": "100", "pbs_name": "M_c0", "submit_time": "...",
+             "state": "R", "host": "h", "queue": "q02"},
+        ]
+        manifest = _make_manifest_with_subs_with_state(tmp_path, subs)
+        from inp_tool.cluster import ClusterClient
+        class MockClient(ClusterClient):
+            def __init__(self, config):
+                super().__init__(config)
+            def cancel(self, job_id, *, force=False):
+                return False  # 模拟 cancel 失败
+            def probe(self): pass
+            def submit(self, **kw): return "x"
+            def status(self, job_id): return PbsJobStatus(job_id, "", "u", "R", "q")
+            def status_many(self, jids): return [self.status(j) for j in jids]
+            def list_user_jobs(self, user): return []
+            def tail(self, p, n=50): return ""
+            def rsync_to(self, ld, rd, *, exclude=()): pass
+            def rsync_from(self, rp, lp): pass
+            def check_concurrency(self, user): return 0
+
+        client = MockClient(ClusterConfig())
+        result = cancel_sweep(manifest, client)
+        assert len(result.cancelled) == 0
+        assert len(result.failed) == 1
+        assert result.failed[0][0] == "100"
+
+    def test_cancel_exception_collected(self, tmp_path):
+        """cancel 抛异常时,job_id 进 failed"""
+        subs = [
+            {"case_dir": str(tmp_path / "c0"), "case_name": "c0",
+             "job_id": "100", "pbs_name": "M_c0", "submit_time": "...",
+             "state": "R", "host": "h", "queue": "q02"},
+        ]
+        manifest = _make_manifest_with_subs_with_state(tmp_path, subs)
+        from inp_tool.cluster import ClusterClient
+        class MockClient(ClusterClient):
+            def __init__(self, config):
+                super().__init__(config)
+            def cancel(self, job_id, *, force=False):
+                raise RuntimeError("ssh broken")
+            def probe(self): pass
+            def submit(self, **kw): return "x"
+            def status(self, job_id): return PbsJobStatus(job_id, "", "u", "R", "q")
+            def status_many(self, jids): return [self.status(j) for j in jids]
+            def list_user_jobs(self, user): return []
+            def tail(self, p, n=50): return ""
+            def rsync_to(self, ld, rd, *, exclude=()): pass
+            def rsync_from(self, rp, lp): pass
+            def check_concurrency(self, user): return 0
+
+        client = MockClient(ClusterConfig())
+        result = cancel_sweep(manifest, client)
+        assert len(result.failed) == 1
+        assert "100" in result.failed[0][0]
+        assert "ssh broken" in result.failed[0][1]
+
+    def test_missing_manifest_raises(self, tmp_path):
+        from inp_tool.cluster import LocalDryRunClient
+        client = LocalDryRunClient(ClusterConfig())
+        with pytest.raises(FileNotFoundError):
+            cancel_sweep(tmp_path / "nope.json", client)
+
+
+# ===========================================================================
+# v0.14.0 / Phase 6:rerun
+# ===========================================================================
+
+from inp_tool.batch import (
+    PbsRerunResult,
+    rerun_sweep,
+)
+
+
+class TestPbsRerunResult:
+    def test_empty(self):
+        r = PbsRerunResult()
+        assert r.cancelled is not None or r.cancelled == PbsCancelResult()
+        assert r.resubmitted is not None or r.resubmitted.submissions == []
+
+    def test_holds_cancel_and_resubmit(self):
+        from inp_tool.batch import PbsCancelResult, PbsBatchResult
+        cancel = PbsCancelResult(cancelled=["1"])
+        resubmit = PbsBatchResult(submissions=[
+            PbsSubmission("a", "a", "1", "p", "h", "q02")
+        ])
+        r = PbsRerunResult(cancelled=cancel, resubmitted=resubmit)
+        assert r.cancelled.cancelled == ["1"]
+        assert len(r.resubmitted.submissions) == 1
+
+
+class TestRerunSweepHappyPath:
+    def test_rerun_cancels_completed_then_submits(self, tmp_path):
+        """rerun 默认:取消 state=C/E + 重新 submit"""
+        subs = [
+            {"case_dir": str(tmp_path / "c0"), "case_name": "c0",
+             "job_id": "100", "pbs_name": "M_c0", "submit_time": "...",
+             "state": "C", "host": "h", "queue": "q02"},
+            {"case_dir": str(tmp_path / "c1"), "case_name": "c1",
+             "job_id": "101", "pbs_name": "M_c1", "submit_time": "...",
+             "state": "E", "host": "h", "queue": "q02"},
+        ]
+        manifest = _make_manifest_with_subs_with_state(tmp_path, subs)
+        from inp_tool.cluster import ClusterClient
+        class MockClient(ClusterClient):
+            def __init__(self, config):
+                super().__init__(config)
+            def cancel(self, job_id, *, force=False):
+                return True
+            def submit(self, script_text, *, remote_dir, pbs_overrides=None):
+                return f"NEW-{remote_dir[-1]}"  # 简单 fake
+            def status(self, job_id): return PbsJobStatus(job_id, "", "u", "Q", "q")
+            def status_many(self, jids): return [self.status(j) for j in jids]
+            def list_user_jobs(self, user): return []
+            def tail(self, p, n=50): return ""
+            def rsync_to(self, ld, rd, *, exclude=()): pass
+            def rsync_from(self, rp, lp): pass
+            def check_concurrency(self, user): return 0
+            def probe(self): pass
+
+        client = MockClient(ClusterConfig())
+        result = rerun_sweep(manifest, client, respect_concurrency=False)
+        # cancel: 100 + 101 都 cancel
+        assert len(result.cancelled.cancelled) == 2
+        # resubmit: 都重提
+        assert len(result.resubmitted.submissions) == 2
+
+    def test_rerun_states_custom(self, tmp_path):
+        """--states Q:只重提 queued 的"""
+        subs = [
+            {"case_dir": str(tmp_path / "c0"), "case_name": "c0",
+             "job_id": "100", "pbs_name": "M_c0", "submit_time": "...",
+             "state": "C", "host": "h", "queue": "q02"},
+            {"case_dir": str(tmp_path / "c1"), "case_name": "c1",
+             "job_id": "101", "pbs_name": "M_c1", "submit_time": "...",
+             "state": "Q", "host": "h", "queue": "q02"},
+        ]
+        manifest = _make_manifest_with_subs_with_state(tmp_path, subs)
+        from inp_tool.cluster import ClusterClient
+        class MockClient(ClusterClient):
+            def __init__(self, config):
+                super().__init__(config)
+            def cancel(self, job_id, *, force=False): return True
+            def submit(self, script_text, *, remote_dir, pbs_overrides=None):
+                return f"NEW-{remote_dir[-1]}"
+            def status(self, job_id): return PbsJobStatus(job_id, "", "u", "Q", "q")
+            def status_many(self, jids): return [self.status(j) for j in jids]
+            def list_user_jobs(self, user): return []
+            def tail(self, p, n=50): return ""
+            def rsync_to(self, ld, rd, *, exclude=()): pass
+            def rsync_from(self, rp, lp): pass
+            def check_concurrency(self, user): return 0
+            def probe(self): pass
+
+        client = MockClient(ClusterConfig())
+        result = rerun_sweep(
+            manifest, client, states=("Q",), respect_concurrency=False,
+        )
+        # 只重提 101 (Q 状态)
+        assert len(result.cancelled.cancelled) == 1
+        assert "101" in result.cancelled.cancelled
+        assert len(result.resubmitted.submissions) == 1
+        assert result.resubmitted.submissions[0].case_name == "c1"
