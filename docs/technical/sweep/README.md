@@ -18,6 +18,7 @@
 | [**10-sweep-case-dir**](10-sweep-case-dir.md) | **sweep 整算例目录 (v0.8.0)** | source_dir / CopyStrategy / per_dir 模式 | **当前主线** |
 | [**11-equation-aware-config**](11-equation-aware-config.md) | **方程感知配置 (v0.9.0/0.9.1)** | 9 eqnset 位置 + 5 湍流 + 3 气体 + 4 preset | **当前主线** |
 | [12-equation-sweep-extend](12-equation-sweep-extend.md) | 方程感知扩展 (v0.10.0) | sweep 按 case 切方程/湍流/气体(枚举轴 + per-case 覆盖 + alias) | 当前主线 |
+| [**13-pbs-submit-watch**](13-pbs-submit-watch.md) | **PBS 批量提交 + 运行中监控 (v0.14.0)** | cluster/batch/monitor 三模块架构 / 数据契约 / 与 sweep 集成 | **当前主线** |
 
 ## 速读路径
 

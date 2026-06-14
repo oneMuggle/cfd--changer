@@ -95,5 +95,6 @@
 - **看示例:** [`sweep/06-完整示例`](sweep/06-examples.md)
 - **查 .inp 字段:** [`reference/01-mcfd-inp-field-reference`](reference/01-mcfd-inp-field-reference.md)
 - **用 CLI / API:** [`reference/02-cli-api-reference`](reference/02-cli-api-reference.md)
+- **PBS 集群批量提交 / 监控 (v0.14.0+):** [`20-pbs-cluster`](20-pbs-cluster.md)
 - **遇到问题:** [`sweep/07-FAQ`](sweep/07-faq.md)
 - **想理解内部:** [`../technical/`](../technical/)
