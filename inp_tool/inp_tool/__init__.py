@@ -58,6 +58,11 @@ from .batch import (       # v0.14.0 新增(Phase 2)
     PbsSubmission,
     PbsBatchResult,
     submit_sweep,
+    # v0.14.0 / Phase 3 新增
+    SweepStatusEntry,
+    query_sweep_status,
+    summarize_states,
+    format_status_table,
 )
 
 __all__ = [
@@ -84,5 +89,8 @@ __all__ = [
     'probe_scheduler',
     # v0.14.0 batch
     'PbsSubmission', 'PbsBatchResult', 'submit_sweep',
+    # v0.14.0 status (Phase 3)
+    'SweepStatusEntry', 'query_sweep_status',
+    'summarize_states', 'format_status_table',
 ]
 __version__ = '0.13.0'
