@@ -18,7 +18,7 @@
 |---|---|---|---|
 | [`architecture/`](architecture/README.md) | inp_tool 架构与核心模块 | 2 | [01-architecture-overview](architecture/01-architecture-overview.md) |
 | [`sweep/`](sweep/README.md) | sweep 批量算例生成(本手册主线) | 12 | [01-sweep-overview](sweep/01-sweep-overview.md) |
-| [`release/`](release/README.md) | CLI 打包与 CI/CD | 2 | [01-cli-packaging](release/01-cli-packaging.md) |
+| [`release/`](release/README.md) | CLI 打包与 CI/CD | 3 | [01-cli-packaging](release/01-cli-packaging.md) |
 | [`ux/`](ux/README.md) | UX 友好 CLI + GUI 设计 | 1 | [01-gui-architecture](ux/01-gui-architecture.md) |
 | [`intro/`](intro/README.md) | 项目级概念(占位) | 0 | — |
 
