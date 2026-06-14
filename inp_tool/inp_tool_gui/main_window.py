@@ -166,6 +166,14 @@ class MainWindow(QMainWindow):
         self.diff_viewer = DiffViewer(self.diff_ctrl, self)
         self.tabs.addTab(self.diff_viewer, "对比(&D)")
 
+        # v0.15.0 / Phase 6: 后处理面板(气动力提取 / 收敛分析 / Excel / 收敛图)
+        from inp_tool_gui.controllers.postprocess_controller import PostprocessController
+        from inp_tool_gui.widgets.postprocess_panel import PostprocessPanel
+        self.postprocess_ctrl = PostprocessController()
+        self.postprocess_panel = PostprocessPanel(self)
+        self.postprocess_panel.run_requested.connect(self._on_postprocess_run)
+        self.tabs.addTab(self.postprocess_panel, "后处理(&P)")
+
         self.setCentralWidget(self.tabs)
 
     # --- File actions ---------------------------------------------------
@@ -318,6 +326,90 @@ class MainWindow(QMainWindow):
         if dlg.exec_() == PresetDialog.Accepted:
             self._refresh_after_edit()
             self.detect_panel.run(self.file_ctrl.inp)
+
+    def _on_postprocess_run(self, action: str, params: dict) -> None:
+        """v0.15.0 / Phase 6:处理 PostprocessPanel 的 run_requested 信号。
+
+        把 params 写进 controller,然后按 action 派发到对应方法。
+        异常 → 弹错误对话框 + 日志记录。
+        """
+        from PySide2.QtWidgets import QFileDialog
+
+        try:
+            case_dirs = params["case_dirs"]
+            if not case_dirs:
+                QMessageBox.warning(self, "缺少算例", "请先选择至少一个算例目录。")
+                return
+
+            # 配置 controller
+            self.postprocess_ctrl.set_op_ibd(params["op"])
+            self.postprocess_ctrl.set_geometry(
+                sref=params["sref"], lref=params["lref"],
+                xref=params["xref"], yref=params["yref"], zref=params["zref"],
+                xcg=params["xcg"],
+            )
+
+            self.postprocess_panel.append_log(f"=== {action} ===")
+
+            if action == "extract":
+                report = self.postprocess_ctrl.extract(case_dirs)
+                self.postprocess_panel.append_log(
+                    f"提取完成,{len(report.rows)} 个算例")
+                for row in report.rows:
+                    self.postprocess_panel.append_log(
+                        f"  {row.case}: Ma={row.Ma:.4g}, CD={row.CD:.5f}, "
+                        f"CL={row.CL:.5f}, L/D={row.L_over_D:.4f}"
+                    )
+
+            elif action == "convergence":
+                out_dir = QFileDialog.getExistingDirectory(self, "选择输出目录")
+                if not out_dir:
+                    return
+                results = self.postprocess_ctrl.convergence(case_dirs)
+                text = self.postprocess_ctrl.format_convergence_report(results)
+                (Path(out_dir) / "convergence_report.txt").write_text(
+                    text, encoding="utf-8")
+                self.postprocess_panel.append_log(
+                    f"收敛报告: {out_dir}/convergence_report.txt")
+
+            elif action == "report":
+                out_file, _ = QFileDialog.getSaveFileName(
+                    self, "保存 Excel", "ForceReport.xlsx", "Excel (*.xlsx)")
+                if not out_file:
+                    return
+                try:
+                    p = self.postprocess_ctrl.report(case_dirs, out_file)
+                    self.postprocess_panel.append_log(f"Excel: {p}")
+                except ImportError as e:
+                    QMessageBox.warning(self, "缺依赖", str(e))
+
+            elif action == "plot":
+                out_file, _ = QFileDialog.getSaveFileName(
+                    self, "保存收敛图", "convergence_plot.png", "PNG (*.png)")
+                if not out_file:
+                    return
+                try:
+                    p = self.postprocess_ctrl.plot(case_dirs, out_file)
+                    self.postprocess_panel.append_log(f"收敛图: {p}")
+                except ImportError as e:
+                    QMessageBox.warning(self, "缺依赖", str(e))
+
+            elif action == "all":
+                out_dir = QFileDialog.getExistingDirectory(self, "选择输出目录")
+                if not out_dir:
+                    return
+                result = self.postprocess_ctrl.run_all(case_dirs, out_dir)
+                self.postprocess_panel.append_log(
+                    f"完成 {len(result['report'].rows)} 个算例")
+                self.postprocess_panel.append_log(f"  TXT: {result['txt']}")
+                if result.get("xlsx"):
+                    self.postprocess_panel.append_log(f"  XLSX: {result['xlsx']}")
+                if result.get("png"):
+                    self.postprocess_panel.append_log(f"  PNG: {result['png']}")
+
+        except Exception as exc:
+            self.postprocess_panel.append_log(f"错误: {exc}")
+            QMessageBox.critical(self, "后处理失败", str(exc))
 
     def _on_about(self) -> None:
         QMessageBox.about(
