@@ -832,6 +832,93 @@ def cmd_pbs_submit(args):
     return 0
 
 
+def cmd_pbs_status(args):
+    """``inp-tool pbs status`` — 查询 sweep_report.json 中所有 case 的 PBS 状态。"""
+    import json as _json
+    import time as _time
+    from pathlib import Path
+    from .cluster import ClusterConfig, SshClusterClient
+    from .batch import query_sweep_status, summarize_states, format_status_table
+
+    # 1. 解析 sweep_report 路径(同 submit)
+    sweep_path = args.sweep_report
+    if not sweep_path:
+        print("❌ 缺少 sweep_report.json 路径(用法: inp-tool pbs status <sweep_report.json>)", file=sys.stderr)
+        return 1
+    sweep_p = Path(sweep_path)
+    if args.from_sweep_dir or sweep_p.is_dir():
+        if sweep_p.is_dir():
+            manifest = sweep_p / "manifest.json"
+        else:
+            manifest = sweep_p / "manifest.json"
+        if not manifest.is_file():
+            print(f"❌ {sweep_p} 下找不到 manifest.json", file=sys.stderr)
+            return 1
+        sweep_p = manifest
+    if not sweep_p.is_file():
+        print(f"❌ sweep_report.json 不存在: {sweep_p}", file=sys.stderr)
+        return 1
+
+    # 2. 加载 cluster config + 覆盖
+    cfg = ClusterConfig.load()
+    if args.host:
+        cfg.host = args.host
+    if args.user:
+        cfg.user = args.user
+    if args.ssh_key:
+        cfg.ssh_key = args.ssh_key
+        cfg.auth_method = "ssh-key"
+
+    client = SshClusterClient(cfg)
+
+    # 3. filter
+    filter_states = None
+    if args.filter_states:
+        filter_states = [s.strip().upper() for s in args.filter_states.split(",") if s.strip()]
+
+    # 4. 循环(--watch) 或 单次
+    def _do_query() -> list:
+        return query_sweep_status(sweep_p, client, filter_states=filter_states)
+
+    if args.watch:
+        # --watch: Ctrl-C 退出
+        try:
+            while True:
+                _print_status(_do_query(), sweep_p, cfg, args)
+                _time.sleep(args.interval)
+        except KeyboardInterrupt:
+            print("\n(用户中断)")
+            return 0
+    else:
+        entries = _do_query()
+        _print_status(entries, sweep_p, cfg, args)
+    return 0
+
+
+def _print_status(entries, sweep_p, cfg, args) -> None:
+    """辅助函数:打印 status 结果(表格 / JSON)。"""
+    from .batch import summarize_states, format_status_table
+    if args.output_json:
+        import json as _json
+        print(_json.dumps(
+            {
+                "sweep_report": str(sweep_p),
+                "host": cfg.host,
+                "filter": args.filter_states or None,
+                "total": len(entries),
+                "summary": summarize_states(entries),
+                "entries": [e.to_dict() for e in entries],
+            },
+            indent=2, ensure_ascii=False,
+        ))
+        return
+    # 表格
+    summary = summarize_states(entries)
+    summary_str = " ".join(f"{k}={v}" for k, v in sorted(summary.items()))
+    print(f"\n📊 {sweep_p} 状态({len(entries)} case; {summary_str}):")
+    print(format_status_table(entries))
+
+
 def main(argv=None):
     # v0.7.1:--lang 顶层 flag(必须最早解析,因为 i18n 影响后续所有 help/description)
     pre_parser = argparse.ArgumentParser(add_help=False)
@@ -1068,6 +1155,41 @@ def main(argv=None):
         help='Q3: 忽略 max_concurrent_jobs 限流,直接提交',
     )
     spbs_submit.set_defaults(func=cmd_pbs_submit)
+
+    # pbs status — 状态查询(Phase 3)
+    spbs_status = spbs_sub.add_parser(
+        'status',
+        help='查询 sweep_report.json 中所有 case 的 PBS 状态(qstat)',
+    )
+    spbs_status.add_argument(
+        'sweep_report', nargs='?',
+        help='sweep_report.json 路径(或 sweep 目录,自动找 manifest.json)',
+    )
+    spbs_status.add_argument(
+        '--from-sweep-dir', dest='from_sweep_dir', action='store_true',
+        help='sweep_report 是 sweep 目录,自动找 manifest.json',
+    )
+    spbs_status.add_argument('--host', help='覆盖 cluster.json 的 host')
+    spbs_status.add_argument('--user', help='覆盖 user')
+    spbs_status.add_argument('--ssh-key', dest='ssh_key', help='SSH 私钥路径')
+    spbs_status.add_argument(
+        '--filter', dest='filter_states', default='',
+        help='按 state 过滤(逗号分隔,如 R,Q 只看运行+排队)',
+    )
+    spbs_status.add_argument(
+        '--json', dest='output_json', action='store_true',
+        help='输出 JSON(机器可读)',
+    )
+    spbs_status.add_argument(
+        '--watch', dest='watch', action='store_true',
+        help='持续刷新(每 5s)',
+    )
+    spbs_status.add_argument(
+        '--interval', dest='interval', type=int, default=5,
+        help='--watch 刷新间隔(秒,默认 5)',
+    )
+    spbs_status.add_argument('--no-color', dest='no_color', action='store_true')
+    spbs_status.set_defaults(func=cmd_pbs_status)
 
     args = p.parse_args(argv)
     return args.func(args)

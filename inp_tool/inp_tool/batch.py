@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .cluster import ClusterClient
 
@@ -256,3 +256,162 @@ def _patch_manifest(
     report_path.write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False)
     )
+
+
+# ===========================================================================
+# v0.14.0 / Phase 3:状态查询
+# ===========================================================================
+
+@dataclass
+class SweepStatusEntry:
+    """单 case 状态条目(本地 manifest 字段 + 实时 qstat 字段的并集)。"""
+    case_name: str
+    job_id: str
+    pbs_name: str
+    case_dir: str
+    state: str                       # Q|R|E|H|C|Unknown
+    queue: str
+    submit_time: str = ""            # 来自 manifest
+    ncpus: Optional[int] = None
+    walltime_req: Optional[str] = None
+    walltime_used: Optional[str] = None
+    start_time: Optional[str] = None
+    exec_host: Optional[str] = None
+    exit_status: Optional[int] = None
+    live: bool = True                # True = 来自 qstat;False = qstat 失败(默认 Unknown)
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "case_name": self.case_name,
+            "job_id": self.job_id,
+            "pbs_name": self.pbs_name,
+            "case_dir": self.case_dir,
+            "state": self.state,
+            "queue": self.queue,
+            "submit_time": self.submit_time,
+            "live": self.live,
+        }
+        if self.ncpus is not None:
+            d["ncpus"] = self.ncpus
+        if self.walltime_req is not None:
+            d["walltime_req"] = self.walltime_req
+        if self.walltime_used is not None:
+            d["walltime_used"] = self.walltime_used
+        if self.start_time is not None:
+            d["start_time"] = self.start_time
+        if self.exec_host is not None:
+            d["exec_host"] = self.exec_host
+        if self.exit_status is not None:
+            d["exit_status"] = self.exit_status
+        return d
+
+
+def query_sweep_status(
+    sweep_report_path: Any,
+    cluster: ClusterClient,
+    *,
+    filter_states: Optional[Sequence[str]] = None,
+) -> List[SweepStatusEntry]:
+    """读 sweep_report.json, 对每个 pbs_submission 调 cluster.status() 聚合。
+
+    Args:
+        sweep_report_path: manifest JSON 路径
+        cluster: ClusterClient 实例(通常 SshClusterClient)
+        filter_states: 逗号分隔的 state 过滤(如 ``["R", "Q"]`` 只返回运行 + 排队)
+
+    Returns:
+        list[SweepStatusEntry],按 manifest 原顺序
+
+    错误处理:
+    - manifest 缺失 → raise FileNotFoundError
+    - cluster.status() 单个失败 → 该 entry 标 state="Unknown" / live=False,不抛
+    """
+    report_path = Path(sweep_report_path)
+    if not report_path.is_file():
+        raise FileNotFoundError(f"sweep_report.json 不存在: {report_path}")
+    manifest: Dict[str, Any] = json.loads(report_path.read_text())
+    submissions: List[Dict[str, Any]] = list(manifest.get("pbs_submissions", []))
+
+    filter_set: Optional[set] = set(filter_states) if filter_states else None
+    results: List[SweepStatusEntry] = []
+
+    for sub in submissions:
+        job_id = sub.get("job_id", "")
+        # 1. 调 cluster.status 单个 job
+        try:
+            live_status = cluster.status(job_id)
+        except Exception:
+            # qstat 失败:用 manifest 字段填,state="Unknown"
+            results.append(SweepStatusEntry(
+                case_name=sub.get("case_name", ""),
+                job_id=job_id,
+                pbs_name=sub.get("pbs_name", ""),
+                case_dir=sub.get("case_dir", ""),
+                state="Unknown",
+                queue=sub.get("queue", ""),
+                submit_time=sub.get("submit_time", ""),
+                live=False,
+            ))
+            continue
+
+        entry = SweepStatusEntry(
+            case_name=sub.get("case_name", ""),
+            job_id=job_id,
+            pbs_name=live_status.name or sub.get("pbs_name", ""),
+            case_dir=sub.get("case_dir", ""),
+            state=live_status.state,
+            queue=live_status.queue or sub.get("queue", ""),
+            submit_time=sub.get("submit_time", ""),
+            ncpus=live_status.ncpus,
+            walltime_req=live_status.walltime_req,
+            walltime_used=live_status.walltime_used,
+            start_time=live_status.start_time,
+            exec_host=live_status.exec_host,
+            exit_status=live_status.exit_status,
+            live=True,
+        )
+        # 2. 过滤
+        if filter_set is not None and entry.state not in filter_set:
+            continue
+        results.append(entry)
+
+    return results
+
+
+# ===========================================================================
+# v0.14.0 / Phase 3:状态汇总(给 CLI 用)
+# ===========================================================================
+
+def summarize_states(entries: Sequence[SweepStatusEntry]) -> Dict[str, int]:
+    """统计 state 分布,给 CLI 显示"3 Q / 5 R / 2 C"。"""
+    summary: Dict[str, int] = {}
+    for e in entries:
+        summary[e.state] = summary.get(e.state, 0) + 1
+    return summary
+
+
+def format_status_table(entries: Sequence[SweepStatusEntry]) -> str:
+    """渲染对齐的终端表格(给 ``pbs status`` 用)。"""
+    if not entries:
+        return "(无 case)"
+    headers = ["case", "job_id", "state", "queue", "ncpu", "walltime_used", "exec_host"]
+    rows: List[List[str]] = []
+    for e in entries:
+        rows.append([
+            e.case_name,
+            e.job_id,
+            e.state,
+            e.queue,
+            str(e.ncpus) if e.ncpus is not None else "-",
+            e.walltime_used or "-",
+            e.exec_host or "-",
+        ])
+    # 计算每列宽度
+    widths = [max(len(h), max(len(r[i]) for r in rows)) for i, h in enumerate(headers)]
+    # 头
+    lines = ["  ".join(h.ljust(widths[i]) for i, h in enumerate(headers))]
+    lines.append("  ".join("-" * w for w in widths))
+    # 行
+    for r in rows:
+        lines.append("  ".join(r[i].ljust(widths[i]) for i in range(len(headers))))
+    return "\n".join(lines)
