@@ -1017,6 +1017,224 @@ def cmd_pbs_watch(args):
     return 0
 
 
+# ============================================================================
+# v0.14.0:pbs cancel / rerun / run 子命令(Phase 5+6)
+# ============================================================================
+
+def _resolve_sweep_manifest(args) -> Optional["Path"]:
+    """cancel/rerun/run 共用:解析 sweep_report 路径(同 submit/watch)。"""
+    from pathlib import Path
+    sweep_path = args.sweep_report
+    if not sweep_path:
+        return None
+    sweep_p = Path(sweep_path)
+    if args.from_sweep_dir or sweep_p.is_dir():
+        if sweep_p.is_dir():
+            manifest = sweep_p / "manifest.json"
+        else:
+            manifest = sweep_p / "manifest.json"
+        if not manifest.is_file():
+            return None
+        sweep_p = manifest
+    if not sweep_p.is_file():
+        return None
+    return sweep_p
+
+
+def _print_sweep_path_error(sweep_path: Optional["Path"]) -> bool:
+    """打印 sweep_report 路径错误,返回 True(应 return 1)。"""
+    if sweep_path is None:
+        print("❌ 缺少 sweep_report.json 路径", file=sys.stderr)
+    else:
+        print(f"❌ sweep_report.json 不存在: {sweep_path}", file=sys.stderr)
+    return True
+
+
+def cmd_pbs_cancel(args):
+    """``inp-tool pbs cancel`` — 批量取消 sweep 中所有(或指定) job。"""
+    from .cluster import ClusterConfig, SshClusterClient
+    from .batch import cancel_sweep
+
+    sweep_p = _resolve_sweep_manifest(args)
+    if sweep_p is None:
+        if _print_sweep_path_error(sweep_p):
+            return 1
+
+    cfg = ClusterConfig.load()
+    if args.host:
+        cfg.host = args.host
+    if args.user:
+        cfg.user = args.user
+    if args.ssh_key:
+        cfg.ssh_key = args.ssh_key
+        cfg.auth_method = "ssh-key"
+    client = SshClusterClient(cfg)
+
+    job_ids = None
+    if args.job_ids:
+        job_ids = [s.strip() for s in args.job_ids.split(",") if s.strip()]
+
+    print(f"取消 {sweep_p} 上的 job ...")
+    result = cancel_sweep(
+        sweep_p, client,
+        job_ids=job_ids,
+        force=args.force,
+        skip_completed=not args.cancel_all,
+    )
+
+    print(f"\n🛑 取消结果:")
+    print(f"   ✅ 已取消: {len(result.cancelled)}")
+    for jid in result.cancelled:
+        print(f"      {jid}")
+    print(f"   ⏭  跳过: {len(result.skipped)}")
+    for sk in result.skipped[:5]:
+        print(f"      {sk}")
+    if len(result.skipped) > 5:
+        print(f"      ... ({len(result.skipped) - 5} more)")
+    print(f"   ❌ 失败: {len(result.failed)}")
+    for jid, err in result.failed:
+        print(f"      {jid}: {err}")
+
+    if result.failed:
+        return 1
+    return 0
+
+
+def cmd_pbs_rerun(args):
+    """``inp-tool pbs rerun`` — 取消指定 state 的 job + 重新提交。"""
+    from .cluster import ClusterConfig, SshClusterClient
+    from .batch import rerun_sweep
+
+    sweep_p = _resolve_sweep_manifest(args)
+    if sweep_p is None:
+        if _print_sweep_path_error(sweep_p):
+            return 1
+
+    cfg = ClusterConfig.load()
+    if args.host:
+        cfg.host = args.host
+    if args.user:
+        cfg.user = args.user
+    if args.ssh_key:
+        cfg.ssh_key = args.ssh_key
+        cfg.auth_method = "ssh-key"
+    client = SshClusterClient(cfg)
+
+    states = tuple(s.strip() for s in args.states.split(",") if s.strip())
+
+    print(f"重跑 {sweep_p} (states={states}) ...")
+    result = rerun_sweep(
+        sweep_p, client,
+        states=states,
+        force_cancel=args.force_cancel,
+    )
+
+    print(f"\n🔄 重跑结果:")
+    print(f"   🛑 取消: {len(result.cancelled.cancelled)}")
+    for jid in result.cancelled.cancelled:
+        print(f"      {jid}")
+    print(f"   ⏭  跳过: {len(result.skipped)}")
+    for sk in result.skipped[:5]:
+        print(f"      {sk}")
+    print(f"   ✅ 重新提交: {len(result.resubmitted.submissions)}")
+    for s in result.resubmitted.submissions:
+        print(f"      {s.case_name} → job_id={s.job_id}")
+    if result.cancelled.failed:
+        print(f"   ❌ cancel 失败: {len(result.cancelled.failed)}")
+        for jid, err in result.cancelled.failed:
+            print(f"      {jid}: {err}")
+    if result.resubmitted.failed:
+        print(f"   ❌ submit 失败: {len(result.resubmitted.failed)}")
+        for case_dir, err in result.resubmitted.failed:
+            print(f"      {case_dir}: {err}")
+
+    if result.cancelled.failed or result.resubmitted.failed:
+        return 1
+    return 0
+
+
+def cmd_pbs_run(args):
+    """``inp-tool pbs run`` — submit + 立即 watch 一站式。"""
+    from .cluster import ClusterConfig, SshClusterClient, LocalDryRunClient
+    from .batch import submit_sweep
+    from .monitor import SweepMonitor, format_progress_table
+    import json as _json
+
+    sweep_p = _resolve_sweep_manifest(args)
+    if sweep_p is None:
+        if _print_sweep_path_error(sweep_p):
+            return 1
+
+    cfg = ClusterConfig.load()
+    if args.host:
+        cfg.host = args.host
+    if args.user:
+        cfg.user = args.user
+    if args.ssh_key:
+        cfg.ssh_key = args.ssh_key
+        cfg.auth_method = "ssh-key"
+    if args.max_concurrent_jobs is not None:
+        cfg.max_concurrent_jobs = args.max_concurrent_jobs
+
+    if args.dry_run:
+        print("🏃 dry-run 模式: submit 走 LocalDryRunClient")
+        submit_client = LocalDryRunClient(cfg)
+    else:
+        submit_client = SshClusterClient(cfg)
+
+    pbs_overrides: Dict[str, str] = {}
+    if args.queue:
+        pbs_overrides["-q"] = args.queue
+    if args.walltime:
+        pbs_overrides["-l walltime"] = args.walltime
+    if args.nodes or args.ppn:
+        nodes = args.nodes or cfg.default_nodes
+        ppn = args.ppn or cfg.default_ppn
+        pbs_overrides["-l nodes"] = f"{nodes}:ppn={ppn}"
+
+    # 1. submit
+    print(f"提交 {sweep_p} 到 {cfg.user}@{cfg.host} ...")
+    submit_result = submit_sweep(
+        sweep_p, submit_client,
+        dry_run=args.dry_run,
+        skip_existing=args.skip_existing,
+        pbs_overrides=pbs_overrides or None,
+    )
+    print(f"\n📊 提交结果(用时 {submit_result.elapsed_seconds:.1f}s):")
+    print(f"   ✅ 成功: {len(submit_result.submissions)}")
+    print(f"   ⏭ 跳过: {len(submit_result.skipped)}")
+    print(f"   ❌ 失败: {len(submit_result.failed)}")
+
+    if submit_result.failed:
+        for case_dir, err in submit_result.failed:
+            print(f"      {case_dir}: {err}")
+        return 1
+
+    # 2. watch
+    watch_client = SshClusterClient(cfg)
+    manifest_data = _json.loads(sweep_p.read_text())
+    cases = manifest_data.get("cases", [])
+    local_meta_path: str = ""
+    if cases:
+        first_case = Path(cases[0].get("path", ""))
+        candidate = first_case / cfg.info_meta_file
+        if candidate.is_file():
+            local_meta_path = str(candidate)
+    monitor = SweepMonitor(
+        sweep_p, watch_client, info_meta_path=local_meta_path or None,
+    )
+
+    def _render(progresses):
+        print(f"\n⏱  监控 {sweep_p} (interval={args.interval}s; {len(progresses)} case):")
+        print(format_progress_table(progresses))
+
+    try:
+        monitor.watch(interval=args.interval, once=False, callback=_render)
+    except KeyboardInterrupt:
+        print("\n(用户中断)")
+    return 0
+
+
 def main(argv=None):
     # v0.7.1:--lang 顶层 flag(必须最早解析,因为 i18n 影响后续所有 help/description)
     pre_parser = argparse.ArgumentParser(add_help=False)
@@ -1343,6 +1561,105 @@ def main(argv=None):
     )
     spbs_watch.add_argument('--no-color', dest='no_color', action='store_true')
     spbs_watch.set_defaults(func=cmd_pbs_watch)
+
+    # pbs cancel — 批量取消(Phase 5)
+    spbs_cancel = spbs_sub.add_parser(
+        'cancel',
+        help='批量取消 sweep_report.json 中所有(或指定) job',
+    )
+    spbs_cancel.add_argument(
+        'sweep_report', nargs='?',
+        help='sweep_report.json 路径(或 sweep 目录)',
+    )
+    spbs_cancel.add_argument(
+        '--from-sweep-dir', dest='from_sweep_dir', action='store_true',
+        help='sweep_report 是 sweep 目录',
+    )
+    spbs_cancel.add_argument('--host', help='覆盖 cluster.json 的 host')
+    spbs_cancel.add_argument('--user', help='覆盖 user')
+    spbs_cancel.add_argument('--ssh-key', dest='ssh_key', help='SSH 私钥路径')
+    spbs_cancel.add_argument(
+        '--job-ids', dest='job_ids', default='',
+        help='逗号分隔的 job_id 列表(默认: 取消所有 active)',
+    )
+    spbs_cancel.add_argument(
+        '--all', dest='cancel_all', action='store_true',
+        help='取消所有(包括 C/E 完成态,默认跳过)',
+    )
+    spbs_cancel.add_argument(
+        '--force', dest='force', action='store_true',
+        help='qdel -W 15 强删',
+    )
+    spbs_cancel.set_defaults(func=cmd_pbs_cancel)
+
+    # pbs rerun — 取消已完成 + 重新提交(Phase 6)
+    spbs_rerun = spbs_sub.add_parser(
+        'rerun',
+        help='取消指定 state 的 job, 重新提交(--states 默认 C,E)',
+    )
+    spbs_rerun.add_argument(
+        'sweep_report', nargs='?',
+        help='sweep_report.json 路径(或 sweep 目录)',
+    )
+    spbs_rerun.add_argument(
+        '--from-sweep-dir', dest='from_sweep_dir', action='store_true',
+    )
+    spbs_rerun.add_argument('--host', help='覆盖 host')
+    spbs_rerun.add_argument('--user', help='覆盖 user')
+    spbs_rerun.add_argument('--ssh-key', dest='ssh_key', help='SSH 私钥路径')
+    spbs_rerun.add_argument(
+        '--states', dest='states', default='C,E',
+        help='要重跑的 state 集合(逗号分隔,默认 C,E)',
+    )
+    spbs_rerun.add_argument(
+        '--force-cancel', dest='force_cancel', action='store_true',
+        help='qdel -W 15 强删',
+    )
+    spbs_rerun.set_defaults(func=cmd_pbs_rerun)
+
+    # pbs run — submit + 立即 watch 一站式(Phase 6)
+    spbs_run = spbs_sub.add_parser(
+        'run',
+        help='一站式: 批量提交 + 立即进入 watch 循环',
+    )
+    spbs_run.add_argument(
+        'sweep_report', nargs='?',
+        help='sweep_report.json 路径(或 sweep 目录)',
+    )
+    spbs_run.add_argument(
+        '--from-sweep-dir', dest='from_sweep_dir', action='store_true',
+    )
+    spbs_run.add_argument('--host', help='覆盖 host')
+    spbs_run.add_argument('--user', help='覆盖 user')
+    spbs_run.add_argument('--ssh-key', dest='ssh_key', help='SSH 私钥路径')
+    spbs_run.add_argument(
+        '--queue', help='覆盖 -q (PBS queue)',
+    )
+    spbs_run.add_argument(
+        '--walltime', help='覆盖 -l walltime',
+    )
+    spbs_run.add_argument('--nodes', type=int, help='覆盖 -l nodes')
+    spbs_run.add_argument('--ppn', type=int, help='覆盖 -l ppn')
+    spbs_run.add_argument(
+        '--interval', dest='interval', type=int, default=30,
+        help='watch 刷新间隔(秒,默认 30)',
+    )
+    spbs_run.add_argument(
+        '--max-concurrent-jobs', dest='max_concurrent_jobs', type=int,
+        help='覆盖 cluster.json 的 max_concurrent_jobs',
+    )
+    spbs_run.add_argument(
+        '--dry-run', dest='dry_run', action='store_true',
+        help='submit 走 LocalDryRunClient(不真提交)',
+    )
+    spbs_run.add_argument(
+        '--skip-existing', dest='skip_existing', action='store_true', default=True,
+        help='跳过已提交 case(默认 True)',
+    )
+    spbs_run.add_argument(
+        '--no-skip-existing', dest='skip_existing', action='store_false',
+    )
+    spbs_run.set_defaults(func=cmd_pbs_run)
 
     args = p.parse_args(argv)
     return args.func(args)

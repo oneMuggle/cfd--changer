@@ -16,6 +16,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -415,3 +417,186 @@ def format_status_table(entries: Sequence[SweepStatusEntry]) -> str:
     for r in rows:
         lines.append("  ".join(r[i].ljust(widths[i]) for i in range(len(headers))))
     return "\n".join(lines)
+
+
+# ===========================================================================
+# v0.14.0 / Phase 5:批量取消
+# ===========================================================================
+
+@dataclass
+class PbsCancelResult:
+    """批量取消结果(v0.14.0 / Phase 5)。"""
+    requested: List[str] = field(default_factory=list)     # 请求取消的 job_ids
+    cancelled: List[str] = field(default_factory=list)     # 实际取消成功的
+    failed: List[Tuple[str, str]] = field(default_factory=list)    # (job_id, error)
+    skipped: List[str] = field(default_factory=list)     # 跳过的 (state=C/E 之类)
+
+    @property
+    def total(self) -> int:
+        return len(self.requested) + len(self.failed) + len(self.skipped)
+
+
+def cancel_sweep(
+    sweep_report_path: Any,
+    cluster: ClusterClient,
+    *,
+    job_ids: Optional[Sequence[str]] = None,
+    force: bool = False,
+    skip_completed: bool = True,
+    completed_states: Sequence[str] = ("C", "E"),
+) -> PbsCancelResult:
+    """批量取消 sweep 中所有(或指定) job。
+
+    Args:
+        sweep_report_path: manifest JSON 路径
+        cluster: ClusterClient 实例
+        job_ids: 逗号分隔的 job_id 列表;None 表示取消 sweep 中所有
+        force: True 调 cluster.cancel(force=True)(强删,Torque 用 qdel -W 15)
+        skip_completed: True 跳过 state=C/E(默认)
+        completed_states: 哪些 state 算"已完成"被跳过(默认 C, E)
+
+    Returns:
+        PbsCancelResult
+    """
+    report_path = Path(sweep_report_path)
+    if not report_path.is_file():
+        raise FileNotFoundError(f"sweep_report.json 不存在: {report_path}")
+    manifest: Dict[str, Any] = json.loads(report_path.read_text())
+    submissions: List[Dict[str, Any]] = list(manifest.get("pbs_submissions", []))
+
+    result = PbsCancelResult()
+    job_id_filter: Optional[set] = set(job_ids) if job_ids else None
+    completed_set = set(completed_states)
+
+    for sub in submissions:
+        jid = sub.get("job_id", "")
+        if not jid:
+            continue
+        if job_id_filter is not None and jid not in job_id_filter:
+            continue
+        result.requested.append(jid)
+        state = sub.get("state", "")
+        case_name = sub.get("case_name", "")
+        if skip_completed and state in completed_set:
+            result.skipped.append(
+                f"{jid} (case={case_name}, state={state})"
+            )
+            continue
+        # 真取消
+        try:
+            ok = cluster.cancel(jid, force=force)
+        except Exception as e:
+            result.failed.append((jid, str(e)))
+            continue
+        if ok:
+            result.cancelled.append(jid)
+        else:
+            result.failed.append((jid, "cancel returned False"))
+
+    return result
+
+
+# ===========================================================================
+# v0.14.0 / Phase 6:rerun = cancel(completed) + submit_sweep
+# ===========================================================================
+
+@dataclass
+class PbsRerunResult:
+    """重跑结果(cancel + 重新 submit 的复合)。"""
+    cancelled: PbsCancelResult = field(default_factory=PbsCancelResult)
+    resubmitted: PbsBatchResult = field(default_factory=PbsBatchResult)
+    skipped: List[str] = field(default_factory=list)    # 跳过没重跑的 case
+
+
+def rerun_sweep(
+    sweep_report_path: Any,
+    cluster: ClusterClient,
+    *,
+    states: Sequence[str] = ("C", "E"),
+    force_cancel: bool = False,
+    respect_concurrency: bool = True,
+) -> PbsRerunResult:
+    """重跑 sweep 中指定 state 的 case。
+
+    步骤:
+    1. cancel: 只取消 state in `states` 的 job
+    2. submit_sweep(limit=被 cancel 的 case):重新提交(``skip_existing=False``,
+       因为旧 entries 已被 cluster 视为无效)
+
+    Args:
+        sweep_report_path: manifest JSON 路径
+        cluster: ClusterClient
+        states: 要重跑的 state 集合(默认 C, E — 已完成 + 异常退出)
+        force_cancel: True 强删
+        respect_concurrency: 透传给 submit_sweep
+    """
+    # 1. cancel: 只 cancel states 集合里的(不 cancel 其他)
+    report_path = Path(sweep_report_path)
+    manifest: Dict[str, Any] = json.loads(report_path.read_text())
+    submissions: List[Dict[str, Any]] = list(manifest.get("pbs_submissions", []))
+    states_set = set(states)
+    rerun_job_ids = [
+        sub["job_id"] for sub in submissions
+        if sub.get("state", "") in states_set and sub.get("job_id")
+    ]
+    cancel_result = cancel_sweep(
+        sweep_report_path, cluster,
+        job_ids=rerun_job_ids or None,
+        force=force_cancel,
+        skip_completed=False,
+    )
+    # 2. submit_sweep 重提(只重提 rerun_dirs)
+    rerun_dirs: List[str] = [
+        sub["case_dir"] for sub in submissions
+        if sub.get("state", "") in states_set and sub.get("case_dir")
+    ]
+    if not rerun_dirs:
+        return PbsRerunResult(
+            cancelled=cancel_result,
+            resubmitted=PbsBatchResult(),
+            skipped=[
+                f"{sub['case_dir']} (state={sub['state']})"
+                for sub in submissions
+                if sub.get("state", "") not in states_set and sub.get("case_dir")
+            ],
+        )
+    # 写临时 manifest 只含 rerun case,供 submit_sweep 用
+    import tempfile
+    rerun_set = set(rerun_dirs)
+    filtered_cases = [
+        c for c in manifest.get("cases", [])
+        if c.get("path") in rerun_set
+    ]
+    filtered_subs = [
+        s for s in submissions if s.get("case_dir") in rerun_set
+    ]
+    filtered_manifest = dict(manifest)
+    filtered_manifest["cases"] = filtered_cases
+    filtered_manifest["pbs_submissions"] = filtered_subs
+    filtered_manifest["total"] = len(filtered_cases)
+    # 写到临时文件
+    tmp_fd, tmp_path_str = tempfile.mkstemp(suffix=".json", prefix="inp_rerun_")
+    os.close(tmp_fd)
+    tmp_p = Path(tmp_path_str)
+    tmp_p.write_text(json.dumps(filtered_manifest, indent=2, ensure_ascii=False))
+    try:
+        resubmit = submit_sweep(
+            tmp_p, cluster,
+            skip_existing=False,
+            respect_concurrency=respect_concurrency,
+        )
+    finally:
+        try:
+            tmp_p.unlink()
+        except OSError:
+            pass
+    skipped = [
+        f"{sub['case_dir']} (state={sub['state']})"
+        for sub in submissions
+        if sub.get("state", "") not in states_set and sub.get("case_dir")
+    ]
+    return PbsRerunResult(
+        cancelled=cancel_result,
+        resubmitted=resubmit,
+        skipped=skipped,
+    )

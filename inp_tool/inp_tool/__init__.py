@@ -63,6 +63,11 @@ from .batch import (       # v0.14.0 新增(Phase 2)
     query_sweep_status,
     summarize_states,
     format_status_table,
+    # v0.14.0 / Phase 5+6 新增
+    PbsCancelResult,
+    cancel_sweep,
+    PbsRerunResult,
+    rerun_sweep,
 )
 from .monitor import (      # v0.14.0 / Phase 4 新增
     Info0Parser,
@@ -101,6 +106,9 @@ __all__ = [
     # v0.14.0 status (Phase 3)
     'SweepStatusEntry', 'query_sweep_status',
     'summarize_states', 'format_status_table',
+    # v0.14.0 cancel / rerun (Phase 5+6)
+    'PbsCancelResult', 'cancel_sweep',
+    'PbsRerunResult', 'rerun_sweep',
     # v0.14.0 monitor (Phase 4)
     'Info0Parser', 'CaseProgress', 'CaseMonitor', 'SweepMonitor',
     'parse_info0_meta', 'format_progress_table',
