@@ -33,7 +33,10 @@ from inp_tool.postprocess.forces import (
     summarize_forces,
 )
 
-REFERENCE_DIR = Path("/home/fz/project/cfd--changer/reference/full_case/Case")
+REFERENCE_DIR = (
+    Path(__file__).resolve().parent.parent.parent
+    / "reference" / "full_case" / "Case"
+)
 REFERENCE_INP = REFERENCE_DIR / "mcfd.inp"
 
 
