@@ -115,5 +115,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,           # 后续可加 .ico
+    # v0.14.1: GUI 应用图标(Win7 任务栏/Alt-Tab 显示)
+    # Linux/macOS 忽略此参数(.ico 是 Windows 专属);Windows 用 .ico
+    # 多分辨率 16/32/48/64/128/256 由 scripts/generate_gui_icon.py 生成
+    icon='inp_tool_gui/resources/inp-tool-gui.ico' if sys.platform.startswith('win') else None,
 )
