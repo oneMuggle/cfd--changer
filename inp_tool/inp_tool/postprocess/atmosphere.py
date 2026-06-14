@@ -191,8 +191,12 @@ def _pressure_at(h_km: float, layer_idx: int, T: float) -> float:
 def atmosphere_us_1976(altitude_km: float) -> AtmosphereResult:
     """US 1976 标准大气模型。
 
-    输入 ``altitude_km`` 是 **geopotential 高度**(km,US 1976 标准基准量)。
-    若手头是几何高度,先用 :func:`geometric_to_geopotential_km` 转一下。
+    **Warning:** ``altitude_km`` 是 **geopotential 高度**(km,US 1976 标准基准量),
+    不是几何高度。若手头是几何高度,先调
+    :func:`geometric_to_geopotential_km` 转一下,例如::
+
+        h_geo = geometric_to_geopotential_km(z_geom_km)
+        result = atmosphere_us_1976(h_geo)
 
     返回温度 / 压强 / 密度 / 粘度 / 声速。
 
@@ -238,16 +242,46 @@ def sutherland_mu(T: float) -> float:
     return _SUTHERLAND_B * (T ** 1.5) / (T + _SUTHERLAND_S)
 
 
-def reynolds_number(altitude_km: float, velocity_ms: float,
-                    pressure_pa: float, temperature_k: float) -> float:
+def reynolds_number(velocity_ms: float, pressure_pa: float,
+                    temperature_k: float) -> float:
     """单位 Reynolds 数 Re/m = ρ·V/μ。
 
-    使用 ``pressure_pa / temperature_k`` 直接算 ρ(理想气体);
-    ``altitude_km`` 参数当前未使用,保留是为了 API 一致性(后续若按
-    ``intyp=1`` 走完整 atmosphere 模式时方便扩展)。
+    ρ = ``pressure_pa / (R·temperature_k)``(理想气体,``R = 287.0531``)。
+    μ 用 :func:`sutherland_mu` 在 ``temperature_k`` 处取值。
+
+    边界:
+    - ``velocity_ms == 0`` → 返回 0(物理 Re=0)
+    - ``velocity_ms < 0``:抛 ``ValueError``(应该传 ``|V|``)
+    - ``pressure_pa <= 0`` 或 ``temperature_k <= 0``:抛 ``ValueError``
     """
+    if velocity_ms < 0.0:
+        raise ValueError(f"velocity {velocity_ms} m/s must be non-negative; "
+                         "pass |V| if working with signed velocity")
+    if pressure_pa <= 0.0:
+        raise ValueError(f"pressure {pressure_pa} Pa must be positive")
+    if temperature_k <= 0.0:
+        raise ValueError(f"temperature {temperature_k} K must be positive")
     if velocity_ms == 0.0:
         return 0.0
     rho = pressure_pa / (_R_SPECIFIC * temperature_k)
     mu = sutherland_mu(temperature_k)
     return rho * velocity_ms / mu
+
+
+def reynolds_number_at_altitude(altitude_km: float,
+                                velocity_ms: float) -> float:
+    """从 geopotential altitude + 速度,走 US 1976 大气模型算 Re/m。
+
+    内部调 :func:`atmosphere_us_1976` 取 ρ/μ,然后 Re = ρ·V/μ。
+    与直接传 P/T 给 :func:`reynolds_number` 等价,但用 altitude 入参更
+    符合"已知飞行高度求 Re"的工程心智。
+
+    边界与 :func:`reynolds_number` 一致(负 V 抛错,V=0 返回 0)。
+    altitude 超出 [0, 84.852] km 由 :func:`atmosphere_us_1976` 抛错。
+    """
+    if velocity_ms < 0.0:
+        raise ValueError(f"velocity {velocity_ms} m/s must be non-negative")
+    if velocity_ms == 0.0:
+        return 0.0
+    atm = atmosphere_us_1976(altitude_km)
+    return atm.rho * velocity_ms / atm.mu

@@ -83,33 +83,43 @@ def uvw_to_alpha_beta(u: float, v: float, w: float) -> Tuple[float, float]:
 def _try_import_numpy():
     """soft import numpy:不可用就返回 None(支持 fallback)。
 
-    单独抽函数是为了让 monkeypatch 在测试中能屏蔽 numpy
-    (``sys.modules['numpy'] = None``)。
+    用 ``sys.modules.get("numpy")`` 而非 ``import numpy`` 是为了让 monkeypatch
+    在测试中能屏蔽 numpy(``sys.modules["numpy"] = None``),且避免在某些
+    Python 解释器上 ``import None`` 触发 TypeError/AttributeError 的奇怪行为。
     """
+    import sys
+    mod = sys.modules.get("numpy")
+    if mod is not None:
+        return mod
     try:
         import numpy as np  # type: ignore
         return np
-    except (ImportError, AttributeError):
-        # AttributeError 出现在 monkeypatch 将 sys.modules['numpy']=None 后
-        # 的极端情况(import None 不抛但访问属性时抛)
+    except ImportError:
         return None
 
 
-def _build_abw_matrix_math(alpha_rad: float, beta_rad: float):
-    """构造 A_bw 矩阵(纯 math 路径,3×3 嵌套 list)。"""
-    cos_a = math.cos(alpha_rad)
-    sin_a = math.sin(alpha_rad)
-    cos_b = math.cos(beta_rad)
-    sin_b = math.sin(beta_rad)
+def _trig_components(alpha_rad: float, beta_rad: float):
+    """一次性算出 (cos α, sin α, cos β, sin β),math 与 numpy 路径共享。"""
+    return (
+        math.cos(alpha_rad),
+        math.sin(alpha_rad),
+        math.cos(beta_rad),
+        math.sin(beta_rad),
+    )
+
+
+def _abw_rows(ca: float, sa: float, cb: float, sb: float):
+    """构造 A_bw 矩阵的 3 行嵌套 list(纯 math 路径直接 dot,numpy 路径
+    一次 ``asarray`` 转 ndarray;两路径浮点舍入顺序完全一致)。"""
     return [
-        [cos_a * cos_b,  sin_b,   sin_a * cos_b],
-        [-sin_b * cos_a, cos_b,  -sin_a * sin_b],
-        [-sin_a,         0.0,     cos_a        ],
+        [ca * cb,  sb,    sa * cb ],
+        [-sb * ca, cb,   -sa * sb],
+        [-sa,      0.0,   ca     ],
     ]
 
 
 def _mat3_vec3_dot(mat, vec) -> Vec3:
-    """3×3 矩阵 · 3 向量(纯 math 路径)。"""
+    """3×3 矩阵 · 3 向量(纯 math 路径,显式展开避免循环开销)。"""
     return (
         mat[0][0] * vec[0] + mat[0][1] * vec[1] + mat[0][2] * vec[2],
         mat[1][0] * vec[0] + mat[1][1] * vec[1] + mat[1][2] * vec[2],
@@ -135,15 +145,18 @@ def body_to_wind(body_vec: Sequence[float], alpha_rad: float, beta_rad: float) -
 
     返回:长度 3 tuple ``(wind_x, wind_y, wind_z)``。
 
-    numpy 可用时走 ``np.dot``(更适合大批量调用);否则纯 math 实现。
+    numpy 可用时用 ``np.asarray + @`` 走加速;否则纯 math 实现。
+    两路径共享同一组 ``_trig_components`` + ``_abw_rows``,浮点舍入顺序一致。
     """
+    ca, sa, cb, sb = _trig_components(alpha_rad, beta_rad)
+    rows = _abw_rows(ca, sa, cb, sb)
     np = _try_import_numpy()
     if np is not None:
-        abw = np.array(_build_abw_matrix_math(alpha_rad, beta_rad))
-        wind = np.dot(abw, np.array(body_vec, dtype=float))
+        abw = np.asarray(rows, dtype=float)
+        vec = np.asarray(body_vec, dtype=float)
+        wind = abw @ vec
         return (float(wind[0]), float(wind[1]), float(wind[2]))
-    mat = _build_abw_matrix_math(alpha_rad, beta_rad)
-    return _mat3_vec3_dot(mat, body_vec)
+    return _mat3_vec3_dot(rows, body_vec)
 
 
 def wind_to_body(wind_vec: Sequence[float], alpha_rad: float, beta_rad: float) -> Vec3:
@@ -155,12 +168,13 @@ def wind_to_body(wind_vec: Sequence[float], alpha_rad: float, beta_rad: float) -
 
     返回:长度 3 tuple ``(body_x, body_y, body_z)``。
     """
+    ca, sa, cb, sb = _trig_components(alpha_rad, beta_rad)
+    rows = _abw_rows(ca, sa, cb, sb)
     np = _try_import_numpy()
     if np is not None:
-        abw = np.array(_build_abw_matrix_math(alpha_rad, beta_rad))
-        awb = abw.T
-        body = np.dot(awb, np.array(wind_vec, dtype=float))
+        abw = np.asarray(rows, dtype=float)
+        vec = np.asarray(wind_vec, dtype=float)
+        body = abw.T @ vec
         return (float(body[0]), float(body[1]), float(body[2]))
-    mat = _build_abw_matrix_math(alpha_rad, beta_rad)
-    mat_t = _mat3_transpose(mat)
-    return _mat3_vec3_dot(mat_t, wind_vec)
+    rows_t = _mat3_transpose(rows)
+    return _mat3_vec3_dot(rows_t, wind_vec)

@@ -26,6 +26,7 @@ from .atmosphere import (
     atmosphere_us_1976,
     geometric_to_geopotential_km,
     reynolds_number,
+    reynolds_number_at_altitude,
     sutherland_mu,
 )
 
@@ -35,6 +36,7 @@ __all__ = [
     "atmosphere_us_1976",
     "geometric_to_geopotential_km",
     "reynolds_number",
+    "reynolds_number_at_altitude",
     "sutherland_mu",
     # aero_math
     "alpha_beta_to_uvw",

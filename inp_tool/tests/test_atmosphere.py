@@ -35,8 +35,11 @@ from inp_tool.postprocess.atmosphere import (
     AtmosphereResult,
     atmosphere_us_1976,
     reynolds_number,
+    reynolds_number_at_altitude,
     sutherland_mu,
 )
+# 内部常量 — TestBaseTemperatures 用来锁定温度阶梯
+from inp_tool.postprocess.atmosphere import _BASE_TEMPS, _LAPSE_RATES, _LAYER_BREAKS
 
 
 # ============================================================================
@@ -235,7 +238,7 @@ class TestSutherlandMu:
 
 
 # ============================================================================
-# reynolds_number — Re = ρ·V/μ
+# reynolds_number — Re = ρ·V/μ(P/T 直传)
 # ============================================================================
 
 class TestReynoldsNumber:
@@ -243,11 +246,10 @@ class TestReynoldsNumber:
 
     def test_sea_level_M0p5(self):
         """海平面 Ma=0.5,V=170.15 m/s,Re/m ≈ 1.16e7。"""
-        h_km = 0.0
         vel = 0.5 * 340.294  # M=0.5 at sea level
         p = 101325.0
         T = 288.15
-        Re = reynolds_number(h_km, vel, p, T)
+        Re = reynolds_number(vel, p, T)
         # ρ = P/(R·T) = 101325/(287.0531·288.15) ≈ 1.225
         # μ(288.15) = 1.789e-5
         # Re = 1.225 * 170.15 / 1.789e-5 ≈ 1.165e7
@@ -255,12 +257,105 @@ class TestReynoldsNumber:
 
     def test_zero_velocity(self):
         """V=0 → Re=0。"""
-        Re = reynolds_number(0.0, 0.0, 101325.0, 288.15)
+        Re = reynolds_number(0.0, 101325.0, 288.15)
         assert Re == 0.0
 
     def test_positive_velocity_positive_re(self):
-        Re = reynolds_number(10.0, 100.0, 26500.0, 223.25)
+        Re = reynolds_number(100.0, 26500.0, 223.25)
         assert Re > 0.0
+
+    def test_negative_velocity_raises(self):
+        """负 V 物理无效(应该传 |V|)— ValueError。"""
+        with pytest.raises(ValueError, match="non-negative"):
+            reynolds_number(-100.0, 101325.0, 288.15)
+
+    def test_non_positive_pressure_raises(self):
+        with pytest.raises(ValueError, match="pressure"):
+            reynolds_number(100.0, 0.0, 288.15)
+        with pytest.raises(ValueError, match="pressure"):
+            reynolds_number(100.0, -1000.0, 288.15)
+
+    def test_non_positive_temperature_raises(self):
+        with pytest.raises(ValueError, match="temperature"):
+            reynolds_number(100.0, 101325.0, 0.0)
+
+
+# ============================================================================
+# reynolds_number_at_altitude — 走 atmosphere 模型
+# ============================================================================
+
+class TestReynoldsNumberAtAltitude:
+    """便利 API:Re 从 altitude 直接取大气参数(等价于 atmosphere + reynolds)。"""
+
+    def test_sea_level_matches_reynolds_with_PT(self):
+        """h=0 + V=170 → 与 reynolds_number(V, 101325, 288.15) 几乎一致。"""
+        vel = 170.15
+        re_at_alt = reynolds_number_at_altitude(0.0, vel)
+        re_pt = reynolds_number(vel, 101325.0, 288.15)
+        assert re_at_alt == pytest.approx(re_pt, rel=0.001)
+
+    def test_altitude_increases_re_decreases_at_constant_V(self):
+        """V 不变时,altitude 越高,Re 越低(ρ 下降)。"""
+        re_0 = reynolds_number_at_altitude(0.0, 100.0)
+        re_11 = reynolds_number_at_altitude(11.0, 100.0)
+        re_20 = reynolds_number_at_altitude(20.0, 100.0)
+        assert re_0 > re_11 > re_20 > 0.0
+
+    def test_zero_velocity_returns_zero(self):
+        assert reynolds_number_at_altitude(5.0, 0.0) == 0.0
+
+    def test_negative_velocity_raises(self):
+        with pytest.raises(ValueError, match="non-negative"):
+            reynolds_number_at_altitude(5.0, -100.0)
+
+    def test_altitude_above_model_limit_raises(self):
+        """altitude > 84.852 由 atmosphere_us_1976 抛错(不静默)。"""
+        with pytest.raises(ValueError, match="84.852"):
+            reynolds_number_at_altitude(100.0, 100.0)
+
+
+# ============================================================================
+# _BASE_TEMPS — 内部温度阶梯锁定(防 _LAPSE_RATES 误改导致 P 公式爆炸)
+# ============================================================================
+
+class TestBaseTemperatures:
+    """锁定 _LAPSE_RATES 与 _LAYER_BREAKS 累积出的温度阶梯。
+
+    一旦未来有人改 _LAPSE_RATES 顺序 / 单位(K/km ↔ K/m),气压公式的
+    指数就会爆掉,但 T 仍可能"模糊正确"。本断言确保温度阶梯硬钉死。
+    """
+
+    def test_lapse_rates_length_matches_breaks(self):
+        """有 8 个 break,所以应该有 7 个 lapse rate。"""
+        assert len(_LAYER_BREAKS) == 8
+        assert len(_LAPSE_RATES) == 7
+        assert len(_BASE_TEMPS) == 8  # 每个 break 一个累积温度
+
+    def test_layer_breaks_are_us_1976_standard(self):
+        """0 / 11 / 20 / 32 / 47 / 51 / 71 / 84.852 km(US 1976 geopotential)。"""
+        expected = (0.0, 11.0, 20.0, 32.0, 47.0, 51.0, 71.0, 84.852)
+        assert _LAYER_BREAKS == expected
+
+    def test_lapse_rates_are_us_1976_standard(self):
+        """K/km 单位的 lapse rates(troposphere -6.5 起每段)。"""
+        expected = (-6.5, 0.0, +1.0, +2.8, 0.0, -2.8, -2.0)
+        assert _LAPSE_RATES == expected
+
+    def test_base_temperatures_accumulate_correctly(self):
+        """从 288.15 起逐段累积的温度阶梯。"""
+        # 段顶 T = _BASE_TEMPS[i+1]
+        # 0 → -6.5·11 = -71.5  → 216.65
+        # 11 → +0·9 = 0          → 216.65
+        # 20 → +1·12 = +12       → 228.65
+        # 32 → +2.8·15 = +42     → 270.65
+        # 47 → +0·4 = 0          → 270.65
+        # 51 → -2.8·20 = -56     → 214.65
+        # 71 → -2.0·13.852 ≈ -27.704 → 186.946
+        expected = (288.15, 216.65, 216.65, 228.65, 270.65, 270.65, 214.65, 186.946)
+        assert len(_BASE_TEMPS) == len(expected)
+        for i, (got, want) in enumerate(zip(_BASE_TEMPS, expected)):
+            assert got == pytest.approx(want, abs=1e-9), \
+                f"_BASE_TEMPS[{i}]={got} expected {want} (break {_LAYER_BREAKS[i]} km)"
 
 
 # ============================================================================
