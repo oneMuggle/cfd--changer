@@ -1661,6 +1661,11 @@ def main(argv=None):
     )
     spbs_run.set_defaults(func=cmd_pbs_run)
 
+    # v0.15.0 / Phase 5: post 子命令(extract / convergence / report / plot / all)
+    # 通过独立模块 cli_post.py 注册,避免 cli.py 继续膨胀。
+    from .cli_post import _register_post_subparser
+    _register_post_subparser(sub)
+
     args = p.parse_args(argv)
     return args.func(args)
 

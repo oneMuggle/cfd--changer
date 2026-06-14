@@ -55,9 +55,9 @@ jobs:
         run: |
           if [ "$RUNNER_OS" == "macOS" ]; then
             echo "macOS runner — skipping [gui] install (PySide2 5.15.2.1 无 arm64 wheel)"
-            conda run -n cfdchanger pip install -e ".[dev,api,yaml,build]"
+            conda run -n cfdchanger pip install -e ".[dev,api,yaml,build,post]"
           else
-            conda run -n cfdchanger pip install -e ".[dev,api,yaml,build,gui]"
+            conda run -n cfdchanger pip install -e ".[dev,api,yaml,build,gui,post]"
           fi
 
       - name: Run tests + coverage
