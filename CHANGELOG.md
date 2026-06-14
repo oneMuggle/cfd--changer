@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.15.0] - 2026-06-14
+
+### Added
+
+- **`inp_tool.postprocess` 子包**(借鉴 `reference/code/` 路线 v0.15.0 / Phase 1-7,~1530 行新代码 + 332 个新测试)
+  - **6 个零依赖核心模块**(纯 Python stdlib):
+    - `atmosphere`:US 1976 标准大气模型 + Sutherland 粘度 + Reynolds 数(NASA-TM-X-74335)
+    - `aero_math`:风轴↔体轴 A_bw 矩阵变换 + α/β↔uvw 互推(numpy soft fallback)
+    - `bc`:`mcfd.bc` 边界编号→名称解析
+    - `info1`:`mcfd.info1` 力/矩历程解析(状态机)
+    - `forces`:气动力汇总 + 力矩中心换算 + CD/CY/CL/Cm/D/L/L_over_D/Xcp 系数
+    - `convergence`:CV 变异系数判定 + 中文 UTF-8 文本报告
+  - **2 个 `[post]` extras 模块**:
+    - `report`:openpyxl 单 Sheet 28 列 Excel 输出
+    - `plot`:matplotlib 2×3 subplot 收敛曲线 png(强制 Agg 后端)
+- **`inp-tool post` CLI 子命令树**:`extract` / `convergence` / `report` / `plot` / `all` 5 子命令
+- **GUI "后处理(&P)" tab**:PySide2 panel 提供桌面交互式后处理(case 列表 + 几何参数 + 5 action 按钮 + 日志区)
+- **`[post]` extras**:`openpyxl>=3.1,<4` / `matplotlib>=3.5,<3.8` / `numpy>=1.22,<2.0`(Win7+Py3.8 兼容上限)
+- **技术手册** [docs/technical/postprocess/](docs/technical/postprocess/)(7 章:README + 01-overview + 02-atmosphere-aero-math + 03-info1-bc-parsing + 04-forces-convergence + 05-excel-plot-output + 06-cli-gui)
+- **用户手册** [docs/user-manual/postprocess/](docs/user-manual/postprocess/)(3 章:README + 01-quickstart + 02-output-formats)
+
+### Fixed
+
+- **修复 reference 已确认的 2 个 bug**(详见 `docs/technical/postprocess/`):
+  - `reference/code/CFDPlus_V4.py:Atmosphere_US_1976` 压强公式系数 `k=34.163195` + geopotential 转换量纲错误(h>0 处给出错误 P/ρ)→ 本实现按 NASA 公开数据正确重写
+  - `reference/code/CFDPlus_V4.py:read_info1_file` EOF flush bug(最后一个 step 的 `formomi` 累积值丢失)→ 本实现在循环末显式 flush
+
+### Changed
+
+- **CI install 步骤**:加 `[post]` extras(`.github/workflows/ci.yml`),让 `test_post_*` 测试在 CI 上跑而非 importorskip 跳过 → 覆盖率从 79.66% 升回 80% 以上
+- **inp_tool 版本**:`0.14.0` → `0.15.0`(MINOR bump,新增 postprocess 子包)
+
 ## [v0.14.1] - 2026-06-14
 
 ### Fixed
