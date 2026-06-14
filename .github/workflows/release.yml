@@ -77,9 +77,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     # v0.14.1: macOS(Apple Silicon M1/M2)runner 上 PySide2 5.15.2.1 无 arm64 wheel,
     # GUI build 必爆;CLI build 仍可用(纯 stdlib)。用 exclude 把 macOS GUI 排除。
+    #
+    # 重要:GitHub Actions 要求 matrix.exclude 的 key 必须出现在 matrix 顶层,
+    # 单纯用 include + exclude 会报 "Matrix exclude key 'os' does not match" 错误
+    # (422 Invalid Argument)。正确写法:在 matrix 顶层定义 os + target 的列表
+    # (产生笛卡尔积 3×2=6),再用 include 覆盖特定组合的 artifact_name 等字段,
+    # 最后用 exclude 移除 macOS GUI。净效果 5 个 build matrix。
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        target: [cli, gui]
         include:
           # CLI 二进制(3 平台)
           - os: ubuntu-latest
