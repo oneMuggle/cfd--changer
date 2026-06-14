@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.14.1] - 2026-06-14
+
+### Fixed
+- **GUI binary (`inp-tool-gui`) 进入 Release pipeline** (PR #33)
+  - `scripts/build.sh` 加 `--mode gui` case(调 `inp_tool_gui.spec`,PySide2 依赖检查,offscreen smoke)
+  - `.github/workflows/release.yml` build job matrix 3 → 5 entries(CLI 3 + GUI 2),`exclude` `macos-latest + gui`(PySide2 5.15.2.1 无 arm64 wheel,与 `ci.yml` 对齐)
+  - `.github/workflows/release.yml` release job `files:` 列表追加 2 个 GUI binary(inp-tool-gui-linux-x86_64、inp-tool-gui-windows-x86_64.exe)
+  - **根因**:`feat(build): inp_tool_gui.spec` (Phase 6, commit `12c9407`) 只提交了 spec 文件,没同步 build.sh / release.yml,导致 v0.12.0 / v0.13.0 用户文档承诺的"73 MB GUI EXE"从未出现在 GitHub Release
+
+### Added
+- **Win7 SP1 物理验证清单** ([docs/technical/release/03-win7-verification-checklist.md](docs/technical/release/03-win7-verification-checklist.md)) (PR #33)
+  - CLI / GUI 5 链路(File/Edit、Sweep、Detect、Diff、启动)人工验证步骤
+  - 故障排查表(MSVCP140.dll、Platform Update、offscreen 等)
+  - 性能阈值(冷启动 ≤5s、内存 ≤150MB 等)
+  - 报告模板 + 截图归档目录
+
+- **GUI 应用图标** ([inp_tool/inp_tool_gui/resources/inp-tool-gui.ico](inp_tool/inp_tool_gui/resources/inp-tool-gui.ico)) (PR #33)
+  - 多分辨率 16/32/48/64/128/256(Win7 任务栏/Alt-Tab 用)
+  - 设计:深蓝圆角底 + 青色流线 + 白色"CFD"字
+  - 生成脚本:[scripts/generate_gui_icon.py](scripts/generate_gui_icon.py)(Pillow,一次性本地工具)
+  - `inp_tool_gui.spec` 平台条件引用(`sys.platform.startswith('win')`)
+
+### Documentation
+- `docs/technical/release/` 章节目录(2 → 3):新增 `03-win7-verification-checklist.md`
+
 ## [v0.14.0] - 2026-06-14
 
 ### Added
