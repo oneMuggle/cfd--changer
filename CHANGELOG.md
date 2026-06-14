@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.14.0] - 2026-06-14
+
+### Added
+- **集群配置 + 调度器适配 (`inp_tool.cluster`)** (Phase 1, PR #26)
+  - `SchedulerType` enum: `torque` (默认, 10.10.10.251) / `slurm` (备) / `pbspro` (留接口)
+  - `TorqueAdapter` / `SlurmAdapter`: 双调度器命令构造 + 输出解析
+    - `parse_submit_stdout` (qsub `1234.head01` vs sbatch `Submitted batch job 1234`)
+    - `parse_qstat_f` (Torque) / `parse_squeue` (Slurm) / `parse_qstat_user` (列格式计数)
+  - `ClusterConfig` dataclass: 全量配置 (host / user / ssh_key / queue / 限流 / 资源 / 路径 / 列映射)
+    - 持久化到 `~/.inp_tool/cluster.json` (Win/Linux 都支持)
+  - `SshClusterClient`: 真 SSH 客户端 (4 种认证: ssh-key / password via sshpass / proxycommand / 默认)
+    - `submit` / `status` / `status_many` / `cancel` / `list_user_jobs` /
+      `tail` / `rsync_to` / `rsync_from` / `check_concurrency` / `probe`
+  - `LocalDryRunClient`: 不真提交,只记录命令 (单元测试 + `--dry-run`)
+  - `probe_scheduler()`: ssh 远端自动探测 qstat vs sinfo 识别调度器
+
+- **批量提交 (`inp_tool.batch`)** (Phase 2, PR #27)
+  - `PbsSubmission` / `PbsBatchResult` dataclass
+  - `submit_sweep()`: 读 `sweep_report.json` → 遍历 pbs_submissions →
+    `cluster.submit()` → 写回 manifest (`pbs_submissions` 段追加)
+  - `--skip-existing` (默认 True) / `--limit` / `--dry-run` / `--no-respect-concurrency`
+  - 并发限流 (Q3 = 暂停等待, 5 分钟超时)
+
+- **PBS 状态查询 (`inp_tool.batch`)** (Phase 3, PR #28)
+  - `SweepStatusEntry` dataclass
+  - `query_sweep_status()`: 读 `sweep_report.json` → 调 `cluster.status()` 聚合
+  - `summarize_states()` / `format_progress_table()`: 给 CLI 用
+  - 错误处理: 单 `status()` 失败 → `state="Unknown"` / `live=False`, 不抛
+
+- **运行中监控 (`inp_tool.monitor`)** (Phase 4, PR #29) — **用户最初核心需求**
+  - `parse_info0_meta()`: 解析 `minfo0.mpf1d` → `{col_name: index}` 动态映射
+  - `Info0Parser`: `parse_line` / `tail_progress` (列名动态 + 列索引可覆盖)
+  - `CaseProgress` dataclass (step / time / dt / cfl_global / cfl_local /
+    rhs_avg / rhs_max / eigenvalue / last_update)
+  - `CaseMonitor` / `SweepMonitor`: refresh + history + watch loop
+  - **用户需求达成**:
+    - 监控当前计算步数: `CaseProgress.current_step`
+    - 监控 CFL 数: `CaseProgress.current_cfl_local` (ramp 0.1→20.0)
+    - 监控残差曲线: `history('current_rhs_avg')` / `('current_rhs_max')`
+
+- **批量取消 + 重跑 (`inp_tool.batch`)** (Phase 5+6, PR #30)
+  - `PbsCancelResult` / `cancel_sweep()`: 取消 active job, 默认跳过 C/E
+  - `PbsRerunResult` / `rerun_sweep()`: 取消指定 state + 重新提交 (写临时 manifest)
+  - `pbs run` 一站式 (submit + 立即 watch)
+
+- **新 CLI 子命令** (5 个二级子命令, 全部走 `inp-tool <verb> <noun>`):
+  - `inp-tool cluster probe / config / test` (Phase 1)
+  - `inp-tool pbs submit / status / watch / cancel / rerun / run` (Phase 2-6)
+
+- **新公共导出** (`from inp_tool import ...`):
+  - 集群: `SchedulerType / ClusterConfig / ClusterInfo / PbsJobStatus /
+    TorqueAdapter / SlurmAdapter / SshClusterClient / LocalDryRunClient / probe_scheduler`
+  - 批量: `PbsSubmission / PbsBatchResult / submit_sweep`
+  - 状态: `SweepStatusEntry / query_sweep_status / summarize_states / format_status_table`
+  - 监控: `Info0Parser / CaseProgress / CaseMonitor / SweepMonitor /
+    parse_info0_meta / format_progress_table / DEFAULT_INFO0_COLUMNS`
+  - 取消: `PbsCancelResult / cancel_sweep / PbsRerunResult / rerun_sweep`
+
+- **新测试** (累计 +239 用例, 共 906 passed, 覆盖率 80.66%)
+  - `test_pbs_name.py` (25) / `test_cluster.py` (25) / `test_schedulers.py` (19)
+  - `test_batch.py` (33, 含 cancel + rerun) / `test_pbs_status.py` (10) /
+    `test_pbs_cli.py` (21) / `test_monitor.py` (21)
+
+- **新文档** (本版本)
+  - `docs/user-manual/20-pbs-cluster.md` (用户向)
+  - `docs/technical/sweep/13-pbs-submit-watch.md` (开发者向)
+
+### Changed
+- **PBS 任务名校验 (v0.13 bug fix)** (Phase 0, PR #25)
+  - `render_pbs_name` 默认 `max_len` 200 → 15 (集群 `-N` 硬约束)
+  - `extract_pbs_basename` 默认 `max_len` 8 → 14 (留 1 给 suffix)
+  - 新增 `validate_pbs_name()` (长度 / 首字符 / 空白 / 字符集 4 规则)
+  - 新增 `PbsValidationError` 异常类
+  - `write_pbs()` 写出前自动校验, 违规 raise
+  - 常量 `PBS_NAME_MAX_LEN = 15`
+- **inp_tool 保持零运行时依赖**: cluster / batch / monitor / cli 全部 stdlib only
+
+### Fixed
+- v0.13 已知 bug: PBS 任务名超 15 字符提交会被集群拒 (#25)
+- 集群配置 hardcoded (`q02` / `10.10.10.251` / `20 jobs` / ssh key 无) → 全可配置 (Phase 1)
+
+### Notes
+- **真实 mcfd.info0 数据列名与直觉不符**: minfo0.mpf1d 的 `CFL_global` 列实际是
+  `cflglo` 残差上界 (常值 `1e15`); `CFL_local` 列才是真实 CFL ramp (0.1→20.0)。
+  这是 CFD++ 内部命名约定, `monitor.py` 用 column index 而非 name 拿值规避。
+- **真实集群 smoke test 待用户给 ssh key + 集群访问**。
+- 累计代码: +2531 行生产代码, +2640 行测试 (含 Phase 0-6)。
+
 ## [v0.13.0] - 2026-06-13
 
 ### Changed
