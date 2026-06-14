@@ -72,22 +72,41 @@ jobs:
 
   # ========== 跨平台打包 ==========
   build:
-    name: build (${{ matrix.os }})
+    name: build (${{ matrix.os }}, ${{ matrix.target }})
     needs: test
     runs-on: ${{ matrix.os }}
+    # v0.14.1: macOS(Apple Silicon M1/M2)runner 上 PySide2 5.15.2.1 无 arm64 wheel,
+    # GUI build 必爆;CLI build 仍可用(纯 stdlib)。用 exclude 把 macOS GUI 排除。
     strategy:
       fail-fast: false
       matrix:
         include:
+          # CLI 二进制(3 平台)
           - os: ubuntu-latest
+            target: cli
             artifact_name: inp-tool-linux-x86_64
             binary_name: inp-tool
           - os: windows-latest
+            target: cli
             artifact_name: inp-tool-windows-x86_64.exe
             binary_name: inp-tool.exe
           - os: macos-latest
+            target: cli
             artifact_name: inp-tool-macos-universal2
             binary_name: inp-tool
+          # GUI 二进制(PySide2,Linux + Windows;macOS 跳过)
+          - os: ubuntu-latest
+            target: gui
+            artifact_name: inp-tool-gui-linux-x86_64
+            binary_name: inp-tool-gui
+          - os: windows-latest
+            target: gui
+            artifact_name: inp-tool-gui-windows-x86_64.exe
+            binary_name: inp-tool-gui.exe
+        exclude:
+          # PySide2 5.15.2.1 无 arm64 wheel:macOS GUI build 必须排除
+          - os: macos-latest
+            target: gui
 
     defaults:
       run:
@@ -104,36 +123,59 @@ jobs:
           python-version: "3.8"
           use-mamba: true
 
-      - name: Install pyinstaller (build dep)
+      - name: Install build deps (${{ matrix.target }})
         shell: bash -l {0}
         # v0.4.2: 装 [build] extra(包含 pyinstaller==6.16.0);单一来源:pyproject.toml
         # v0.8.3: 同时装 [api] 和 [yaml] — standalone binary 必须 self-contain 运行时
         # 依赖(否则 PyInstaller 在 Analysis 阶段找不到 yaml/fastapi 等模块,
         # 导致运行时 ModuleNotFoundError,即使 spec hiddenimports 列了)
+        # v0.14.1: GUI build 加 [gui-build] extra(含 PySide2==5.15.2.1)
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          conda run -n cfdchanger pip install -e ".[api,yaml,build]"
+          if [ "${{ matrix.target }}" == "gui" ]; then
+            conda run -n cfdchanger pip install -e ".[api,yaml,gui-build]"
+          else
+            conda run -n cfdchanger pip install -e ".[api,yaml,build]"
+          fi
 
-      - name: Build standalone (PyInstaller)
+      - name: Build standalone (PyInstaller, ${{ matrix.target }})
         shell: bash -l {0}
+        # v0.14.1: GUI build 调 inp_tool_gui.spec;CLI build 调 inp_tool.spec
         run: |
+          if [ "${{ matrix.target }}" == "gui" ]; then
+            SPEC="inp_tool_gui.spec"
+          else
+            SPEC="inp_tool.spec"
+          fi
           if [ "$RUNNER_OS" == "Windows" ]; then
               # Windows:Git Bash 不能直接跑 .bat,用 python 调 (cwd 已是 inp_tool/)
-              python -c "import PyInstaller.__main__ as m; m.run(['inp_tool.spec','--clean','--noconfirm'])"
+              python -c "import PyInstaller.__main__ as m; m.run(['$SPEC','--clean','--noconfirm'])"
           else
               # Linux/macOS: scripts/ 在仓库根,cwd 是 inp_tool/,需 ../
-              bash ../scripts/build.sh
+              if [ "${{ matrix.target }}" == "gui" ]; then
+                bash ../scripts/build.sh --mode gui
+              else
+                bash ../scripts/build.sh
+              fi
           fi
 
       - name: Smoke test (${{ matrix.binary_name }})
         shell: bash -l {0}
+        # CLI: --version + --help
+        # GUI: 不启动主窗口(GUI 需要桌面 session),只验证 import 主窗口模块
         run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-              ./dist/inp-tool.exe --version
+          if [ "${{ matrix.target }}" == "cli" ]; then
+            if [ "$RUNNER_OS" == "Windows" ]; then
+                ./dist/inp-tool.exe --version
+            else
+                ./dist/inp-tool --version
+                ./dist/inp-tool --help | head -3
+            fi
           else
-              ./dist/inp-tool --version
-              ./dist/inp-tool --help | head -3
+            # GUI smoke: offscreen 平台 import MainWindow,验证依赖图 + 模块链完整
+            # (单行 + 分号,避免 YAML 多行字符串缩进陷阱)
+            QT_QPA_PLATFORM=offscreen conda run -n cfdchanger python -c 'from PySide2.QtWidgets import QApplication; app = QApplication([]); from inp_tool_gui.main_window import MainWindow; w = MainWindow(); print("  ✓ MainWindow import OK, title:", w.windowTitle())'
           fi
 
       - name: Upload build artifact
@@ -158,10 +200,15 @@ jobs:
         # v0.4.2: softprops/action-gh-release@v2 不支持 path#name 重命名语法,
         # 用 cp 在 release 前给 linux/macos 二进制加平台后缀,避免 basename 'inp-tool' 冲突
         # (Windows 的 inp-tool.exe 已经天然 unique)
+        # v0.14.1: GUI 二进制同样需要 rename(linux/macos)
         shell: bash
         run: |
           cp artifacts/inp-tool-linux-x86_64/inp-tool artifacts/inp-tool-linux-x86_64/inp-tool-linux-x86_64
           cp artifacts/inp-tool-macos-universal2/inp-tool artifacts/inp-tool-macos-universal2/inp-tool-macos-universal2
+          # v0.14.1: GUI 二进制 rename(若存在;macOS GUI 已被 build matrix exclude)
+          if [ -f artifacts/inp-tool-gui-linux-x86_64/inp-tool-gui ]; then
+            cp artifacts/inp-tool-gui-linux-x86_64/inp-tool-gui artifacts/inp-tool-gui-linux-x86_64/inp-tool-gui-linux-x86_64
+          fi
 
       - name: Display collected artifacts
         run: |
@@ -181,9 +228,12 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           # v0.4.2: 精确列举 3 个平台 binary(已 cp 重命名为 unique 名,避免 'inp-tool' 冲突)
+          # v0.14.1: GUI 二进制追加(linux + windows;macOS GUI 缺)
           files: |
             artifacts/inp-tool-linux-x86_64/inp-tool-linux-x86_64
             artifacts/inp-tool-macos-universal2/inp-tool-macos-universal2
             artifacts/inp-tool-windows-x86_64.exe/inp-tool.exe
+            artifacts/inp-tool-gui-linux-x86_64/inp-tool-gui-linux-x86_64
+            artifacts/inp-tool-gui-windows-x86_64.exe/inp-tool-gui.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
