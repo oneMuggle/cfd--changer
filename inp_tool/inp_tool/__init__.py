@@ -114,4 +114,4 @@ __all__ = [
     'parse_info0_meta', 'format_progress_table',
     'DEFAULT_INFO0_COLUMNS',
 ]
-__version__ = '0.14.0'
+__version__ = '0.15.0'
