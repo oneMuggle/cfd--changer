@@ -110,3 +110,61 @@ class SweepController:
         if self._last_report is None:
             return None
         return self._last_report.to_dict()
+
+    # --- 实时编辑(实时表单用)----------------------------------------
+
+    def update_field(self, key, value):
+        """实时修改某个字段并重新构造内部 CaseSweep。
+
+        支持的 key:
+            - "template" / "output_dir" / "naming" / "naming_ext"
+            - "source_dir" / "copy_strategy" / "exclude"
+            - "sweeps.<axis>"    单个 axis 值
+            - "sweeps_dict"      整个 sweeps dict 替换
+
+        Raises:
+            KeyError: 未知 key
+            RuntimeError: 未 load 配置
+        """
+        if self._sweep is None:
+            raise RuntimeError("未 load sweep 配置,无法 update_field")
+
+        d = _sweep_to_dict(self._sweep)
+
+        if "." in key:
+            head, _, tail = key.partition(".")
+            if head == "sweeps":
+                d.setdefault("sweeps", {})[tail] = value
+            else:
+                raise KeyError("不支持的复合字段 {!r}".format(key))
+        else:
+            if key in ("template", "output_dir", "naming", "naming_ext",
+                       "source_dir", "copy_strategy", "exclude"):
+                d[key] = value
+            elif key == "sweeps_dict":
+                d["sweeps"] = dict(value)
+            else:
+                raise KeyError("未知字段 {!r}".format(key))
+
+        self._sweep = CaseSweep.from_dict(d)
+        self._last_report = None
+
+
+def _sweep_to_dict(cs):
+    """把 CaseSweep 实例转回 dict,供 update_field 改写后重建。
+
+    注意:CaseSweep 里的 ``sweeps`` 是 ``SweepSpec`` dataclass,``asdict`` 会
+    序列化成 ``{"values": {...}}``;这里要展平回 ``{axis: [...]}`` 形式,
+    才能被 :meth:`CaseSweep.from_dict` 正确解析。
+    """
+    if hasattr(cs, "to_dict") and callable(cs.to_dict):
+        return cs.to_dict()
+    from dataclasses import asdict
+    d = asdict(cs)
+    if "copy_strategy" in d and hasattr(d["copy_strategy"], "value"):
+        d["copy_strategy"] = d["copy_strategy"].value
+    # 展平 SweepSpec → 平铺 dict (供 from_dict 识别)
+    sw = d.get("sweeps")
+    if isinstance(sw, dict) and "values" in sw and isinstance(sw["values"], dict):
+        d["sweeps"] = sw["values"]
+    return d
