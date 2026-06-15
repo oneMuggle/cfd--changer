@@ -1,4 +1,10 @@
 # tests/test_gui_open_mode.py
+"""FileController 算例目录测试。
+
+OpenModeDialog 相关的 widget 测试在 v0.16.1 移除(主窗口拆菜单为
+"打开文件 / 打开文件夹" 两项后,不再弹选择模式对话框,直接走对应入口)。
+OpenModeDialog widget 本身保留(供可能外部引用),但本测试不再覆盖。
+"""
 import pytest
 from PySide2.QtWidgets import QApplication
 
@@ -40,16 +46,3 @@ def test_file_controller_case_dir_warning_geometry(qapp, tmp_path):
     warn_codes = [i.code for i in fc.case_validation.issues
                   if i.severity == "warning"]
     assert "missing_geometry" in warn_codes
-
-
-def test_open_mode_dialog_default_folder(qapp):
-    from inp_tool_gui.widgets.open_mode_dialog import OpenModeDialog, Mode
-    dlg = OpenModeDialog()
-    assert dlg.selected_mode() == Mode.FOLDER
-
-
-def test_open_mode_dialog_user_picks_file(qapp):
-    from inp_tool_gui.widgets.open_mode_dialog import OpenModeDialog, Mode
-    dlg = OpenModeDialog()
-    dlg._radio_file.setChecked(True)
-    assert dlg.selected_mode() == Mode.FILE
