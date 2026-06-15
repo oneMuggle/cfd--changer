@@ -13,11 +13,35 @@
     if fc.set_value("physics", "reftem", 300.0):
         fc.save()  # 写回原路径
 """
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
 from inp_tool import parser, writer
 from inp_tool.model import Block, InpFile
+
+
+@dataclass
+class CaseValidationIssue:
+    code: str
+    message: str
+    severity: str  # "error" | "warning"
+
+
+@dataclass
+class CaseValidation:
+    ok: bool
+    issues: List["CaseValidationIssue"] = field(default_factory=list)
+
+
+class CaseValidationError(Exception):
+    """算例目录不完整时抛的异常。"""
+
+    def __init__(self, validation: "CaseValidation") -> None:
+        self.validation = validation
+        msgs = ["[{}] {}".format(i.code, i.message) for i in validation.issues
+                if i.severity == "error"]
+        super().__init__("算例完整性检查失败:\n" + "\n".join(msgs))
 
 
 class FileController:
@@ -26,6 +50,8 @@ class FileController:
     def __init__(self) -> None:
         self._inp: Optional[InpFile] = None
         self._path: Optional[Path] = None
+        self._case_dir: Optional[Path] = None
+        self._case_validation: Optional["CaseValidation"] = None
 
     # --- 状态查询 --------------------------------------------------------
 
@@ -130,3 +156,72 @@ class FileController:
         if not block.set(keyword, value):
             block.append(keyword, value)
         return True
+
+    # --- 文件夹模式(算例目录) -----------------------------------------
+
+    @property
+    def current_case_dir(self) -> Optional[Path]:
+        """当前打开的算例目录;未打开算例目录时返回 :data:`None`。"""
+        return self._case_dir
+
+    @property
+    def case_validation(self) -> Optional["CaseValidation"]:
+        """最后一次算例目录校验结果;未跑过 :meth:`open_case_dir` 时返回 :data:`None`。"""
+        return self._case_validation
+
+    def open_case_dir(self, path: Union[str, Path]) -> InpFile:
+        """打开一个完整算例目录(必须是含 mcfd.inp 的目录)。
+
+        - ``path`` 不是目录 → 抛 :class:`CaseValidationError`
+        - 缺 ``mcfd.inp`` → 抛 :class:`CaseValidationError`
+        - 缺 ``*.pbs`` / 几何文件 → 只在 :attr:`case_validation` 里记 warning,不抛
+        - 成功 → 返回 :class:`InpFile`,并设 :attr:`current_case_dir` /
+          :attr:`case_validation`
+        """
+        p = Path(path)
+        if not p.is_dir():
+            raise CaseValidationError(CaseValidation(
+                ok=False, issues=[
+                    CaseValidationIssue(
+                        "not_a_dir", "{} 不是目录".format(p), "error"),
+                ]))
+        validation = self._validate_case_dir(p)
+        errors = [i for i in validation.issues if i.severity == "error"]
+        if errors:
+            raise CaseValidationError(validation)
+        try:
+            self._inp = parser.parse_file(str(p / "mcfd.inp"))
+        except Exception as e:
+            validation.issues.append(CaseValidationIssue(
+                "parse_error", str(e), "error"))
+            raise CaseValidationError(validation)
+        self._path = p / "mcfd.inp"
+        self._case_dir = p
+        self._case_validation = validation
+        return self._inp
+
+    def _validate_case_dir(self, p: Path) -> "CaseValidation":
+        """检查 ``p`` 是不是一个完整算例目录。
+
+        检查项:
+        - ``mcfd.inp`` 必须存在(error)
+        - 至少一个 ``*.pbs``(warning)
+        - 至少一个 ``*.tri`` 或 ``*.plt``(warning)
+        """
+        issues: List["CaseValidationIssue"] = []
+        inp_path = p / "mcfd.inp"
+        if not inp_path.is_file():
+            issues.append(CaseValidationIssue(
+                "missing_inp", "缺少 mcfd.inp", "error"))
+        pbs = list(p.glob("*.pbs"))
+        if not pbs:
+            issues.append(CaseValidationIssue(
+                "missing_pbs", "缺少 PBS 脚本", "warning"))
+        geom_files = list(p.glob("*.tri")) + list(p.glob("*.plt"))
+        if not geom_files:
+            issues.append(CaseValidationIssue(
+                "missing_geometry", "缺少几何文件", "warning"))
+        return CaseValidation(
+            ok=not any(i.severity == "error" for i in issues),
+            issues=issues,
+        )
