@@ -27,17 +27,21 @@ from PySide2.QtWidgets import (
     QWidget,
 )
 
+from inp_tool.i18n_gui import tg
 from inp_tool_gui.app import APP_NAME, APP_VERSION
 from inp_tool_gui.controllers.detect_controller import DetectController
 from inp_tool_gui.controllers.diff_controller import DiffController
 from inp_tool_gui.controllers.edit_controller import EditController
-from inp_tool_gui.controllers.file_controller import FileController
+from inp_tool_gui.controllers.file_controller import FileController, CaseValidationError
 from inp_tool_gui.controllers.sweep_controller import SweepController
 from inp_tool_gui.widgets.detect_panel import DetectPanel
 from inp_tool_gui.widgets.diff_viewer import DiffViewer
+from inp_tool_gui.widgets.field_search_bar import FieldSearchBar
 from inp_tool_gui.widgets.inp_tree import InpTreeWidget
+from inp_tool_gui.widgets.open_mode_dialog import OpenModeDialog, Mode
 from inp_tool_gui.widgets.preset_dialog import PresetDialog
 from inp_tool_gui.widgets.sweep_form import SweepForm
+from inp_tool_gui.widgets.sweep_live_form import SweepLiveForm
 from inp_tool_gui.widgets.value_editor import ValueEditorDialog
 
 
@@ -72,60 +76,60 @@ class MainWindow(QMainWindow):
 
     def _setup_actions(self) -> None:
         # File
-        self.act_open = QAction("打开(&O)...", self)
+        self.act_open = QAction(tg("act.open"), self)
         self.act_open.setShortcut(QKeySequence.Open)
         self.act_open.triggered.connect(self._on_open)
 
-        self.act_save = QAction("保存(&S)", self)
+        self.act_save = QAction(tg("act.save"), self)
         self.act_save.setShortcut(QKeySequence.Save)
         self.act_save.triggered.connect(self._on_save)
 
-        self.act_save_as = QAction("另存为(&A)...", self)
+        self.act_save_as = QAction(tg("act.save_as"), self)
         self.act_save_as.setShortcut(QKeySequence.SaveAs)
         self.act_save_as.triggered.connect(self._on_save_as)
 
-        self.act_exit = QAction("退出(&X)", self)
+        self.act_exit = QAction(tg("act.exit"), self)
         self.act_exit.setShortcut(QKeySequence("Ctrl+Q"))
         self.act_exit.triggered.connect(self.close)
 
         # Edit
-        self.act_undo = QAction("撤销(&U)", self)
+        self.act_undo = QAction(tg("act.undo"), self)
         self.act_undo.setShortcut(QKeySequence.Undo)
         self.act_undo.triggered.connect(self._on_undo)
 
-        self.act_redo = QAction("重做(&R)", self)
+        self.act_redo = QAction(tg("act.redo"), self)
         self.act_redo.setShortcut(QKeySequence.Redo)
         self.act_redo.triggered.connect(self._on_redo)
 
         # Sweep / Detect(阶段 5 启用,接入标签页)
-        self.act_sweep = QAction("批量算例(&W)...", self)
+        self.act_sweep = QAction(tg("act.sweep"), self)
         self.act_sweep.triggered.connect(self._on_sweep_action)
 
-        self.act_detect = QAction("检测方程/湍流(&D)", self)
+        self.act_detect = QAction(tg("act.detect"), self)
         self.act_detect.triggered.connect(self._on_detect_action)
 
     def _setup_menus(self) -> None:
         menubar = self.menuBar()
 
-        m_file = menubar.addMenu("文件(&F)")
+        m_file = menubar.addMenu(tg("menu.file"))
         m_file.addAction(self.act_open)
         m_file.addAction(self.act_save)
         m_file.addAction(self.act_save_as)
         m_file.addSeparator()
         m_file.addAction(self.act_exit)
 
-        m_edit = menubar.addMenu("编辑(&E)")
+        m_edit = menubar.addMenu(tg("menu.edit"))
         m_edit.addAction(self.act_undo)
         m_edit.addAction(self.act_redo)
 
-        m_sweep = menubar.addMenu("Sweep(&W)")
+        m_sweep = menubar.addMenu(tg("menu.sweep"))
         m_sweep.addAction(self.act_sweep)
 
-        m_detect = menubar.addMenu("检测(&D)")
+        m_detect = menubar.addMenu(tg("menu.detect"))
         m_detect.addAction(self.act_detect)
 
-        m_help = menubar.addMenu("帮助(&H)")
-        m_help.addAction("关于(&A)...").triggered.connect(self._on_about)
+        m_help = menubar.addMenu(tg("menu.help"))
+        m_help.addAction(tg("act.about")).triggered.connect(self._on_about)
 
     def _setup_toolbar(self) -> None:
         toolbar = QToolBar("主工具栏", self)
@@ -140,7 +144,7 @@ class MainWindow(QMainWindow):
     def _setup_statusbar(self) -> None:
         bar = QStatusBar(self)
         self.setStatusBar(bar)
-        self._status_path = QLabel("(未打开文件)")
+        self._status_path = QLabel(tg("status.no_file"))
         self._status_dirty = QLabel("")
         self._status_lines = QLabel("0 行")
         bar.addWidget(self._status_path, 1)
@@ -152,44 +156,93 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget(self)
         self.tabs.setObjectName("CentralTabs")
 
-        self.tree_widget = InpTreeWidget(self)
+        # v0.16:文件 tab = 搜索框 + InpTree(共用一个 QWidget 容器)
+        from PySide2.QtWidgets import QVBoxLayout
+        file_widget = QWidget(self)
+        file_layout = QVBoxLayout(file_widget)
+        file_layout.setContentsMargins(0, 0, 0, 0)
+        self._search_bar = FieldSearchBar(file_widget)
+        file_layout.addWidget(self._search_bar)
+        self.tree_widget = InpTreeWidget(file_widget)
         self.tree_widget.value_edit_requested.connect(self._on_value_edit_requested)
-        self.tabs.addTab(self.tree_widget, "文件(&E)")
+        file_layout.addWidget(self.tree_widget, 1)
+        self._search_bar.attach(self.tree_widget)
+        self.tabs.addTab(file_widget, tg("tab.file"))
 
         self.detect_panel = DetectPanel(self.detect_ctrl, self.edit_ctrl, self)
         self.detect_panel.preset_requested.connect(self._on_preset_requested)
-        self.tabs.addTab(self.detect_panel, "检测(&T)")
+        self.tabs.addTab(self.detect_panel, tg("tab.detect"))
 
-        self.sweep_form = SweepForm(self.sweep_ctrl, self)
-        self.tabs.addTab(self.sweep_form, "Sweep(&S)")
+        # v0.16:Sweep tab 改为 QTabWidget 子 tab(File / Live)
+        sweep_container = QTabWidget(self)
+        self.sweep_form = SweepForm(self.sweep_ctrl, sweep_container)
+        sweep_container.addTab(self.sweep_form, tg("tab.sweep"))
+        self.sweep_live_form = SweepLiveForm(self.sweep_ctrl, sweep_container)
+        sweep_container.addTab(self.sweep_live_form, tg("tab.sweep_live"))
+        self.tabs.addTab(sweep_container, tg("tab.sweep"))
 
         self.diff_viewer = DiffViewer(self.diff_ctrl, self)
-        self.tabs.addTab(self.diff_viewer, "对比(&D)")
+        self.tabs.addTab(self.diff_viewer, tg("tab.diff"))
 
-        # v0.15.0 / Phase 6: 后处理面板(气动力提取 / 收敛分析 / Excel / 收敛图)
+        # v0.15.0 / Phase 6: 后处理面板
         from inp_tool_gui.controllers.postprocess_controller import PostprocessController
         from inp_tool_gui.widgets.postprocess_panel import PostprocessPanel
         self.postprocess_ctrl = PostprocessController()
         self.postprocess_panel = PostprocessPanel(self)
         self.postprocess_panel.run_requested.connect(self._on_postprocess_run)
-        self.tabs.addTab(self.postprocess_panel, "后处理(&P)")
+        self.tabs.addTab(self.postprocess_panel, tg("tab.postprocess"))
 
         self.setCentralWidget(self.tabs)
 
     # --- File actions ---------------------------------------------------
 
     def _on_open(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "打开 mcfd.inp", str(Path.cwd()),
-            "mcfd.inp (*.inp);;所有文件 (*)",
-        )
-        if not path:
+        # 1. 弹 OpenModeDialog
+        dlg = OpenModeDialog(self)
+        if dlg.exec_() != OpenModeDialog.Accepted:
             return
-        try:
-            self.file_ctrl.open(path)
-        except Exception as exc:
-            QMessageBox.critical(self, "打开失败", f"无法解析 {path}:\n{exc}")
-            return
+        mode = dlg.selected_mode()
+
+        if mode == Mode.FOLDER:
+            path = QFileDialog.getExistingDirectory(self, tg("dialog.open_title"))
+            if not path:
+                return
+            try:
+                self.file_ctrl.open_case_dir(path)
+            except CaseValidationError as e:
+                QMessageBox.critical(
+                    self, tg("case_check.title"),
+                    "算例目录不完整:\n{}\n\n提示:可改用 文件模式 打开 mcfd.inp".format(str(e)))
+                return
+            except Exception as exc:
+                QMessageBox.critical(self, tg("dialog.open_failed_title"),
+                                     "无法解析:\n{}".format(exc))
+                return
+            # 显示完整性检查结果
+            v = self.file_ctrl.case_validation
+            if v is not None:
+                msg_lines = [tg("case_check.ok")] if v.ok else ["算例不完整"]
+                for issue in v.issues:
+                    key = "case_check.{}".format(issue.code)
+                    try:
+                        msg_lines.append(tg(key))
+                    except KeyError:
+                        msg_lines.append("[{}] {}".format(issue.severity, issue.message))
+                QMessageBox.information(
+                    self, tg("case_check.title"), "\n".join(msg_lines))
+        else:
+            path, _ = QFileDialog.getOpenFileName(
+                self, tg("dialog.open_title"), str(Path.cwd()),
+                tg("dialog.open_inp_filter"))
+            if not path:
+                return
+            try:
+                self.file_ctrl.open(path)
+            except Exception as exc:
+                QMessageBox.critical(self, tg("dialog.open_failed_title"),
+                                     "无法解析 {}:\n{}".format(path, exc))
+                return
+
         self.edit_ctrl.mark_clean()
         self._refresh_after_open()
 
@@ -307,8 +360,12 @@ class MainWindow(QMainWindow):
     # --- Sweep / Detect actions ----------------------------------------
 
     def _on_sweep_action(self) -> None:
-        """菜单触发:跳到 Sweep 标签页。"""
-        self.tabs.setCurrentWidget(self.sweep_form)
+        """菜单触发:跳到 Sweep 顶层标签页。"""
+        # v0.16:Sweep 顶层 tab 是 sweep_container(子 QTabWidget)
+        for i in range(self.tabs.count()):
+            if "Sweep" in self.tabs.tabText(i) or "sweep" in self.tabs.tabText(i).lower():
+                self.tabs.setCurrentIndex(i)
+                return
 
     def _on_detect_action(self) -> None:
         """菜单触发:跳到检测标签页 + 立即跑检测。"""
@@ -423,7 +480,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_after_open(self) -> None:
         path = self.file_ctrl.current_path
-        self._status_path.setText(str(path) if path else "(未打开文件)")
+        self._status_path.setText(str(path) if path else tg("status.no_file"))
         if path and path.exists():
             try:
                 with open(str(path), "r", encoding="utf-8", errors="replace") as f:
@@ -434,7 +491,11 @@ class MainWindow(QMainWindow):
         if self.file_ctrl.inp is not None:
             self.tree_widget.populate(self.file_ctrl.inp)
             self.detect_panel.run(self.file_ctrl.inp)
-            self.tabs.setCurrentWidget(self.tree_widget)
+            # v0.16:切到顶层 文件 tab(包了 tree_widget 的容器)
+            for i in range(self.tabs.count()):
+                if "File" in self.tabs.tabText(i) or "文件" in self.tabs.tabText(i):
+                    self.tabs.setCurrentIndex(i)
+                    break
         self._update_title()
         self._update_actions_enabled()
 

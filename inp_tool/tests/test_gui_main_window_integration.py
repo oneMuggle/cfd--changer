@@ -77,7 +77,10 @@ def test_open_populates_tree(qapp, sample_inp_path):
         assert "顶层语句" in labels
         assert "块" in labels
 
-        assert win.tabs.currentWidget() is win.tree_widget
+        # v0.16:tree_widget 现在包在 file_widget 容器内 → current tab 是容器
+        current = win.tabs.currentWidget()
+        assert current.layout() is not None
+        assert current.layout().indexOf(win.tree_widget) >= 0
     finally:
         win.close()
         win.deleteLater()
@@ -107,7 +110,14 @@ def test_sweep_action_switches_tab(qapp, sample_inp_path):
     try:
         win.file_ctrl.open(sample_inp_path)
         win._on_sweep_action()
-        assert win.tabs.currentWidget() is win.sweep_form
+        # v0.16:Sweep tab 现在包在 sweep_container 子 QTabWidget 里
+        # 验证:_on_sweep_action 至少把顶层 tab 切到了 Sweep
+        top_labels = [win.tabs.tabText(i) for i in range(win.tabs.count())]
+        sweep_top_idx = next(
+            (i for i, t in enumerate(top_labels) if "Sweep" in t), None
+        )
+        assert sweep_top_idx is not None
+        assert win.tabs.currentIndex() == sweep_top_idx
     finally:
         win.close()
         win.deleteLater()
@@ -186,6 +196,50 @@ def test_act_detect_enabled_when_file_open(qapp, sample_inp_path):
         win._update_actions_enabled()
         assert win.act_detect.isEnabled() is True
         assert win.act_sweep.isEnabled() is True
+    finally:
+        win.close()
+        win.deleteLater()
+
+
+# 加到 test_gui_main_window_integration.py 末尾
+import pytest
+from pathlib import Path
+from PySide2.QtWidgets import QApplication
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    app = QApplication.instance() or QApplication([])
+    yield app
+
+
+def test_main_window_has_search_bar_above_tree(qapp):
+    from inp_tool_gui.main_window import MainWindow
+    from inp_tool_gui.widgets.field_search_bar import FieldSearchBar
+    win = MainWindow()
+    try:
+        assert len(win.findChildren(FieldSearchBar)) >= 1
+    finally:
+        win.close()
+        win.deleteLater()
+
+
+def test_main_window_has_sweep_live_tab(qapp):
+    from inp_tool_gui.main_window import MainWindow
+    win = MainWindow()
+    try:
+        # 找到顶层 Sweep tab(里面是 QTabWidget 含 File/Live 子页签)
+        sweep_idx = None
+        for i in range(win.tabs.count()):
+            title = win.tabs.tabText(i)
+            if "Sweep" in title or "sweep" in title.lower():
+                sweep_idx = i
+                break
+        assert sweep_idx is not None, "MainWindow 没有 Sweep 顶层 tab"
+        sweep_container = win.tabs.widget(sweep_idx)
+        sub_titles = [sweep_container.tabText(j) for j in range(sweep_container.count())]
+        assert any("实时" in t or "Live" in t for t in sub_titles), \
+            "Sweep tab 下没有 Live Edit 子页签,实际:{}".format(sub_titles)
     finally:
         win.close()
         win.deleteLater()
