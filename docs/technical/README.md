@@ -102,3 +102,14 @@ inp_tool/                          ←  核心包
 - **示例配置:** [`../../inp_tool/examples/`](../../inp_tool/examples/)
 - **测试:** [`../../inp_tool/tests/`](../../inp_tool/tests/)
 - **项目约束:** [`../../CLAUDE.md`](../../CLAUDE.md)
+
+---
+
+## 7. 顶层章节(跨子目录归档)
+
+少数章节按"版本变更"归档,不归入任何子目录,与子目录内编号并列。
+
+| 编号 | 标题 | 简介 |
+|---|---|---|
+| 09 | [GUI UX 优化 v0.16](09-gui-ux-v0.16.md) | 中文 UI + 字段搜索 + Sweep 实时编辑 + 文件夹/文件双模式 |
+| 09 | [GUI 测试覆盖率报告 v0.16](09-gui-test-coverage.md) | v0.16 GUI 模块覆盖率基线 + follow-up 清单 |

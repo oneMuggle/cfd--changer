@@ -194,3 +194,45 @@ def test_refresh_row_updates_displayed_text(qapp, small_inp):
         assert value_item.text(0) == "500.0"
     finally:
         tree.deleteLater()
+
+
+# --- field_help tooltip ------------------------------------------------
+
+
+def test_value_item_has_tooltip_from_field_help(qapp):
+    from inp_tool.model import InpFile, Stmt, Value
+    from inp_tool_gui.widgets.inp_tree import InpTreeWidget
+
+    inp = InpFile()
+    inp.top_stmts.append(
+        Stmt(keyword="reftem", values=[Value(raw="300.0", typed=300.0)])
+    )
+    tree = InpTreeWidget()
+    try:
+        tree.populate(inp)
+        top = tree.topLevelItem(0)  # "顶层语句"
+        stmt_item = top.child(0)
+        value_item = stmt_item.child(0)
+        tip = value_item.toolTip(0)
+        assert "温度" in tip  # field_help 里 reftem 的说明
+    finally:
+        tree.deleteLater()
+
+
+def test_value_item_no_tooltip_for_unknown_field(qapp):
+    from inp_tool.model import InpFile, Stmt, Value
+    from inp_tool_gui.widgets.inp_tree import InpTreeWidget
+
+    inp = InpFile()
+    inp.top_stmts.append(
+        Stmt(keyword="zzz_unknown_xxx", values=[Value(raw="1.0", typed=1.0)])
+    )
+    tree = InpTreeWidget()
+    try:
+        tree.populate(inp)
+        top = tree.topLevelItem(0)
+        stmt_item = top.child(0)
+        value_item = stmt_item.child(0)
+        assert value_item.toolTip(0) == ""  # 无说明 → 无 tooltip
+    finally:
+        tree.deleteLater()

@@ -34,6 +34,8 @@ from typing import Any, List, Optional, Tuple
 from PySide2.QtCore import Qt, Signal
 from PySide2.QtWidgets import QTreeWidget, QTreeWidgetItem
 
+from inp_tool.field_help import get_help, known_blocks
+from inp_tool.i18n_gui import tg
 from inp_tool.model import InpFile
 
 
@@ -73,17 +75,21 @@ class InpTreeWidget(QTreeWidget):
         self._inp = inp
 
         # 顶层语句父节点
-        top_parent = QTreeWidgetItem([self._LBL_TOP])
+        top_parent = QTreeWidgetItem([self._lbl_top()])
         top_parent.setData(0, Qt.UserRole, (_PARENT_ROLE, "top"))
         self.addTopLevelItem(top_parent)
         for stmt_idx, stmt in enumerate(inp.top_stmts):
             stmt_item = self._make_stmt_item(-1, stmt_idx, stmt.keyword)
             top_parent.addChild(stmt_item)
             for vi, v in enumerate(stmt.values):
-                stmt_item.addChild(self._make_value_item(-1, stmt_idx, vi, stmt.keyword, v))
+                stmt_item.addChild(
+                    self._make_value_item(
+                        -1, stmt_idx, vi, stmt.keyword, v, block_name="<top>"
+                    )
+                )
 
         # 块父节点
-        blk_parent = QTreeWidgetItem([self._LBL_BLOCKS])
+        blk_parent = QTreeWidgetItem([self._lbl_blocks()])
         blk_parent.setData(0, Qt.UserRole, (_PARENT_ROLE, "blocks"))
         self.addTopLevelItem(blk_parent)
         for blk_idx, block in enumerate(inp.block_list):
@@ -96,7 +102,9 @@ class InpTreeWidget(QTreeWidget):
                 blk_item.addChild(stmt_item)
                 for vi, v in enumerate(stmt.values):
                     stmt_item.addChild(
-                        self._make_value_item(blk_idx, stmt_idx, vi, stmt.keyword, v)
+                        self._make_value_item(
+                            blk_idx, stmt_idx, vi, stmt.keyword, v, block_name=block.name
+                        )
                     )
 
         # 展开前两层(便于浏览)
@@ -170,8 +178,11 @@ class InpTreeWidget(QTreeWidget):
 
     # --- 内部 ---------------------------------------------------------
 
-    _LBL_TOP = "顶层语句"
-    _LBL_BLOCKS = "块"
+    def _lbl_top(self) -> str:
+        return tg("tree.lbl.top")
+
+    def _lbl_blocks(self) -> str:
+        return tg("tree.lbl.blocks")
 
     def _block_label(self, blk_idx: int, name: str) -> str:
         """同名 block 第 2+ 个加 `` [N]`` 后缀(0-indexed,与 list_idx 一致)。"""
@@ -199,6 +210,7 @@ class InpTreeWidget(QTreeWidget):
         value_idx: int,
         keyword: str,
         value: Any,
+        block_name: str = "",
     ) -> QTreeWidgetItem:
         raw = getattr(value, "raw", str(value))
         item = QTreeWidgetItem([raw, "value", raw])
@@ -207,6 +219,24 @@ class InpTreeWidget(QTreeWidget):
             Qt.UserRole,
             (_VALUE_ROLE, block_idx, stmt_idx, value_idx, keyword),
         )
+        # v0.16:接 field_help,挂 tooltip
+        # 顶层语句 block_name = "<top>",field_help 里没有该 key;
+        # 退化到扫所有 block,找含此 keyword 的第一条作为说明。
+        help_text = ""
+        effective_block = block_name
+        if block_name:
+            help_text = get_help(block_name, keyword)
+        if not help_text and block_name == "<top>":
+            for kb in known_blocks():
+                h = get_help(kb, keyword)
+                if h:
+                    help_text = h
+                    effective_block = kb
+                    break
+        if help_text:
+            tip = f"{effective_block}.{keyword}\n{help_text}"
+            for col in range(3):
+                item.setToolTip(col, tip)
         return item
 
     def _walk_to_value_item(
@@ -215,14 +245,14 @@ class InpTreeWidget(QTreeWidget):
         """从顶层按 (block_idx, stmt_idx, value_idx) 走到 value item。"""
         # block_idx = -1 → 顶层语句;否则 → 块
         if block_idx == -1:
-            top = self._find_top_by_label(self._LBL_TOP)
+            top = self._find_top_by_label(self._lbl_top())
             if top is None:
                 return None
             stmt_item = top.child(stmt_idx)
             if stmt_item is None:
                 return None
             return stmt_item.child(value_idx)
-        blk_parent = self._find_top_by_label(self._LBL_BLOCKS)
+        blk_parent = self._find_top_by_label(self._lbl_blocks())
         if blk_parent is None:
             return None
         # block 在 blk_parent 第 blk_idx 个 child
@@ -252,7 +282,7 @@ class InpTreeWidget(QTreeWidget):
         """
         if self._inp is None:
             return None
-        if parent_label == self._LBL_TOP:
+        if parent_label == self._lbl_top():
             for stmt_idx, stmt in enumerate(self._inp.top_stmts):
                 if stmt.keyword == keyword and value_idx < len(stmt.values):
                     return (-1, stmt_idx, value_idx, keyword)
