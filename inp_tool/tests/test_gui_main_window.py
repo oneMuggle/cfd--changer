@@ -49,7 +49,7 @@ def test_main_window_title_initial(win):
     """未打开时标题 = APP_NAME vAPP_VERSION。"""
     title = win.windowTitle()
     assert "inp-tool-gui" in title
-    assert "0.15.2-dev" in title
+    assert "0.16.0-dev" in title
     assert "*" not in title  # 未 dirty
 
 
