@@ -21,8 +21,19 @@ def build_window() -> QMainWindow:
     """构造主窗口(不显示,不入事件循环)。
 
     v0.10 集成版:挂载完整 :class:`MainWindow`(5 controllers + 4 标签页 +
-    菜单/工具栏/状态栏)。``MainWindow`` 在 :mod:`inp_tool_gui.main_window` 内
-    定义,此处内嵌 import 以保持 ``app`` 模块零循环依赖。
+    菜单/工具栏/状态栏)。
+
+    调用方需保证 :class:`QApplication` 单例已存在;否则先 ``QApplication([])``。
+    直接 ``from inp_tool_gui.app import build_window; build_window().show()`` 会在
+    ``MainWindow.__init__`` 构造 Qt widgets 时触发 ``QWidget: Cannot create a
+    QWidget without QApplication``。
+
+    ``MainWindow`` 在 :mod:`inp_tool_gui.main_window` 内定义,此处**必须**用内嵌
+    import 而非模块顶部 import。``main_window.py:30`` 顶部有
+    ``from inp_tool_gui.app import APP_NAME, APP_VERSION``,若将本 import 提到
+    顶部会触发循环:``app`` 加载 → 加载 ``main_window`` → 反向 ``app.APP_NAME``
+    → ``app`` 尚未绑定名称 → ``ImportError: cannot import name 'APP_NAME' from
+    partially initialized module 'inp_tool_gui.app'``。
     """
     from inp_tool_gui.main_window import MainWindow
     return MainWindow()
