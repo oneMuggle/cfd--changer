@@ -1,0 +1,268 @@
+# inp_tool/inp_tool/i18n_gui.py
+"""GUI 专用 i18n(与 REPL i18n 独立)。
+
+用法:
+    from inp_tool.i18n_gui import tg, set_gui_lang
+    set_gui_lang("zh")  # 默认
+    tg("menu.file")  # "文件(&F)"
+"""
+from __future__ import annotations
+import os
+from typing import Any, Dict, List
+
+_DEFAULT_LANG = os.environ.get("INP_TOOL_LANG", "zh")
+if _DEFAULT_LANG not in ("zh", "en"):
+    _DEFAULT_LANG = "zh"
+_CURRENT_LANG: str = _DEFAULT_LANG
+
+# 命名空间:
+# - menu.* / act.* / tab.* / toolbar.* / status.* 主框架
+# - dialog.*  弹窗标题/过滤
+# - sweep.*   sweep 标签页
+# - detect.*  detect 标签页
+# - tree.*    InpTreeWidget + 搜索框
+# - postprocess.*  后处理面板
+# - open_mode.*    打开模式选择
+# - case_check.*   算例完整性检查
+MESSAGES_GUI: Dict[str, Dict[str, str]] = {
+    "zh": {
+        "menu.file": "文件(&F)",
+        "menu.edit": "编辑(&E)",
+        "menu.sweep": "Sweep(&W)",
+        "menu.detect": "检测(&D)",
+        "menu.help": "帮助(&H)",
+        "act.open": "打开(&O)...",
+        "act.save": "保存(&S)",
+        "act.save_as": "另存为(&A)...",
+        "act.exit": "退出(&X)",
+        "act.undo": "撤销(&U)",
+        "act.redo": "重做(&R)",
+        "act.sweep": "批量算例(&W)...",
+        "act.detect": "检测方程/湍流(&D)",
+        "act.about": "关于(&A)...",
+        "toolbar.main": "主工具栏",
+        "status.no_file": "(未打开文件)",
+        "status.lines": "{n} 行",
+        "tab.file": "文件(&E)",
+        "tab.detect": "检测(&T)",
+        "tab.sweep": "Sweep(&S)",
+        "tab.sweep_live": "实时编辑(&L)",
+        "tab.diff": "对比(&D)",
+        "tab.postprocess": "后处理(&P)",
+        "dialog.open_title": "打开 mcfd.inp",
+        "dialog.open_inp_filter": "mcfd.inp (*.inp);;所有文件 (*)",
+        "dialog.open_failed_title": "打开失败",
+        "dialog.save_title": "另存为",
+        "dialog.save_failed_title": "保存失败",
+        "dialog.no_file": "请先打开一个 .inp 文件。",
+        "sweep.btn.load_yaml": "加载 YAML...",
+        "sweep.btn.load_json": "加载 JSON...",
+        "sweep.btn.run_dry": "运行(Dry)",
+        "sweep.btn.run": "运行",
+        "sweep.btn.force": "强制覆盖",
+        "sweep.btn.save_config": "保存为 YAML",
+        "sweep.lbl.template": "模板:",
+        "sweep.lbl.output": "输出目录:",
+        "sweep.lbl.naming": "命名:",
+        "sweep.lbl.case_count": "case 数:",
+        "sweep.lbl.empty": "(未加载)",
+        "sweep.lbl.short": "(略)",
+        "sweep.col.case_id": "case_id",
+        "sweep.col.path": "path",
+        "sweep.col.params": "params",
+        "sweep.col.applied": "applied",
+        "sweep.title.cfg": "当前配置",
+        "sweep.title.sweeps_axes": "Sweep 轴(键=值列表,逗号分隔)",
+        "sweep.run_failed": "Sweep 失败:\n{err}",
+        "sweep.load_failed_yaml": "无法解析 YAML:\n{err}",
+        "sweep.load_failed_json": "无法解析 JSON:\n{err}",
+        "sweep.live.sync_ok": "已同步到 SweepController",
+        "sweep.live.sync_fail": "同步失败:{err}",
+        "sweep.live.need_template": "请先填模板路径",
+        "sweep.live.need_output": "请先填输出目录",
+        "sweep.live.invalid_axis": "轴 {key} 的值不是合法列表/标量:{val}",
+        "detect.btn.run": "运行检测",
+        "detect.btn.preset_turb": "应用 SST k-ω",
+        "detect.btn.preset_2t": "应用 双温度(2T)",
+        "detect.btn.preset_species": "应用 多组分",
+        "detect.lbl.summary_empty": "尚未运行检测",
+        "detect.title.report": "检测报告",
+        "detect.title.notes": "方程检测告警(notes)",
+        "detect.title.sweep_warn": "Sweep Axis 告警",
+        "detect.title.rec": "推荐字段",
+        "detect.lbl.empty": "(无)",
+        "detect.lbl.rec_empty": "(无推荐字段 — 关键字段已齐备)",
+        "detect.btn.apply": "应用",
+        "tree.search.placeholder": "搜索字段(关键字或值片段)",
+        "tree.search.btn_clear": "清空",
+        "tree.search.hits_zero": "无匹配字段",
+        "tree.lbl.top": "顶层语句",
+        "tree.lbl.blocks": "块",
+        "postprocess.title.case_dirs": "算例目录:",
+        "postprocess.btn.add": "添加算例",
+        "postprocess.btn.run_extract": "提取气动力",
+        "postprocess.btn.run_convergence": "生成收敛报告",
+        "postprocess.btn.run_report": "生成 Excel",
+        "postprocess.btn.run_plot": "生成收敛图",
+        "postprocess.btn.run_all": "一键全部",
+        "postprocess.lbl.op": "工况点:",
+        "postprocess.lbl.sref": "参考面积 Sref:",
+        "postprocess.lbl.lref": "参考长度 Lref:",
+        "postprocess.lbl.xref": "Xref:",
+        "postprocess.lbl.yref": "Yref:",
+        "postprocess.lbl.zref": "Zref:",
+        "postprocess.lbl.xcg": "质心 Xcg:",
+        "open_mode.title": "选择打开方式",
+        "open_mode.label": "要打开的是单个 .inp 文件,还是一个完整的算例目录?",
+        "open_mode.file_radio": "文件模式(只打开 .inp)",
+        "open_mode.folder_radio": "文件夹模式(打开完整算例)",
+        "open_mode.folder_hint": "文件夹模式会校验 mcfd.inp 完整性,推荐用于批量算例。",
+        "open_mode.remember": "记住我的选择",
+        "open_mode.ok": "确定",
+        "open_mode.cancel": "取消",
+        "case_check.title": "算例完整性检查",
+        "case_check.ok": "✓ 算例完整,可用于 sweep 生成",
+        "case_check.missing_inp": "✗ 缺少 mcfd.inp",
+        "case_check.missing_pbs": "⚠ 缺少 PBS 脚本(批量提交时无法直接 qsub)",
+        "case_check.missing_geometry": "⚠ 缺少几何文件(请确认 tri/plt 文件存在)",
+        "case_check.parse_error": "✗ mcfd.inp 解析失败:{err}",
+        "case_check.empty_axes": "⚠ 批量算例轴为空,请确认 .inp 已正确加载",
+    },
+    "en": {
+        "menu.file": "&File",
+        "menu.edit": "&Edit",
+        "menu.sweep": "S&weep",
+        "menu.detect": "&Detect",
+        "menu.help": "&Help",
+        "act.open": "&Open...",
+        "act.save": "&Save",
+        "act.save_as": "Save &As...",
+        "act.exit": "E&xit",
+        "act.undo": "&Undo",
+        "act.redo": "&Redo",
+        "act.sweep": "S&weep Cases...",
+        "act.detect": "Detect Equations/&Turbulence",
+        "act.about": "&About...",
+        "toolbar.main": "Main Toolbar",
+        "status.no_file": "(no file open)",
+        "status.lines": "{n} lines",
+        "tab.file": "&File",
+        "tab.detect": "&Detect",
+        "tab.sweep": "&Sweep",
+        "tab.sweep_live": "&Live Edit",
+        "tab.diff": "&Diff",
+        "tab.postprocess": "&Post",
+        "dialog.open_title": "Open mcfd.inp",
+        "dialog.open_inp_filter": "mcfd.inp (*.inp);;All files (*)",
+        "dialog.open_failed_title": "Open Failed",
+        "dialog.save_title": "Save As",
+        "dialog.save_failed_title": "Save Failed",
+        "dialog.no_file": "Please open a .inp file first.",
+        "sweep.btn.load_yaml": "Load YAML...",
+        "sweep.btn.load_json": "Load JSON...",
+        "sweep.btn.run_dry": "Run (Dry)",
+        "sweep.btn.run": "Run",
+        "sweep.btn.force": "Force Overwrite",
+        "sweep.btn.save_config": "Save as YAML",
+        "sweep.lbl.template": "Template:",
+        "sweep.lbl.output": "Output Dir:",
+        "sweep.lbl.naming": "Naming:",
+        "sweep.lbl.case_count": "Case count:",
+        "sweep.lbl.empty": "(not loaded)",
+        "sweep.lbl.short": "(omitted)",
+        "sweep.col.case_id": "case_id",
+        "sweep.col.path": "path",
+        "sweep.col.params": "params",
+        "sweep.col.applied": "applied",
+        "sweep.title.cfg": "Current Config",
+        "sweep.title.sweeps_axes": "Sweep axes (key=list-of-values, comma-separated)",
+        "sweep.run_failed": "Sweep failed:\n{err}",
+        "sweep.load_failed_yaml": "Failed to parse YAML:\n{err}",
+        "sweep.load_failed_json": "Failed to parse JSON:\n{err}",
+        "sweep.live.sync_ok": "Synced to SweepController",
+        "sweep.live.sync_fail": "Sync failed: {err}",
+        "sweep.live.need_template": "Please fill in template path first",
+        "sweep.live.need_output": "Please fill in output directory first",
+        "sweep.live.invalid_axis": "Axis {key} value is not a valid list/scalar: {val}",
+        "detect.btn.run": "Run Detection",
+        "detect.btn.preset_turb": "Apply SST k-ω",
+        "detect.btn.preset_2t": "Apply Two-Temperature (2T)",
+        "detect.btn.preset_species": "Apply Multi-Species",
+        "detect.lbl.summary_empty": "Detection not run yet",
+        "detect.title.report": "Detection Report",
+        "detect.title.notes": "Equation Detection Warnings (notes)",
+        "detect.title.sweep_warn": "Sweep Axis Warnings",
+        "detect.title.rec": "Recommended Fields",
+        "detect.lbl.empty": "(none)",
+        "detect.lbl.rec_empty": "(no recommendations — key fields are complete)",
+        "detect.btn.apply": "Apply",
+        "tree.search.placeholder": "Search fields (keyword or value fragment)",
+        "tree.search.btn_clear": "Clear",
+        "tree.search.hits_zero": "No matching fields",
+        "tree.lbl.top": "Top-level Statements",
+        "tree.lbl.blocks": "Blocks",
+        "postprocess.title.case_dirs": "Case directories:",
+        "postprocess.btn.add": "Add Case",
+        "postprocess.btn.run_extract": "Extract Aero",
+        "postprocess.btn.run_convergence": "Gen Convergence Report",
+        "postprocess.btn.run_report": "Gen Excel",
+        "postprocess.btn.run_plot": "Gen Convergence Plot",
+        "postprocess.btn.run_all": "All-in-One",
+        "postprocess.lbl.op": "Operating point:",
+        "postprocess.lbl.sref": "Sref:",
+        "postprocess.lbl.lref": "Lref:",
+        "postprocess.lbl.xref": "Xref:",
+        "postprocess.lbl.yref": "Yref:",
+        "postprocess.lbl.zref": "Zref:",
+        "postprocess.lbl.xcg": "Xcg:",
+        "open_mode.title": "Choose Open Mode",
+        "open_mode.label": "Are you opening a single .inp file, or a complete case directory?",
+        "open_mode.file_radio": "File mode (open .inp only)",
+        "open_mode.folder_radio": "Folder mode (open complete case)",
+        "open_mode.folder_hint": "Folder mode validates mcfd.inp integrity, recommended for batch sweeps.",
+        "open_mode.remember": "Remember my choice",
+        "open_mode.ok": "OK",
+        "open_mode.cancel": "Cancel",
+        "case_check.title": "Case Integrity Check",
+        "case_check.ok": "✓ Case is complete, ready for sweep",
+        "case_check.missing_inp": "✗ Missing mcfd.inp",
+        "case_check.missing_pbs": "⚠ Missing PBS script (cannot qsub directly)",
+        "case_check.missing_geometry": "⚠ Missing geometry file (verify tri/plt files exist)",
+        "case_check.parse_error": "✗ mcfd.inp parse failed: {err}",
+        "case_check.empty_axes": "⚠ Sweep axes are empty — verify .inp is loaded",
+    },
+}
+
+
+def get_gui_lang() -> str:
+    return _CURRENT_LANG
+
+
+def set_gui_lang(lang: str) -> None:
+    global _CURRENT_LANG
+    if lang not in MESSAGES_GUI:
+        raise ValueError(
+            f"i18n_gui: unsupported language {lang!r} "
+            f"(supported: {sorted(MESSAGES_GUI.keys())})"
+        )
+    _CURRENT_LANG = lang
+
+
+def tg(key: str, **kwargs: Any) -> str:
+    """GUI 字符串取当前语言,支持 {name} 占位符(同 t())。"""
+    msg = MESSAGES_GUI[_CURRENT_LANG].get(key)
+    if msg is None:
+        other = "en" if _CURRENT_LANG == "zh" else "zh"
+        if key in MESSAGES_GUI[other]:
+            raise KeyError(
+                f"i18n_gui: missing key {key!r} in {_CURRENT_LANG!r} "
+                f"(present in {other!r})"
+            )
+        raise KeyError(f"i18n_gui: missing key {key!r} in any language")
+    if kwargs:
+        return msg.format(**kwargs)
+    return msg
+
+
+def supported_keys() -> List[str]:
+    return sorted(MESSAGES_GUI["zh"].keys())
