@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.15.1] - 2026-06-15
+
+### Fixed
+- fix(gui): wire app.build_window() to MainWindow (v0.10 集成版) (commit a9be431)
+  - `inp_tool_gui.app.build_window()` 之前返回**裸 QMainWindow**(只设标题/尺寸,内容区空白),完整 18KB 的 `MainWindow`(5 controllers + 4 标签页 + 菜单/工具栏/状态栏)已实现在 `main_window.py` 但没接到 `app.py` 上,导致 `inp-tool-gui` 启动后看到的是空窗口
+  - 现改为 `return MainWindow()`(内嵌 import 避免循环);`DEFAULT_WIDTH/HEIGHT` 同步到 1280×800(与 `MainWindow._setup_window` 一致)
+  - 加 `isinstance(window, MainWindow)` 回归断言(`test_gui_smoke.py`)
+
 ## [v0.15.0] - 2026-06-14
 
 ### Added
