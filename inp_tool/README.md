@@ -1,4 +1,4 @@
-# inp_tool — mcfd.inp 解析 / 修改 / diff / **批量算例生成** / **standalone CLI** v0.9.0
+# inp_tool — mcfd.inp 解析 / 修改 / diff / **批量算例生成** / **standalone CLI** v0.15.1
 
 [![CI](https://github.com/oneMuggle/cfd--changer/workflows/ci/badge.svg)](https://github.com/oneMuggle/cfd--changer/actions/workflows/ci.yml)
 [![Release](https://github.com/oneMuggle/cfd--changer/workflows/release/badge.svg)](https://github.com/oneMuggle/cfd--changer/actions/workflows/release.yml)

@@ -20,7 +20,7 @@ def test_app_constants_exposed():
     from inp_tool_gui.app import APP_NAME, APP_VERSION
 
     assert APP_NAME == "inp-tool-gui"
-    assert APP_VERSION == "0.10.0-dev"
+    assert APP_VERSION == "0.15.2-dev"
 
 
 def test_build_window_smoke():
