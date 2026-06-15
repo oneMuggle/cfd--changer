@@ -6,4 +6,4 @@
 - 独立 spec:打包走 ``inp_tool_gui.spec``,与 CLI 的 ``inp_tool.spec`` 互不干扰
 """
 
-__version__ = "0.15.2-dev"
+__version__ = "0.16.0-dev"
