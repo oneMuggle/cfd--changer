@@ -24,7 +24,11 @@ def test_app_constants_exposed():
 
 
 def test_build_window_smoke():
-    """``build_window()`` 不抛异常,标题与尺寸正确。"""
+    """``build_window()`` 不抛异常,标题/尺寸/MainWindow 子类身份符合预期。
+
+    v0.10 集成版:``build_window()`` 返回 :class:`MainWindow` 实例,
+    默认 1280×800(由 ``MainWindow._setup_window`` 决定)。
+    """
     from PySide2.QtWidgets import QApplication
     from inp_tool_gui.app import (
         APP_NAME,
@@ -33,6 +37,7 @@ def test_build_window_smoke():
         DEFAULT_WIDTH,
         build_window,
     )
+    from inp_tool_gui.main_window import MainWindow
 
     # QApplication 单例:已有就复用,没有就建一个
     app = QApplication.instance() or QApplication([])
@@ -43,6 +48,8 @@ def test_build_window_smoke():
         assert window.windowTitle() == f"{APP_NAME} v{APP_VERSION}"
         assert window.width() == DEFAULT_WIDTH
         assert window.height() == DEFAULT_HEIGHT
+        # 集成版断言:实例是 MainWindow(不是裸 QMainWindow)
+        assert isinstance(window, MainWindow)
     finally:
         window.close()
         window.deleteLater()
