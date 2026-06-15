@@ -12,7 +12,7 @@ from typing import Optional, Sequence
 from PySide2.QtWidgets import QApplication, QMainWindow
 
 APP_NAME = "inp-tool-gui"
-APP_VERSION = "0.10.0-dev"
+APP_VERSION = "0.15.2-dev"
 DEFAULT_WIDTH = 1280
 DEFAULT_HEIGHT = 800
 
