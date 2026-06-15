@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.16.0] - 2026-06-15
+
+### Added
+- feat(gui): v0.16 GUI UX 优化(中文 UI + 字段搜索 + Sweep 实时编辑 + 文件夹/文件双模式) (commit 0fb0902)
+  - **中文 UI**:`inp_tool.i18n_gui` 模块提供 100+ 字符串 key 的 zh/en 双语字典,默认 zh;`MainWindow` 全部菜单/动作/标签页/状态栏走 `tg()` 走 i18n
+  - **字段说明 tooltip**:`inp_tool.field_help` 字典(8 blocks, 19 keywords)接入 `InpTreeWidget`,hover value item 显示 "block.keyword + 说明"
+  - **树形搜索框**:`FieldSearchBar` 挂在文件 tab 顶部,实时递归过滤(大小写不敏感),父节点自动保留可见,emit `match_count_changed(int)` 信号
+  - **Sweep 实时编辑**:`SweepLiveForm` 与 YAML/JSON 加载并列(共用同一 `SweepController`),支持 template / output_dir / naming / naming_ext / source_dir / copy_strategy / exclude / sweeps.\<axis\> / sweeps_dict 共 9 类字段实时同步;支持"保存为 YAML"反向导出
+  - **文件夹/文件双模式**:`OpenModeDialog` 默认 folder,`FileController.open_case_dir()` 新入口 + `CaseValidation` 校验(`mcfd.inp` 必含 → error,`*.pbs` / `*.tri` / `*.plt` 缺失 → warning)
+  - **算例完整性检查 UI**:folder 模式打开后自动显示 ok/错误/警告三类信息(走 `QMessageBox.information`)
+  - **新模块/类(7 个)**: `inp_tool.i18n_gui`、`inp_tool.field_help`、`inp_tool_gui.widgets.field_search_bar.FieldSearchBar`、`inp_tool_gui.widgets.sweep_live_form.SweepLiveForm`、`inp_tool_gui.widgets.open_mode_dialog.OpenModeDialog` / `Mode` / `FileController.open_case_dir` / `CaseValidation` / `CaseValidationError` / `CaseValidationIssue`
+  - **新测试(31 个)**:`test_gui_i18n`(6) / `test_field_help`(5) / `test_gui_field_search`(6) / `test_gui_sweep_live_form`(5) / `test_gui_open_mode`(5) / `test_gui_main_window_integration` 追加(2) / `test_gui_inp_tree` 追加(2)
+  - **技术文档**:`docs/technical/09-gui-ux-v0.16.md`(变更概览 + 涉及文件 + 测试 + 用户流程 + 已知限制 + 后续工作)
+
+### Fixed
+- fix(gui): 捕获 `tg()` 占位符错误,与父 `t()` 对齐 (commit 9dcbc5e)
+  - `i18n_gui.tg()` 之前直接 `msg.format(**kwargs)`,用户传错占位符收到 `KeyError: 'n'`(与"key 缺失"混淆);加 `try/except KeyError` 提示"key X needs placeholder Y, got kwargs=[...]"
+- fix(gui): 更新 test_gui_main_window 版本断言 0.15.2-dev → 0.16.0-dev (commit d45ffa7)
+
+### Changed
+- **inp_tool_gui 版本**:`0.15.2-dev` → `0.16.0-dev`(MINOR bump,4 项 GUI 优化;core 包 `inp_tool` 维持 0.15.0 不动,沿用 393c419 先例)
+- **`SweepController`** 新增 `update_field(key, value)` 方法 + 模块级 `_sweep_to_dict()` 辅助(为实时表单铺垫)
+- **`FileController`** 新增 `current_case_dir` / `case_validation` property 和 `open_case_dir(path)` / `_validate_case_dir(p)` 方法
+- **`InpTreeWidget`** 类属性 `_LBL_TOP` / `_LBL_BLOCKS` 改为方法 `_lbl_top()` / `_lbl_blocks()`(走 i18n);`_make_value_item` 新增 `block_name` 参数用于 tooltip
+
 ## [v0.15.1] - 2026-06-15
 
 ### Fixed
