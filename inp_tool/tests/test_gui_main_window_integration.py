@@ -49,6 +49,7 @@ def sample_inp_path(tmp_path):
 def test_central_tabs_present(qapp):
     """构造后中心区有 4 个 tab(文件/检测/Sweep/对比)。"""
     from inp_tool_gui.main_window import MainWindow
+    from inp_tool.i18n_gui import tg
 
     win = MainWindow()
     try:
@@ -56,7 +57,8 @@ def test_central_tabs_present(qapp):
         labels = [tabs.tabText(i) for i in range(tabs.count())]
         assert "文件(&E)" in labels
         assert "检测(&T)" in labels
-        assert "Sweep(&S)" in labels
+        # v0.16.1:Sweep 顶层 tab 翻译为"批量算例" / "&Batch Cases"
+        assert tg("tab.sweep_zh") in labels
         assert "对比(&D)" in labels
     finally:
         win.close()
@@ -110,11 +112,12 @@ def test_sweep_action_switches_tab(qapp, sample_inp_path):
     try:
         win.file_ctrl.open(sample_inp_path)
         win._on_sweep_action()
-        # v0.16:Sweep tab 现在包在 sweep_container 子 QTabWidget 里
-        # 验证:_on_sweep_action 至少把顶层 tab 切到了 Sweep
+        # v0.16.1:Sweep 顶层 tab 翻译为"批量算例" / "&Batch Cases"
+        # _on_sweep_action 找包含 "批量算例" / "Batch" 的 tab
         top_labels = [win.tabs.tabText(i) for i in range(win.tabs.count())]
         sweep_top_idx = next(
-            (i for i, t in enumerate(top_labels) if "Sweep" in t), None
+            (i for i, t in enumerate(top_labels)
+             if "批量算例" in t or "Batch" in t), None
         )
         assert sweep_top_idx is not None
         assert win.tabs.currentIndex() == sweep_top_idx
@@ -224,22 +227,25 @@ def test_main_window_has_search_bar_above_tree(qapp):
         win.deleteLater()
 
 
-def test_main_window_has_sweep_live_tab(qapp):
+def test_main_window_has_sweep_tab(qapp):
+    """v0.16.1:Sweep 顶层 tab 翻译为"批量算例" / "&Batch Cases",
+    不再含 File/Live 子 QTabWidget(Change 3 把实时编辑直接集成进 SweepForm)。
+    """
     from inp_tool_gui.main_window import MainWindow
+    from inp_tool.i18n_gui import tg
+
     win = MainWindow()
     try:
-        # 找到顶层 Sweep tab(里面是 QTabWidget 含 File/Live 子页签)
+        # 找到翻译后的 Sweep 顶层 tab
         sweep_idx = None
         for i in range(win.tabs.count()):
             title = win.tabs.tabText(i)
-            if "Sweep" in title or "sweep" in title.lower():
+            if tg("tab.sweep_zh") in title:
                 sweep_idx = i
                 break
         assert sweep_idx is not None, "MainWindow 没有 Sweep 顶层 tab"
-        sweep_container = win.tabs.widget(sweep_idx)
-        sub_titles = [sweep_container.tabText(j) for j in range(sweep_container.count())]
-        assert any("实时" in t or "Live" in t for t in sub_titles), \
-            "Sweep tab 下没有 Live Edit 子页签,实际:{}".format(sub_titles)
+        # v0.16.1:Sweep tab 容器就是 SweepForm(不再有子 QTabWidget)
+        assert win.tabs.widget(sweep_idx) is win.sweep_form
     finally:
         win.close()
         win.deleteLater()

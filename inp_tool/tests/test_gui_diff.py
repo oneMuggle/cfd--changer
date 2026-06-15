@@ -145,7 +145,7 @@ def sweep_yaml_path(tmp_path, sample_inp):
 
 
 def test_sweep_form_load_yaml_populates_config(qapp, sweep_yaml_path):
-    """load_yaml 后 case_count=3,_lbl_tpl 含 sample 路径。"""
+    """load_yaml 后 case_count=3,_lbl_cases 显示 'case 数: 3'。"""
     sc = SweepController()
     from inp_tool_gui.widgets.sweep_form import SweepForm
 
@@ -154,7 +154,7 @@ def test_sweep_form_load_yaml_populates_config(qapp, sweep_yaml_path):
         form.load_yaml(sweep_yaml_path)
         assert sc.is_loaded is True
         assert sc.case_count == 3
-        assert form._lbl_cases.text() == "3"
+        assert form._lbl_cases.text() == "case 数: 3"
     finally:
         form.deleteLater()
 
