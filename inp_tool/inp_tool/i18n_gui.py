@@ -260,7 +260,13 @@ def tg(key: str, **kwargs: Any) -> str:
             )
         raise KeyError(f"i18n_gui: missing key {key!r} in any language")
     if kwargs:
-        return msg.format(**kwargs)
+        try:
+            return msg.format(**kwargs)
+        except KeyError as e:
+            raise KeyError(
+                f"i18n_gui: key {key!r} needs placeholder {e}, "
+                f"got kwargs={list(kwargs.keys())}"
+            ) from e
     return msg
 
 
