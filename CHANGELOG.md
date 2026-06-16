@@ -7,17 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added (GUI Sweep 标签页 UX 重构 v0.17)
+### Fixed
+- fix(gui): SweepForm 值 cell 不可编辑(enum 渲染为 QLabel + spec=None 时不创建 cell),改为统一 QLineEdit,允许用户对枚举轴做子集 sweep,并加 enum 校验(i18n key `sweep.live.invalid_enum`)
+
+## [v0.17.0] - 2026-06-16
+
+### Added (GUI Sweep 标签页 UX 重构)
 - feat(gui): SweepForm 顶部 3 个 label(模板路径 / 输出目录 / 命名模式)
 - feat(gui): SweepForm 轴表 cell 用 QComboBox + QLineEdit(变量可下拉选)
 - feat(gui): VarSpec 数据类 + enumerate_vars() 纯函数(sweep_var_combo.py)
 - feat(gui): SweepController.available_vars() + 缓存(同 template 路径只解析一次)
 - feat(gui): 失焦时类型校验(int / float / str / enum,支持 FORTRAN `d` 写法如 `1.0d-3`)
 - feat(gui): 失效轴红底 + 禁用运行 + tooltip 解释(模板改了后不存在的轴不再静默)
-- i18n(gui): 7 个新 key(3 label + 4 错误)→ sweep.lbl.template / output / naming + sweep.live.need_template / need_output / invalid_int / invalid_float / invalid_axis / orphan_axes / sync_fail
+- i18n(gui): 7 个新 key(3 label + 4 错误)→ sweep.lbl.template / output / naming + sweep.live.invalid_int / invalid_float / orphan_axes / no_template_no_axes
 
 ### Fixed
-- fix(gui): pre-existing `tg()` kwargs 冲突(invalid_axis placeholder 误把 `n` 当占位符)
+- fix(gui): pre-existing `tg()` kwargs 冲突(invalid_axis placeholder 误把 `n` 当占位符,改用 `.replace()` 手动填充)
+- fix(test): 替换 `examples/mcfd.inp` 绝对路径 symlink 为真实文件(Windows 兼容)
+- fix(gui): enumerate_vars 恢复 top_stmts 枚举(原 Task 3 spec deviation 修复,丢了 375 个 sweep 候选)
 
 ## [v0.16.0] - 2026-06-15
 

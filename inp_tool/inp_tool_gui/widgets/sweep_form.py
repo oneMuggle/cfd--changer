@@ -208,8 +208,6 @@ class SweepForm(QWidget):
                     msg = tg("sweep.live.invalid_axis").replace("{key}", key).replace("{val}", raw)
                     raise ValueError(msg) from e
                 sweeps_dict[key] = vals
-            elif isinstance(cell, QLabel):
-                sweeps_dict[key] = list(spec.enum_values or ())
         return {
             "template": self._edit_tpl.text().strip(),
             "output_dir": self._edit_out.text().strip(),
@@ -267,12 +265,13 @@ class SweepForm(QWidget):
             return
         old_text = ""
         old_cell = self._axes_table.cellWidget(row, 1)
+        # 旧 cell 可能是 _append_axis_row 里 spec=None 时建的默认 QLineEdit
         if isinstance(old_cell, QLineEdit):
             old_text = old_cell.text()
+        # _make_value_cell_for_kind 现在永远返回 QLineEdit(不变式)
         new_cell = self._make_value_cell_for_kind(spec)
-        if isinstance(new_cell, QLineEdit):
-            new_cell.setText(old_text)
-            new_cell.editingFinished.connect(self._sync_form_to_controller)
+        new_cell.setText(old_text)
+        new_cell.editingFinished.connect(self._sync_form_to_controller)
         self._axes_table.setCellWidget(row, 1, new_cell)
         self._sync_form_to_controller()
         self._scan_orphan_axes()
@@ -302,6 +301,16 @@ class SweepForm(QWidget):
         if not raw:
             return None
         parts = [p.strip() for p in raw.split(",") if p.strip()]
+        # enum:值必须属于 spec.enum_values(允许子集,但不接受未声明的)
+        if spec.kind == "enum" and spec.enum_values:
+            valid = set(spec.enum_values)
+            bad = [p for p in parts if p not in valid]
+            if bad:
+                tmpl = tg("sweep.live.invalid_enum")
+                return (tmpl
+                        .replace("{key}", spec.key)
+                        .replace("{bad}", ", ".join(bad))
+                        .replace("{valid}", ", ".join(spec.enum_values)))
         if spec.kind == "int":
             for i, p in enumerate(parts, start=1):
                 try:
@@ -335,14 +344,19 @@ class SweepForm(QWidget):
                     break
         return combo
 
-    def _make_value_cell_for_kind(self, spec: VarSpec) -> QWidget:
-        """按 spec.kind 生成值 cell:enum→QLabel(不可编辑),其他→QLineEdit。"""
+    def _make_value_cell_for_kind(self, spec: VarSpec) -> QLineEdit:
+        """按 spec.kind 生成值 cell:统一返回 QLineEdit。
+
+        - enum: 预填 ``, .join(enum_values)``,允许用户编辑子集
+        - 其他: 空 QLineEdit,由 ``_append_axis_row`` 设文本
+        """
+        edit = QLineEdit(self)
         if spec.kind == "enum":
             values = spec.enum_values or ()
-            lbl = QLabel(", ".join(values), self)
-            lbl.setStyleSheet("color: #555; font-style: italic;")
-            return lbl
-        return QLineEdit(self)
+            edit.setText(", ".join(values))
+            # tooltip 用独立短文案 key,避免从错误模板切 ; 的脆弱写法
+            edit.setToolTip(tg("sweep.lbl.enum_tooltip"))
+        return edit
 
     def _append_axis_row(
         self,
@@ -367,14 +381,19 @@ class SweepForm(QWidget):
         self._axes_table.setCellWidget(r, 0, combo)
         combo.currentIndexChanged.connect(self._on_axis_changed)
 
-        # 第 1 列:按 kind
-        if spec is not None:
-            cell = self._make_value_cell_for_kind(spec)
-            if isinstance(cell, QLineEdit):
-                text = ", ".join(str(x) for x in raw_val) if isinstance(raw_val, list) else str(raw_val or "")
-                cell.setText(text)
-                cell.editingFinished.connect(self._sync_form_to_controller)
-            self._axes_table.setCellWidget(r, 1, cell)
+        # 第 1 列:按 kind。spec=None 也创建默认 QLineEdit,保证 cell 永远存在
+        if spec is None:
+            cell_spec: VarSpec = VarSpec(key="", label="", kind="str")
+        else:
+            cell_spec = spec
+        cell = self._make_value_cell_for_kind(cell_spec)
+        # 仅在 raw_val 显式非空时覆盖(保留 enum 的预填全部合法值)
+        if isinstance(raw_val, list) and raw_val:
+            cell.setText(", ".join(str(x) for x in raw_val))
+        elif not isinstance(raw_val, list) and raw_val:
+            cell.setText(str(raw_val))
+        cell.editingFinished.connect(self._sync_form_to_controller)
+        self._axes_table.setCellWidget(r, 1, cell)
 
     def _mark_row_orphan(self, r: int) -> None:
         """标记行为失效(红底 + tooltip)。"""
