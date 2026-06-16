@@ -8,15 +8,16 @@ v0.17 引入,与 SweepController 配合:
 不依赖 PySide2,可被 controller 和测试独立 import。
 """
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+from inp_tool import parser
 from inp_tool.sweep import (
     EnergyModel, GasModel, TurbulenceModel,
 )
 
 
 # 枚举轴定义: key -> Enum class
-_ENUM_AXIS_CLASSES = {
+_ENUM_AXIS_CLASSES: Dict[str, type] = {
     "turbulence": TurbulenceModel,
     "energy": EnergyModel,
     "gas": GasModel,
@@ -39,6 +40,22 @@ class VarSpec:
     value_idx: Optional[int] = None
 
 
+def _infer_kind_for_sweep(typed: Any) -> str:
+    """推断 sweep 轴的 kind。
+
+    注意:与 ``infer_type`` 的 bool>int>float>str 不同,
+    sweep 轴语义上更接近「物理参数」,布尔直接走 str(避免误把
+    "t"/"f" 误判成 axis 值)。
+    """
+    if isinstance(typed, bool):
+        return "str"
+    if isinstance(typed, int):
+        return "int"
+    if isinstance(typed, float):
+        return "float"
+    return "str"
+
+
 def _enum_axis_specs() -> List[VarSpec]:
     """构造 3 个枚举轴 VarSpec。"""
     out: List[VarSpec] = []
@@ -54,17 +71,41 @@ def _enum_axis_specs() -> List[VarSpec]:
     return out
 
 
+def _parse_inp(path: str) -> List[VarSpec]:
+    """解析 .inp,生成所有 (block, keyword, value_idx) 的 VarSpec。
+
+    仅枚举块内语句(顶层语句一般不参与 sweep,跳过)。
+    """
+    inp = parser.parse_file(path)
+    out: List[VarSpec] = []
+    for blk in inp.block_list:
+        for stmt in blk.statements:
+            for vi, v in enumerate(stmt.values):
+                kind = _infer_kind_for_sweep(v.typed)
+                raw = str(v.typed) if v.typed is not None else ""
+                key = "{}.{}[{}]".format(blk.name, stmt.keyword, vi)
+                label = "{} [{}] = {}".format(key, kind, raw)
+                out.append(VarSpec(
+                    key=key, label=label, kind=kind,
+                    block=blk.name, keyword=stmt.keyword, value_idx=vi,
+                ))
+    return out
+
+
 def enumerate_vars(template_path: Optional[str]) -> List[VarSpec]:
     """根据模板路径返回 :class:`VarSpec` 列表。
 
     - template_path 为空(None 或空串)→ 仅 3 个枚举轴
-    - template_path 存在但解析失败 → 仅 3 个枚举轴(不抛,本任务范围)
+    - template_path 存在但解析失败 → 仅 3 个枚举轴(不抛)
     - 否则 → 解析 .inp,枚举所有 (block, keyword, value_idx)
-      (Task 3 实现)
 
     返回列表:枚举轴在前,.inp 变量在后;同 group 内顺序由实现定义。
     """
+    enum_specs = _enum_axis_specs()
     if not template_path:
-        return _enum_axis_specs()
-    # 解析 .inp(后续 Task 3 实现)
-    return _enum_axis_specs()  # 暂未实现
+        return enum_specs
+    try:
+        inp_specs = _parse_inp(template_path)
+    except Exception:
+        return enum_specs  # 解析失败:静默退化为仅枚举轴
+    return enum_specs + inp_specs

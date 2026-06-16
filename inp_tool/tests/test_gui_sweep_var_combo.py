@@ -1,5 +1,16 @@
 """VarSpec 数据类测试 + enumerate_vars 枚举轴部分。"""
+import os
+
+import pytest
+
 from inp_tool_gui.widgets.sweep_var_combo import VarSpec, enumerate_vars
+
+
+# 共享 fixture:examples/mcfd.inp 的绝对路径
+EXAMPLES_INP = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    "examples", "mcfd.inp",
+)
 
 
 def test_varspec_creation_minimal():
@@ -86,3 +97,74 @@ def test_enumerate_vars_none_template_is_pure():
     a = enumerate_vars(None)
     b = enumerate_vars(None)
     assert a == b
+
+
+def test_enumerate_vars_invalid_path_returns_enum_only():
+    """无效路径:返回仅枚举轴,不抛异常。"""
+    specs = enumerate_vars("/不/存在/的/路径.inp")
+    assert len(specs) == 3
+    assert {s.key for s in specs} == {"turbulence", "energy", "gas"}
+
+
+@pytest.mark.skipif(
+    not os.path.exists(EXAMPLES_INP),
+    reason="examples/mcfd.inp 不存在(此环境缺 fixture)",
+)
+def test_enumerate_vars_real_inp_contains_enum_and_inp_vars():
+    """真实 .inp 解析:返回枚举轴 + .inp 变量,key 格式为 block.keyword[idx]。"""
+    specs = enumerate_vars(EXAMPLES_INP)
+    keys = {s.key for s in specs}
+    # 枚举轴必须在前 3
+    enum_keys = {s.key for s in specs if s.kind == "enum"}
+    assert enum_keys == {"turbulence", "energy", "gas"}
+    # .inp 变量 key 格式: block.keyword 或 block.keyword[idx]
+    for s in specs:
+        if s.kind == "enum":
+            continue
+        assert "." in s.key, "非枚举轴 key 缺 block 路径: {}".format(s.key)
+        # label 含 [kind] 信息
+        assert "[" in s.label and "]" in s.label
+        # block / keyword / value_idx 三件套齐全
+        assert s.block is not None
+        assert s.keyword is not None
+        assert s.value_idx is not None
+        # kind ∈ {int, float, str}
+        assert s.kind in ("int", "float", "str")
+
+
+@pytest.mark.skipif(
+    not os.path.exists(EXAMPLES_INP),
+    reason="examples/mcfd.inp 不存在(此环境缺 fixture)",
+)
+def test_enumerate_vars_real_inp_label_includes_template_value():
+    """label 含模板当前值,如 'physics.reynolds[0] [float] = 1.0e6'。"""
+    specs = enumerate_vars(EXAMPLES_INP)
+    # 找任一 float 变量验证
+    float_vars = [s for s in specs if s.kind == "float"]
+    if not float_vars:
+        pytest.skip("examples/mcfd.inp 不含 float 变量")
+    s = float_vars[0]
+    # label 末尾是 " = <value>"
+    assert " = " in s.label
+    # 切开后,右边就是模板当前值的字符串
+    _, _, raw = s.label.rpartition(" = ")
+    assert raw  # 非空
+    # raw 应该能 round-trip 到 s.kind 对应的类型
+    if s.kind == "float":
+        float(raw.replace("d", "e").replace("D", "E"))
+    elif s.kind == "int":
+        int(raw)
+
+
+@pytest.mark.skipif(
+    not os.path.exists(EXAMPLES_INP),
+    reason="examples/mcfd.inp 不存在(此环境缺 fixture)",
+)
+def test_enumerate_vars_real_inp_inferred_kind_order():
+    """kind 推断顺序:本设计不暴露 bool(走 str)。"""
+    specs = enumerate_vars(EXAMPLES_INP)
+    for s in specs:
+        if s.kind == "enum":
+            continue
+        # 不会返回 "bool"
+        assert s.kind in ("int", "float", "str")
