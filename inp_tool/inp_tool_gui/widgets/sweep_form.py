@@ -205,9 +205,8 @@ class SweepForm(QWidget):
                 try:
                     vals = [self._parse_scalar(x) for x in raw.split(",") if x.strip()]
                 except ValueError as e:
-                    raise ValueError(
-                        tg("sweep.live.invalid_axis", key=key, val=raw)
-                    ) from e
+                    msg = tg("sweep.live.invalid_axis").replace("{key}", key).replace("{val}", raw)
+                    raise ValueError(msg) from e
                 sweeps_dict[key] = vals
             elif isinstance(cell, QLabel):
                 sweeps_dict[key] = list(spec.enum_values or ())
