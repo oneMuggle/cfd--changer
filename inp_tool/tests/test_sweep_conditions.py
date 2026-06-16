@@ -19,3 +19,38 @@ def test_condition_predicate_is_frozen():
     p = ConditionPredicate(key="x", op="==", value=0)
     with pytest.raises((AttributeError, Exception)):
         p.key = "y"  # frozen dataclass 禁止赋值
+
+
+def test_parse_condition_single_predicate():
+    """parse_condition: {'mach': '<1'} → 1 个 predicate。"""
+    from inp_tool.sweep import parse_condition, ConditionWhen, ConditionPredicate
+    w = parse_condition({"mach": "<1"})
+    assert isinstance(w, ConditionWhen)
+    assert w.predicates == (ConditionPredicate("mach", "<", 1),)
+
+
+def test_parse_condition_multiple_predicates():
+    """多键 AND。"""
+    from inp_tool.sweep import parse_condition, ConditionPredicate
+    w = parse_condition({"mach": "<1", "reynolds": ">=1e6"})
+    assert ConditionPredicate("mach", "<", 1) in w.predicates
+    assert ConditionPredicate("reynolds", ">=", 1e6) in w.predicates
+    assert len(w.predicates) == 2
+
+
+def test_parse_condition_value_types():
+    """value 类型按字面量推断(int/float/str/bool)。"""
+    from inp_tool.sweep import parse_condition, ConditionPredicate
+    w = parse_condition({"a": "==42", "b": "<3.14", "c": "!=foo", "d": "==true"})
+    pred_map = {p.key: p for p in w.predicates}
+    assert pred_map["a"].value == 42 and isinstance(pred_map["a"].value, int)
+    assert pred_map["b"].value == 3.14 and isinstance(pred_map["b"].value, float)
+    assert pred_map["c"].value == "foo" and isinstance(pred_map["c"].value, str)
+    assert pred_map["d"].value is True
+
+
+def test_parse_condition_unknown_op_raises():
+    """未知 op 抛 ValueError。"""
+    from inp_tool.sweep import parse_condition
+    with pytest.raises(ValueError, match="unknown operator"):
+        parse_condition({"x": "@@1"})

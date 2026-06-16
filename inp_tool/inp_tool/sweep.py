@@ -22,7 +22,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from enum import Enum
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 from .model import InpFile
 from .parser import parse_file
@@ -1391,3 +1391,48 @@ class ConditionPredicate:
     key: str
     op: str        # "<", "<=", "==", "!=", ">=", ">"
     value: Any     # 已按 YAML 推断的类型(int/float/str/bool)
+
+
+_VALID_OPS = ("<", "<=", "==", "!=", ">=", ">")
+_OP_PATTERN = re.compile(r"^(<=|!=|==|>=|[<>])(.*)$")
+
+
+@dataclass(frozen=True)
+class ConditionWhen:
+    """多变量 AND 关系;predicates 空 → 永真。"""
+    predicates: Tuple[ConditionPredicate, ...] = ()
+
+
+def _infer_value(s: str) -> Any:
+    s = s.strip()
+    if s.lower() == "true":
+        return True
+    if s.lower() == "false":
+        return False
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return s
+
+
+def parse_condition(when_dict: Dict[str, str]) -> ConditionWhen:
+    """YAML raw {key: '<op><val>'} → 解析后的 ConditionWhen。"""
+    predicates = []
+    for key, expr in when_dict.items():
+        stripped = expr.strip()
+        m = _OP_PATTERN.match(stripped)
+        if not m:
+            # 若首字符是符号(说明用户想写 op 但 op 无效),报"unknown operator"
+            if stripped and not stripped[0].isalnum() and stripped[0] != "_":
+                raise ValueError(f"unknown operator {stripped[0]!r} in condition for {key!r}")
+            raise ValueError(f"condition '{key}={expr!r}': cannot parse operator")
+        op, val_str = m.group(1), m.group(2)
+        if op not in _VALID_OPS:
+            raise ValueError(f"unknown operator {op!r} in condition for {key!r}")
+        predicates.append(ConditionPredicate(key=key, op=op, value=_infer_value(val_str)))
+    return ConditionWhen(predicates=tuple(predicates))
