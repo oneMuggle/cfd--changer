@@ -54,3 +54,36 @@ def test_parse_condition_unknown_op_raises():
     from inp_tool.sweep import parse_condition
     with pytest.raises(ValueError, match="unknown operator"):
         parse_condition({"x": "@@1"})
+
+
+def test_evaluate_condition_true_when_empty():
+    """空 predicates → 永真。"""
+    from inp_tool.sweep import evaluate_condition, ConditionWhen
+    assert evaluate_condition(ConditionWhen(), {"mach": 0.5}) is True
+
+
+def test_evaluate_condition_and_semantics():
+    """多 predicate 全部 AND。"""
+    from inp_tool.sweep import parse_condition, evaluate_condition
+    w = parse_condition({"mach": "<1", "reynolds": ">=1e6"})
+    assert evaluate_condition(w, {"mach": 0.5, "reynolds": 2e6}) is True
+    assert evaluate_condition(w, {"mach": 0.5, "reynolds": 5e5}) is False  # reynolds 不达标
+    assert evaluate_condition(w, {"mach": 1.5, "reynolds": 2e6}) is False  # mach 不达标
+
+
+def test_evaluate_condition_missing_key_returns_false():
+    """case 缺 key → predicate 不成立。"""
+    from inp_tool.sweep import parse_condition, evaluate_condition
+    w = parse_condition({"mach": "<1"})
+    assert evaluate_condition(w, {}) is False
+
+
+def test_conditional_rule_dataclass():
+    """ConditionalRule 持有 (when, then)。"""
+    from inp_tool.sweep import (
+        ConditionalRule, ConditionThen, parse_condition,
+    )
+    w = parse_condition({"mach": "<1"})
+    t = ConditionThen(disable_axes=("turbulence",))
+    rule = ConditionalRule(when=w, then=t)
+    assert rule.then.disable_axes == ("turbulence",)

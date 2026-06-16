@@ -1436,3 +1436,41 @@ def parse_condition(when_dict: Dict[str, str]) -> ConditionWhen:
             raise ValueError(f"unknown operator {op!r} in condition for {key!r}")
         predicates.append(ConditionPredicate(key=key, op=op, value=_infer_value(val_str)))
     return ConditionWhen(predicates=tuple(predicates))
+
+
+@dataclass(frozen=True)
+class ConditionThen:
+    disable_axes: Tuple[str, ...] = ()
+    set_extra: Tuple[Tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class ConditionalRule:
+    when: ConditionWhen
+    then: ConditionThen
+
+
+def _compare(op: str, lhs: Any, rhs: Any) -> bool:
+    if op == "<":
+        return lhs < rhs
+    if op == "<=":
+        return lhs <= rhs
+    if op == "==":
+        return lhs == rhs
+    if op == "!=":
+        return lhs != rhs
+    if op == ">=":
+        return lhs >= rhs
+    if op == ">":
+        return lhs > rhs
+    raise ValueError(f"unknown operator {op!r}")
+
+
+def evaluate_condition(when: ConditionWhen, case: Dict[str, Any]) -> bool:
+    """AND 语义:全部 predicate 满足才 True。"""
+    for p in when.predicates:
+        if p.key not in case:
+            return False
+        if not _compare(p.op, case[p.key], p.value):
+            return False
+    return True
