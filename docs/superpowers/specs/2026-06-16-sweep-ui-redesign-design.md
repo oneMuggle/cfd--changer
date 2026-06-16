@@ -157,14 +157,18 @@ conditions:                       # List[ConditionalRule], 可选
 
 ### 3.2 AxisSpec 三态
 
-| YAML 形式 | Python `AxisSpec.kind` | 适用 |
+`AxisSpec.kind` 的判定 **依赖 key 的上下文**(从 `available_vars(template_path)` 查):key 是已知 enum 类型 → list 形式为 `enum_subset`;否则 → `explicit_list`。YAML 解析器只产出原始 list,实际 `kind` 由 `controller.normalize_axis(key, raw_list)` 在加载时打标。
+
+| YAML 形式 | Python `AxisSpec.kind`(经 key 上下文判定后) | 适用 |
 |---|---|---|
-| `[v1, v2, ...]`(str 元素) | `enum_subset` | 枚举变量,值必须在该 enum 的合法集合内 |
-| `[v1, v2, ...]`(非 str 元素) | `explicit_list` | 数值/字符串显式列表 |
+| `[v1, v2, ...]`(元素全 str) | key 是枚举 → `enum_subset`<br>key 不是枚举 → `explicit_list` (str) | 枚举子集 / 字符串显式列表 |
+| `[v1, v2, ...]`(元素全 数值) | `explicit_list` (numeric) | 数值显式列表 |
 | `{range: [min, max, step]}` | `range` | 数值等差 |
 | `{range: [min, max]}`(两元素) | `linspace` | 数值等分 N 点(预留,本期不实现) |
-| `"0, 5, 10"`(字符串) | `csv_str` | 同 explicit_list,内部 split |
+| `"0, 5, 10"`(字符串) | `csv_str` | 同 explicit_list,内部 split(",") |
 | `{expr: "..."}` | `expression` | **预留本期不实现** |
+
+**关键约束**:若 key 是枚举但 YAML 写了 `enum_subset` 之外的非法值,`controller.normalize_axis` 抛 `ValueError("unknown enum value '{x}' for axis '{key}'; expected one of {valid}")`(见 §6.3)。
 
 ### 3.3 ConditionalRule 表达式语法
 
@@ -176,6 +180,8 @@ conditions:                       # List[ConditionalRule], 可选
 
 **不支持(本期)**:
 - OR / NOT / 括号嵌套 / 函数调用
+
+**解析**:`parse_condition(when_dict)` 把 raw 字符串解析成结构化的 `ConditionPredicate(key, op, value)`(见 §6.1)。value 按 YAML 推断类型(int / float / str / bool)。
 
 `then` 字段:
 - `disable_axes: [key1, ...]` — 该 case 跳过这些轴的 sweep(等价于笛卡尔积过滤掉)
@@ -331,30 +337,59 @@ class PresetLibrary:
 ### 6.1 新增 API
 
 ```python
+# 解析后的中间表示(由 parse_condition 产出)
+@dataclass(frozen=True)
+class ConditionPredicate:
+    """单变量 op val。"""
+    key: str
+    op: str        # "<", "<=", "==", "!=", ">=", ">"
+    value: Any     # 已按 YAML 推断的类型(int/float/str/bool)
+
 @dataclass(frozen=True)
 class ConditionWhen:
-    """单变量 op val;多变量时 AND 关系。"""
-    predicates: Dict[str, str]  # key -> "<op><val>"
+    """多变量 AND 关系;predicates 空 → 永真。"""
+    predicates: Tuple[ConditionPredicate, ...]
 
 @dataclass(frozen=True)
 class ConditionThen:
-    disable_axes: Tuple[str, ...] = ()
-    set_extra: Tuple[Tuple[str, str], ...] = ()  # (key, value) pairs
+    disable_axes: Tuple[str, ...] = ()              # 该 case 跳过这些轴
+    set_extra: Tuple[Tuple[str, str], ...] = ()    # 该 case 注入 (key,value) 到 .inp
 
 @dataclass(frozen=True)
 class ConditionalRule:
     when: ConditionWhen
     then: ConditionThen
 
-def parse_condition(when_dict: Dict[str, str]) -> ConditionWhen: ...
+def parse_condition(when_dict: Dict[str, str]) -> ConditionWhen:
+    """YAML 原始 when: {key: '<op><val>'} → 解析后的 ConditionWhen。
+    例: {'mach': '<1', 'reynolds': '>=1e6'}
+        → ConditionWhen(predicates=(
+              ConditionPredicate('mach', '<', 1),
+              ConditionPredicate('reynolds', '>=', 1e6),
+          ))
+    """
+
 def evaluate_condition(when: ConditionWhen, case: Dict[str, Any]) -> bool: ...
+
 def expand_with_conditions(
-    spec: "SweepSpecV2",  # 新版 spec,含 conditions
-) -> List[Dict[str, Any]]: ...  # 返回过滤后的 case 列表
+    spec: "SweepSpecV2",  # 新版 spec,含 sweeps + conditions
+) -> List[ExpandedCase]:
+    ...
+
+@dataclass(frozen=True)
+class ExpandedCase:
+    """含 set_extra 应用结果;disable_axes 已过滤(不出现)。"""
+    values: Dict[str, Any]              # case 主体
+    extras: Dict[str, str] = ()         # 该 case 注入到 .inp 的 (k,v) 对
 
 # 旧 API 保留:
 def expand_cartesian(spec: SweepSpec) -> List[Dict[str, Any]]: ...  # v1 路径
 ```
+
+**语义要点**:
+- `evaluate_condition` 多 predicate → 全部 AND;空 predicates → True
+- `expand_with_conditions` 对笛卡尔积每个 case 跑所有 condition 的 `when`;若某 condition 不满足 → 跳过该 case;满足 → 应用 `then`:从 case.values 删除 `disable_axes` 列、`extras` 字段填 `set_extra` 的内容
+- `set_extra` 仅是字面量键值对(暂不支持表达式);后续 sweep 生成器在 apply 时把它注入到生成的 .inp 文件(通过 `inp_tool.editor` API)
 
 ### 6.2 兼容性
 
