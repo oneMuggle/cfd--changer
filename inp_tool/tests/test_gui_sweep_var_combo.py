@@ -1,5 +1,5 @@
-"""VarSpec 数据类测试。"""
-from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+"""VarSpec 数据类测试 + enumerate_vars 枚举轴部分。"""
+from inp_tool_gui.widgets.sweep_var_combo import VarSpec, enumerate_vars
 
 
 def test_varspec_creation_minimal():
@@ -46,3 +46,43 @@ def test_varspec_kind_literal_values():
     for k in ("enum", "int", "float", "str"):
         v = VarSpec(key="x", label="x", kind=k)
         assert v.kind == k
+
+
+def test_enumerate_vars_none_template_returns_enum_only():
+    """无模板路径:返回 3 个枚举轴,无 .inp 变量。"""
+    specs = enumerate_vars(None)
+    assert len(specs) == 3
+    keys = {s.key for s in specs}
+    assert keys == {"turbulence", "energy", "gas"}
+    for s in specs:
+        assert s.kind == "enum"
+        assert s.enum_values is not None
+        assert len(s.enum_values) >= 2
+        assert s.block is None
+        assert s.keyword is None
+        assert s.value_idx is None
+
+
+def test_enumerate_vars_none_template_enum_values_match_sweep_module():
+    """3 个枚举轴的 enum_values 来自 inp_tool.sweep 的 _ENUM_AXES。"""
+    from inp_tool.sweep import (
+        TurbulenceModel, EnergyModel, GasModel,
+    )
+    specs = enumerate_vars(None)
+    by_key = {s.key: s for s in specs}
+    assert set(by_key["turbulence"].enum_values) == {
+        e.value for e in TurbulenceModel
+    }
+    assert set(by_key["energy"].enum_values) == {
+        e.value for e in EnergyModel
+    }
+    assert set(by_key["gas"].enum_values) == {
+        e.value for e in GasModel
+    }
+
+
+def test_enumerate_vars_none_template_is_pure():
+    """enumerate_vars(None) 是纯函数,无副作用(可重复调用)。"""
+    a = enumerate_vars(None)
+    b = enumerate_vars(None)
+    assert a == b
