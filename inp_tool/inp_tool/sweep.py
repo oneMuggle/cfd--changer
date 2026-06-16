@@ -1474,3 +1474,40 @@ def evaluate_condition(when: ConditionWhen, case: Dict[str, Any]) -> bool:
         if not _compare(p.op, case[p.key], p.value):
             return False
     return True
+
+
+@dataclass(frozen=True)
+class ExpandedCase:
+    """含 set_extra 应用结果;disable_axes 已过滤(不出现)。"""
+    values: Dict[str, Any]
+    extras: Tuple[Tuple[str, str], ...] = ()
+
+
+def expand_with_conditions(
+    spec: SweepSpec,
+    conditions: Tuple[ConditionalRule, ...] = (),
+) -> List[ExpandedCase]:
+    """v2 展开:笛卡尔积 + first-match-wins condition。
+
+    语义(spec §6.1):
+    - 笛卡尔积对 spec.values 展开,得到 raw cases
+    - 对每个 raw case,找第一条 when 命中的 rule,应用其 then
+      (从 values 删除 disable_axes 列,extras 字段填 set_extra 的内容)
+    - 若无 rule 命中,该 case 保留原样(miss → keep,不被条件过滤掉)
+    """
+    raw_cases = expand_cartesian(spec)
+    out: List[ExpandedCase] = []
+    for raw in raw_cases:
+        hit_rule = None
+        for rule in conditions:
+            if evaluate_condition(rule.when, raw):
+                hit_rule = rule
+                break
+        if hit_rule is None:
+            # miss → keep (case 不被条件过滤掉,只是不带 extras)
+            out.append(ExpandedCase(values=raw, extras=()))
+            continue
+        # apply then
+        values = {k: v for k, v in raw.items() if k not in hit_rule.then.disable_axes}
+        out.append(ExpandedCase(values=values, extras=hit_rule.then.set_extra))
+    return out

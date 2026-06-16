@@ -87,3 +87,55 @@ def test_conditional_rule_dataclass():
     t = ConditionThen(disable_axes=("turbulence",))
     rule = ConditionalRule(when=w, then=t)
     assert rule.then.disable_axes == ("turbulence",)
+
+
+def test_expand_with_conditions_no_condition_returns_all():
+    """无 conditions 时等价于笛卡尔积(全保留,无 extras)。"""
+    from inp_tool.sweep import expand_with_conditions, SweepSpec, ConditionalRule
+    spec = SweepSpec(values={"a": [1, 2], "b": [10, 20]})
+    cases = expand_with_conditions(spec, conditions=())
+    assert len(cases) == 4
+    assert all(c.extras == () for c in cases)
+
+
+def test_expand_with_conditions_filters_by_when():
+    """first-match-wins:a=1 命中 rule,带 extras;a=2,3 不命中 → 保留但不带 extras。"""
+    from inp_tool.sweep import (
+        expand_with_conditions, SweepSpec, ConditionalRule,
+        ConditionThen, parse_condition,
+    )
+    spec = SweepSpec(values={"a": [1, 2, 3]})
+    rule = ConditionalRule(
+        when=parse_condition({"a": "<2"}),
+        then=ConditionThen(set_extra=(("flag", "yes"),)),
+    )
+    cases = expand_with_conditions(spec, conditions=(rule,))
+    # a=1,2,3 全部保留(miss→keep)
+    assert len(cases) == 3
+    # a=1 命中 → 带 extras
+    a1 = next(c for c in cases if c.values["a"] == 1)
+    assert a1.extras == (("flag", "yes"),)
+    # a=2,3 不命中 → 不带 extras,values 原样
+    for v in (2, 3):
+        c = next(c for c in cases if c.values["a"] == v)
+        assert c.extras == ()
+        assert c.values == {"a": v}
+
+
+def test_expand_with_conditions_disable_axes_filters_value():
+    """disable_axes:该 case 跳过该轴的值(从 case.values 删除)。"""
+    from inp_tool.sweep import (
+        expand_with_conditions, SweepSpec, ConditionalRule,
+        ConditionThen, parse_condition,
+    )
+    spec = SweepSpec(values={"a": [1, 2], "b": [10, 20]})
+    rule = ConditionalRule(
+        when=parse_condition({"a": "<2"}),  # a=1 命中
+        then=ConditionThen(disable_axes=("b",)),
+    )
+    cases = expand_with_conditions(spec, conditions=(rule,))
+    # a=1 命中 → disable b → case.values 不含 b
+    assert cases[0].values == {"a": 1}
+    # a=2 不命中 → b 保留
+    assert {"a": 2, "b": 10} in [c.values for c in cases]
+    assert {"a": 2, "b": 20} in [c.values for c in cases]
