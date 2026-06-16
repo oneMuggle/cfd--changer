@@ -634,3 +634,129 @@ def test_sweep_form_update_status_when_not_loaded(qapp):
     assert not form._btn_run.isEnabled()
     assert not form._btn_run_dry.isEnabled()
     assert form._lbl_status.text() == ""
+
+
+# --- Bug fix: enum 值列表应可编辑(允许子集/自定义) -----------------
+
+
+def test_sweep_form_enum_value_cell_is_qlineedit(qapp, monkeypatch):
+    """Bug fix: enum kind 的值 cell 必须是 QLineEdit,不是 QLabel。
+
+    旧实现把 enum cell 渲染为 QLabel(只读),用户无法做子集 sweep,
+    引擎 `_normalize_axis_value` 虽然支持任意子集。
+    """
+    from PySide2.QtWidgets import QLabel, QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    fake_spec = VarSpec(
+        key="turbulence", label="turbulence", kind="enum",
+        block=None, keyword=None, value_idx=None,
+        enum_values=("sst", "kw", "sa"),
+    )
+    monkeypatch.setattr(
+        ctrl, "available_vars",
+        lambda template_path=None: [fake_spec],
+    )
+    form._append_axis_row("turbulence", [])
+    cell = form._axes_table.cellWidget(0, 1)
+    assert isinstance(cell, QLineEdit), (
+        "enum 值 cell 应为 QLineEdit,got {}".format(type(cell).__name__)
+    )
+    assert not isinstance(cell, QLabel), "enum cell 不应是 QLabel"
+
+
+def test_sweep_form_enum_value_cell_prefilled(qapp, monkeypatch):
+    """enum 值 cell 初始文本预填全部 enum_values(逗号分隔),用户可编辑删减。"""
+    from PySide2.QtWidgets import QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    fake_spec = VarSpec(
+        key="turbulence", label="turbulence", kind="enum",
+        block=None, keyword=None, value_idx=None,
+        enum_values=("sst", "kw", "sa"),
+    )
+    monkeypatch.setattr(
+        ctrl, "available_vars",
+        lambda template_path=None: [fake_spec],
+    )
+    form._append_axis_row("turbulence", [])
+    cell = form._axes_table.cellWidget(0, 1)
+    assert isinstance(cell, QLineEdit)
+    assert cell.text() == "sst, kw, sa"
+
+
+def test_sweep_form_enum_value_user_can_subset(qapp, monkeypatch):
+    """用户编辑 enum cell 删去某个值,_collect_to_dict 应反映子集。"""
+    from PySide2.QtWidgets import QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    form._edit_tpl.setText("t.inp")
+    form._edit_out.setText("out")
+    fake_spec = VarSpec(
+        key="turbulence", label="turbulence", kind="enum",
+        block=None, keyword=None, value_idx=None,
+        enum_values=("sst", "kw", "sa"),
+    )
+    monkeypatch.setattr(
+        ctrl, "available_vars",
+        lambda template_path=None: [fake_spec],
+    )
+    form._append_axis_row("turbulence", [])
+    cell = form._axes_table.cellWidget(0, 1)
+    assert isinstance(cell, QLineEdit)
+    cell.setText("sst, kw")  # 用户只想要 sst 和 kw,不要 sa
+    d = form._collect_to_dict()
+    assert d["sweeps"]["turbulence"] == ["sst", "kw"]
+
+
+def test_sweep_form_value_cell_exists_when_spec_none(qapp, monkeypatch):
+    """Bug fix: spec 为 None(空 combo)时,值 cell 也应创建为默认 QLineEdit。
+
+    旧实现 `if spec is not None: setCellWidget(r, 1, cell)` —— 若 spec 为 None
+    则 cell 永远 None,用户无法编辑。
+    """
+    from PySide2.QtWidgets import QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    # monkeypatch 让 available_vars 返回空列表(对应 spec 为 None 的场景)
+    monkeypatch.setattr(
+        ctrl, "available_vars", lambda template_path=None: []
+    )
+    form._append_axis_row("", "")
+    cell = form._axes_table.cellWidget(0, 1)
+    assert isinstance(cell, QLineEdit), (
+        "spec 为 None 时值 cell 也应存在(默认 QLineEdit),got {}".format(
+            type(cell).__name__ if cell is not None else "None"
+        )
+    )
+
+
+def test_sweep_form_axes_table_value_col_is_qlineedit(qapp):
+    """Bug fix: 值列 cell 一律是 QLineEdit(不论 spec.kind)。
+
+    旧测试断言 `(QLabel, QLineEdit)` 都能接受,过于宽松。修复后必须是 QLineEdit。
+    """
+    from PySide2.QtWidgets import QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    form._append_axis_row("turbulence", "sst")
+    cell = form._axes_table.cellWidget(0, 1)
+    assert isinstance(cell, QLineEdit)
