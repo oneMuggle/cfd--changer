@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (GUI Sweep 标签页 UX 重构 v0.17)
+- feat(gui): SweepForm 顶部 3 个 label(模板路径 / 输出目录 / 命名模式)
+- feat(gui): SweepForm 轴表 cell 用 QComboBox + QLineEdit(变量可下拉选)
+- feat(gui): VarSpec 数据类 + enumerate_vars() 纯函数(sweep_var_combo.py)
+- feat(gui): SweepController.available_vars() + 缓存(同 template 路径只解析一次)
+- feat(gui): 失焦时类型校验(int / float / str / enum,支持 FORTRAN `d` 写法如 `1.0d-3`)
+- feat(gui): 失效轴红底 + 禁用运行 + tooltip 解释(模板改了后不存在的轴不再静默)
+- i18n(gui): 7 个新 key(3 label + 4 错误)→ sweep.lbl.template / output / naming + sweep.live.need_template / need_output / invalid_int / invalid_float / invalid_axis / orphan_axes / sync_fail
+
+### Fixed
+- fix(gui): pre-existing `tg()` kwargs 冲突(invalid_axis placeholder 误把 `n` 当占位符)
+
 ## [v0.16.0] - 2026-06-15
 
 ### Added
