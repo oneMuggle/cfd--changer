@@ -1380,3 +1380,14 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
 def _iso_now() -> str:
     from datetime import datetime
     return datetime.now().isoformat(timespec="seconds")
+
+
+# ============================================================
+# Sweep v2 (Phase 1):condition 原语
+# ============================================================
+@dataclass(frozen=True)
+class ConditionPredicate:
+    """单变量 op val。"""
+    key: str
+    op: str        # "<", "<=", "==", "!=", ">=", ">"
+    value: Any     # 已按 YAML 推断的类型(int/float/str/bool)
