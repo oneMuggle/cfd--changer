@@ -86,6 +86,29 @@ def test_sweep_form_has_template_editor(qapp):
     assert form._edit_tpl.text() == "x.inp"
 
 
+def test_sweep_form_has_three_top_labels(qapp):
+    """顶部 3 行各有 QLabel 显示中文模板路径/输出目录/命名模式。"""
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool.i18n_gui import tg
+
+    sc = SweepController()
+    sc.load_from_dict({
+        "template": "x.inp",
+        "output_dir": "out",
+        "sweeps": {"alpha": [0, 1, 2]},
+    })
+    form = SweepForm(sc)
+
+    from PySide2.QtWidgets import QLabel
+    labels = form.findChildren(QLabel)
+    label_texts = {lbl.text() for lbl in labels}
+
+    # 期望包含 3 个 i18n 文本
+    assert tg("sweep.lbl.template") in label_texts
+    assert tg("sweep.lbl.output") in label_texts
+    assert tg("sweep.lbl.naming") in label_texts
+
+
 def test_sweep_form_yaml_load_fills_fields(qapp, tmp_path):
     """load_yaml 后,表单字段应自动从 controller 回填。"""
     from inp_tool_gui.widgets.sweep_form import SweepForm

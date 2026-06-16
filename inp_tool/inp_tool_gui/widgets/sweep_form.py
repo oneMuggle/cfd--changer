@@ -58,28 +58,39 @@ class SweepForm(QWidget):
 
         # 模板路径
         tpl_row = QHBoxLayout()
+        self._lbl_tpl = QLabel(tg("sweep.lbl.template"), self)
+        self._lbl_tpl.setMinimumWidth(80)
         self._edit_tpl = QLineEdit(self)
         self._edit_tpl.editingFinished.connect(self._sync_form_to_controller)
         self._btn_tpl = QPushButton("浏览...", self)
         self._btn_tpl.clicked.connect(self._pick_template)
+        tpl_row.addWidget(self._lbl_tpl)
         tpl_row.addWidget(self._edit_tpl, 1)
         tpl_row.addWidget(self._btn_tpl)
         root.addLayout(tpl_row)
 
         # 输出目录
         out_row = QHBoxLayout()
+        self._lbl_out = QLabel(tg("sweep.lbl.output"), self)
+        self._lbl_out.setMinimumWidth(80)
         self._edit_out = QLineEdit(self)
         self._edit_out.editingFinished.connect(self._sync_form_to_controller)
         self._btn_out = QPushButton("浏览...", self)
         self._btn_out.clicked.connect(self._pick_output)
+        out_row.addWidget(self._lbl_out)
         out_row.addWidget(self._edit_out, 1)
         out_row.addWidget(self._btn_out)
         root.addLayout(out_row)
 
         # 命名
+        naming_row = QHBoxLayout()
+        self._lbl_naming = QLabel(tg("sweep.lbl.naming"), self)
+        self._lbl_naming.setMinimumWidth(80)
         self._edit_naming = QLineEdit(self)
         self._edit_naming.editingFinished.connect(self._sync_form_to_controller)
-        root.addWidget(self._edit_naming)
+        naming_row.addWidget(self._lbl_naming)
+        naming_row.addWidget(self._edit_naming, 1)
+        root.addLayout(naming_row)
 
         # Sweep 轴表
         axes_box = QGroupBox(tg("sweep.title.sweeps_axes"), self)
