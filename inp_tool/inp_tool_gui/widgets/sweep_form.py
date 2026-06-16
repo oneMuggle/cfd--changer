@@ -265,12 +265,13 @@ class SweepForm(QWidget):
             return
         old_text = ""
         old_cell = self._axes_table.cellWidget(row, 1)
+        # 旧 cell 可能是 _append_axis_row 里 spec=None 时建的默认 QLineEdit
         if isinstance(old_cell, QLineEdit):
             old_text = old_cell.text()
+        # _make_value_cell_for_kind 现在永远返回 QLineEdit(不变式)
         new_cell = self._make_value_cell_for_kind(spec)
-        if isinstance(new_cell, QLineEdit):
-            new_cell.setText(old_text)
-            new_cell.editingFinished.connect(self._sync_form_to_controller)
+        new_cell.setText(old_text)
+        new_cell.editingFinished.connect(self._sync_form_to_controller)
         self._axes_table.setCellWidget(row, 1, new_cell)
         self._sync_form_to_controller()
         self._scan_orphan_axes()
@@ -353,7 +354,8 @@ class SweepForm(QWidget):
         if spec.kind == "enum":
             values = spec.enum_values or ()
             edit.setText(", ".join(values))
-            edit.setToolTip(tg("sweep.live.invalid_enum").split(";")[0] + ": " + ", ".join(values))
+            # tooltip 用独立短文案 key,避免从错误模板切 ; 的脆弱写法
+            edit.setToolTip(tg("sweep.lbl.enum_tooltip"))
         return edit
 
     def _append_axis_row(

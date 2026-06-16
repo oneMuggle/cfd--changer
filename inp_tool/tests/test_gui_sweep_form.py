@@ -760,3 +760,87 @@ def test_sweep_form_axes_table_value_col_is_qlineedit(qapp):
     form._append_axis_row("turbulence", "sst")
     cell = form._axes_table.cellWidget(0, 1)
     assert isinstance(cell, QLineEdit)
+
+
+def test_sweep_form_validate_enum_cell_bad_value(qapp, monkeypatch):
+    """_validate_value_cell: enum cell 含非法值时报错,信息含非法值与合法值集合。"""
+    from PySide2.QtWidgets import QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    fake_spec = VarSpec(
+        key="turbulence", label="turbulence", kind="enum",
+        block=None, keyword=None, value_idx=None,
+        enum_values=("sst", "kw", "sa"),
+    )
+    monkeypatch.setattr(
+        ctrl, "available_vars",
+        lambda template_path=None: [fake_spec],
+    )
+    form._append_axis_row("turbulence", [])
+    cell = form._axes_table.cellWidget(0, 1)
+    assert isinstance(cell, QLineEdit)
+    cell.setText("sst, foo, bar")  # foo/bar 不在合法集合
+    err = form._validate_value_cell(0)
+    assert err is not None
+    assert "foo" in err
+    assert "bar" in err
+    # 任意合法值都应出现在错误信息中(供用户参考)
+    assert any(v in err for v in ("sst", "kw", "sa"))
+
+
+def test_sweep_form_validate_enum_cell_subset_ok(qapp, monkeypatch):
+    """_validate_value_cell: enum 子集(sst, kw)应通过校验,不被误报。"""
+    from PySide2.QtWidgets import QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    fake_spec = VarSpec(
+        key="turbulence", label="turbulence", kind="enum",
+        block=None, keyword=None, value_idx=None,
+        enum_values=("sst", "kw", "sa"),
+    )
+    monkeypatch.setattr(
+        ctrl, "available_vars",
+        lambda template_path=None: [fake_spec],
+    )
+    form._append_axis_row("turbulence", [])
+    cell = form._axes_table.cellWidget(0, 1)
+    assert isinstance(cell, QLineEdit)
+    cell.setText("sst, kw")  # 合法子集
+    err = form._validate_value_cell(0)
+    assert err is None
+
+
+def test_sweep_form_enum_tooltip_uses_dedicated_key(qapp, monkeypatch):
+    """M1 review 修复:enum cell tooltip 走独立 i18n key,不从错误模板切 ;。"""
+    from PySide2.QtWidgets import QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+    from inp_tool.i18n_gui import tg
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    fake_spec = VarSpec(
+        key="turbulence", label="turbulence", kind="enum",
+        block=None, keyword=None, value_idx=None,
+        enum_values=("sst", "kw"),
+    )
+    monkeypatch.setattr(
+        ctrl, "available_vars",
+        lambda template_path=None: [fake_spec],
+    )
+    form._append_axis_row("turbulence", [])
+    cell = form._axes_table.cellWidget(0, 1)
+    assert isinstance(cell, QLineEdit)
+    # tooltip 应等于独立 key 的取值(且不含未渲染的 {key}/{bad} 占位符)
+    assert cell.toolTip() == tg("sweep.lbl.enum_tooltip")
+    assert "{key}" not in cell.toolTip()
+    assert "{bad}" not in cell.toolTip()
