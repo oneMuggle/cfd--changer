@@ -162,3 +162,62 @@ def test_sweep_form_axes_combobox_populated_with_vars(qapp):
     assert any(lbl.startswith("turbulence") for lbl in labels)
     assert any(lbl.startswith("energy") for lbl in labels)
     assert any(lbl.startswith("gas") for lbl in labels)
+
+
+# --- Task 8: 类型校验测试(int/float on edit finished) ----------------
+
+
+def test_sweep_form_validates_int_axis_on_edit_finished(qapp, monkeypatch):
+    """整型轴:输入 'abc' 失焦,状态栏报错。"""
+    from PySide2.QtWidgets import QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    fake_spec = VarSpec(
+        key="test.int_var",
+        label="test.int_var [int] = 1",
+        kind="int",
+        block="test", keyword="int_var", value_idx=0,
+    )
+    monkeypatch.setattr(
+        ctrl, "available_vars",
+        lambda template_path=None: [fake_spec],
+    )
+    form._append_axis_row("test.int_var", "1")
+    cell = form._axes_table.cellWidget(form._axes_table.rowCount() - 1, 1)
+    assert isinstance(cell, QLineEdit)
+    cell.setText("abc")
+    cell.editingFinished.emit()
+    status_text = form._lbl_status.text()
+    assert "整数" in status_text or "int" in status_text.lower()
+
+
+def test_sweep_form_accepts_float_d_notation(qapp, monkeypatch):
+    """浮点轴接受 '1.0d-3' (FORTRAN 双精度写法)。"""
+    from PySide2.QtWidgets import QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    fake_spec = VarSpec(
+        key="test.float_var",
+        label="test.float_var [float] = 1.0",
+        kind="float",
+        block="test", keyword="float_var", value_idx=0,
+    )
+    monkeypatch.setattr(
+        ctrl, "available_vars",
+        lambda template_path=None: [fake_spec],
+    )
+    form._append_axis_row("test.float_var", "1.0d-3")
+    cell = form._axes_table.cellWidget(form._axes_table.rowCount() - 1, 1)
+    assert isinstance(cell, QLineEdit)
+    cell.setText("1.0d-3")
+    cell.editingFinished.emit()
+    text = form._lbl_status.text()
+    assert "不是浮点" not in text

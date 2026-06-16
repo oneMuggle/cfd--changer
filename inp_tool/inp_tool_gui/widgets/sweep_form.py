@@ -195,21 +195,22 @@ class SweepForm(QWidget):
             raise ValueError(tg("sweep.live.need_output"))
         sweeps_dict: Dict[str, List[Any]] = {}
         for r in range(self._axes_table.rowCount()):
-            ki = self._axes_table.item(r, 0)
-            vi = self._axes_table.item(r, 1)
-            if not ki or not vi:
+            spec = self._spec_for_row(r)
+            if spec is None:
                 continue
-            key = ki.text().strip()
-            if not key:
-                continue
-            raw = vi.text().strip()
-            try:
-                vals = [self._parse_scalar(x) for x in raw.split(",") if x.strip()]
-            except ValueError as e:
-                raise ValueError(
-                    tg("sweep.live.invalid_axis", key=key, val=raw)
-                ) from e
-            sweeps_dict[key] = vals
+            key = spec.key
+            cell = self._axes_table.cellWidget(r, 1)
+            if isinstance(cell, QLineEdit):
+                raw = cell.text().strip()
+                try:
+                    vals = [self._parse_scalar(x) for x in raw.split(",") if x.strip()]
+                except ValueError as e:
+                    raise ValueError(
+                        tg("sweep.live.invalid_axis", key=key, val=raw)
+                    ) from e
+                sweeps_dict[key] = vals
+            elif isinstance(cell, QLabel):
+                sweeps_dict[key] = list(spec.enum_values or ())
         return {
             "template": self._edit_tpl.text().strip(),
             "output_dir": self._edit_out.text().strip(),
@@ -219,19 +220,22 @@ class SweepForm(QWidget):
 
     def _sync_form_to_controller(self) -> None:
         """把表单同步到 controller(失焦触发)。"""
+        # 单元级校验(状态栏提示,不阻断)
+        for r in range(self._axes_table.rowCount()):
+            err = self._validate_value_cell(r)
+            if err:
+                self._lbl_status.setText(err)
+                return
         try:
             d = self._collect_to_dict()
         except ValueError as e:
-            # 未填完整时:仅当 controller 已有 load 才更新状态,避免打扰空表单用户输入
             if self._sweep_ctrl.is_loaded:
                 self._lbl_status.setText(str(e))
             return
         try:
             self._sweep_ctrl.load_from_dict(d)
         except Exception as e:
-            self._lbl_status.setText(
-                tg("sweep.live.sync_fail", err=str(e))
-            )
+            self._lbl_status.setText(tg("sweep.live.sync_fail", err=str(e)))
             return
         self._update_status()
 
@@ -248,9 +252,70 @@ class SweepForm(QWidget):
         self._btn_run_dry.setEnabled(True)
         self._btn_run.setEnabled(True)
 
-    def _on_axis_changed(self, _item) -> None:
-        """QTableWidget itemChanged 触发同步。"""
+    def _on_axis_changed(self, _idx_or_item=None) -> None:
+        """QComboBox.currentIndexChanged 或 QTableWidget.itemChanged 触发。"""
+        sender = self.sender()
+        row = -1
+        for r in range(self._axes_table.rowCount()):
+            if self._axes_table.cellWidget(r, 0) is sender:
+                row = r
+                break
+        if row < 0:
+            return
+        spec = self._spec_for_row(row)
+        if spec is None:
+            return
+        old_text = ""
+        old_cell = self._axes_table.cellWidget(row, 1)
+        if isinstance(old_cell, QLineEdit):
+            old_text = old_cell.text()
+        new_cell = self._make_value_cell_for_kind(spec)
+        if isinstance(new_cell, QLineEdit):
+            new_cell.setText(old_text)
+            new_cell.editingFinished.connect(self._sync_form_to_controller)
+        self._axes_table.setCellWidget(row, 1, new_cell)
         self._sync_form_to_controller()
+
+    def _spec_for_row(self, row: int) -> Optional[VarSpec]:
+        """取一行的 VarSpec(从 combobox userData)。"""
+        combo = self._axes_table.cellWidget(row, 0)
+        if not isinstance(combo, QComboBox):
+            return None
+        key = combo.currentData()
+        if not key:
+            return None
+        for s in self._sweep_ctrl.available_vars(self._sweep_ctrl.template):
+            if s.key == key:
+                return s
+        return VarSpec(key=key, label=key + " (未知)", kind="str")
+
+    def _validate_value_cell(self, row: int) -> Optional[str]:
+        """校验一行的值 cell;返回错误信息或 None(OK)。"""
+        spec = self._spec_for_row(row)
+        if spec is None:
+            return None
+        cell = self._axes_table.cellWidget(row, 1)
+        if not isinstance(cell, QLineEdit):
+            return None
+        raw = cell.text().strip()
+        if not raw:
+            return None
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        if spec.kind == "int":
+            for i, p in enumerate(parts, start=1):
+                try:
+                    int(p)
+                except ValueError:
+                    tmpl = tg("sweep.live.invalid_int")
+                    return tmpl.replace("{key}", spec.key).replace("{idx}", str(i))
+        elif spec.kind == "float":
+            for i, p in enumerate(parts, start=1):
+                try:
+                    float(p.replace("d", "e").replace("D", "E"))
+                except ValueError:
+                    tmpl = tg("sweep.live.invalid_float")
+                    return tmpl.replace("{key}", spec.key).replace("{idx}", str(i))
+        return None
 
     def _make_combo_for_row(self, spec: Optional[VarSpec]) -> QComboBox:
         """根据当前 controller 模板,生成含所有可选变量的 QComboBox。"""
