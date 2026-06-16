@@ -1,0 +1,888 @@
+system begin
+mc_filecopy cdepsout.bin cdepsin.bin
+mc_filecopy cdaveout.bin cdavein.bin
+mc_filecopy mcfd6dof.out mcfd6dof.inp
+system end
+iofiles begin
+lm_type STANDARD
+lm_cells_limit 0
+lm_cpus_limit 0
+lm_ser2par 0
+ifinbc 0
+invoke_script 0
+mcpusin_fn mcpusin.bin
+nodesin_fn nodesin.bin
+cellsin_fn cellsin.bin
+exbcsin_fn exbcsin.bin
+inbcsin_fn inbcsin.bin
+ovsetin_fn ovsetin.bin
+cdepsin_fn cdepsin.bin
+pltosin_fn pltosin.bin
+eqsetin_fn eqsetin.bin
+zobcsin_fn zobcsin.bin
+ovsetin_fn ovsetin.bin
+blankin_fn blankin.bin
+cgrpsin_fn cgrpsin.bin
+mcpusout_fn mcpusout.bin
+nodesout_fn nodesout.bin
+cellsout_fn cellsout.bin
+exbcsout_fn exbcsout.bin
+inbcsout_fn inbcsout.bin
+ovsetout_fn ovsetout.bin
+cdepsout_fn cdepsout.bin
+pltosout_fn pltosout.bin
+eqsetout_fn eqsetout.bin
+zobcsout_fn zobcsout.bin
+ovsetout_fn ovsetout.bin
+blankout_fn blankout.bin
+cgrpsout_fn cgrpsout.bin
+iofiles end
+celltypes 1
+celltype 3 fluxmasks 0 0 0 0
+celltype 3 vtfpmasks 0 0 0 0
+celltype 3 vtxpmasks 0 0 0 0
+tsteps begin
+istart 1
+ntstep 50000
+ntstop 0
+ntsmin 0
+ntrmin 0
+dtsmoo 1
+dtsmoo_iters 6
+dtsmoo_param 0.6666667
+runmod 1
+dtauin -1.0
+dtlomx 1.000000
+cflbot 0.001
+cfller 0.750000
+rstcfl 0
+ntbclr 100
+nteclr 500
+cfllbg 2.000000e-002
+cfllen 1.000000e+000
+cflglo 1.0e15
+ilcfla 0
+igcfla 0
+itsync 0
+ntbmdr 100
+ntemdr 200
+mdisbg 0.000000e+000
+mdisen 0.000000e+000
+ntbbfr 1000
+ntebfr 1500
+blfnbg 0.000000e+000
+blfnen 1.000000e+000
+cdepsave_compute 0
+cdepsave_restart 1
+cdepsave_ntsave 0
+tsteps end
+options begin
+ntdsko 2000
+ntdsks 0
+ntplto 0
+ntplts 0
+ntpltt 0
+dtpltt 0.000000e+000
+ntdskc 0
+ntdskr 0
+ntacou 0
+ntout1 0
+ntout2 0
+ntout3 0
+ntout4 0
+ntout5 0
+ntout6 0
+ntout7 0
+ntout9 0
+ntout10 0
+ntout11 0
+ntout12 0
+ntout13 0
+ntout14 0
+ntout15 0
+ntout16 0
+ntout17 0
+ntout18 0
+ntout19 0
+ntout20 0
+ntout21 0
+ntout22 0
+ntout23 0
+ntout24 0
+ntout25 0
+ntout26 0
+ntout27 0
+ntout28 0
+ntout29 0
+nt6dof1 1
+ntoutfv 0
+ntsuffv 0
+ntoutes 0
+ntsufes 0
+ntouttp 0
+ntsuftp 2000
+ntoptrb 0
+ntsptrb 0
+bcsptrb 0
+mpidri 0
+mcpuse 0
+mcgrps 1
+nodebg 0
+inbczb 0
+autozb 0
+osetyp 0
+osetdb 0
+osetbr 0
+osetbc 0
+osetbz 0
+osetll 0
+osetzo 0
+osetsl 0
+osetir 0
+osnocn 1
+osnosg 1
+blnkdb 0
+zobcdb 0
+zobcty 0
+iregrd 0
+iregrq 1
+irezon 0
+reblnk 0
+igrvs1 0
+igrvs7 0
+igrvs9 0
+igrvs10 0
+igrvs13 0
+igrvs14 0
+viscos 1
+vibnew 1
+ifmdis 1
+mdislh 0.250000
+disson 0.100000
+ifmdps 1
+mdisps 0.050000
+mdtype 1
+mdpscf 0.300000
+mdpsmx 1.000000
+ifmdcb 1
+mdcbfr 0.250000
+xyzpol xy
+ispcac 2
+iblend 1
+iblenz 0
+blenzf 0.500000
+bextac 1
+bzonac 2
+bzoncd 0
+arcozb 0
+sewzon 1
+celpol 1
+cenpol 1
+nodnei 1
+viscrs 0
+vcropt 1
+tvspol 1
+celpoj 0
+limfac 0
+rhsopt 1
+rhsink 0
+tolpol 1.000000e-013
+limtvd 3
+tvdcmp 2.0
+tvdphi 0.333330
+chkvol 1
+tolvol 1.000000e-020
+grqua1 0
+grqua2 0
+grqua3 0
+grqua6 0
+gq1dis 0.100000
+gq2ang 2.000000
+gq3dis 0.100000
+gq6dis 0.100000
+gq6ang 40.000000
+rtcord 9.000000
+convo1 0
+convo2 0
+simstr 1
+dultim 0
+glitrc 0.100000
+gloits 1
+pc_method 0
+mbltim 0
+mblfac 1.000000e-001
+mblglt 1
+geomopt1 0
+method 2
+itimac 2
+ifunlx 1
+undrlx 0.750000
+implic 1
+impits 16
+mg_mpio 1
+fg_mpfb 0
+mg_mpfb 0
+mg_meth 2
+mg_type 2
+mg_vers 1
+mg_aggl 1
+mg_step 5
+stojac 1
+mg_alow 1
+mg_stag 1
+mg_lint 2
+mg_itns 1
+mg_levs 20
+mg_mxcg 1048576
+mg_cycl 4
+mg_resc 5.000000e-001
+mg_terc 1.000000e-001
+mg_floc 1.000000e-010
+fg_resc 5.000000e-001
+fg_terc 1.000000e-001
+fg_floc 1.000000e-010
+mg_cvis 1.0
+celord 1
+subdomain_mode 0
+options end
+infsets 198
+values 101 1 1 0 1
+values 11 0 1 1 1
+values 0 16 5 0 0
+values 10 0 0 0 0
+values 0 26 25 10 10
+values 3 0 0 0 0
+values 0
+values 5 300.0 1000.0 6000.0 15000.0
+values 25000.0 30000.0
+values 5.486e-4
+values 9.015e-11 273.16 2.5527e-4 5.152e-3 273.16
+values 2.3059e-2
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11734E+02
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11734E+02
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11733E+02
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11733E+02
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11733E+02
+values 5. 0.0001 0. 9.015e-11
+values 0 0 0 0 0
+values 0 0.0 0.0 0.0 0.0
+values 14.01
+values 1.847e-5 273.16 111.3468 0.04113 273.16
+values 108.0545
+values 0.25031E+01 -0.21800E-04 0.54205E-07 -0.56476E-10 0.20999E-13
+values 0.56130E+05 0.41676E+01
+values 0.24820E+01 0.69258E-04 -0.63065E-07 0.18387E-10 -0.11747E-14
+values 0.56130E+05 0.42618E+01
+values 0.27480E+01 -0.39090E-03 0.13380E-06 -0.11910E-10 0.33690E-15
+values 0.56130E+05 0.28720E+01
+values -0.12280E+01 0.19268E-02 -0.24370E-06 0.12193E-10 -0.19918E-15
+values 0.56130E+05 0.28469E+02
+values 0.15520E+02 -0.38858E-02 0.32288E-06 -0.96053E-11 0.95472E-16
+values 0.56130E+05 -0.88120E+02
+values 5. 0.0001 0. 1.847e-5
+values 2.5 0 0 1.002e8 1
+values 0 0.0 0.0 0.0 0.0
+values 32.00
+values 1.919e-5 273.16 145.4033 0.02449 273.16
+values 310.978
+values 0.36146E+01 -0.18598E-02 0.70814E-05 -0.68070E-08 0.21628E-11
+values -0.10440E+04 0.43628E+01
+values 0.35949E+01 0.75213E-03 -0.18732E-06 0.27913E-10 -0.15774E-14
+values -0.10440E+04 0.38353E+01
+values 0.38599E+01 0.32510E-03 -0.92131E-08 -0.78684E-12 0.29426E-16
+values -0.10440E+04 0.23789E+01
+values 0.34867E+01 0.52384E-03 -0.39123E-07 0.10094E-11 -0.88718E-17
+values -0.10440E+04 0.48179E+01
+values 0.39620E+01 0.39446E-03 -0.29506E-07 0.73975E-12 -0.64209E-17
+values -0.10440E+04 0.13985E+01
+values 154.6 0.00229 0.021 0.72425
+values 3.5 129 1.543e7 3.771e7 2
+values 0 0.0 0.0 0.0 0.0
+values 30.01
+values 1.774e-5 273.16 128.577 0.02353 273.16
+values 296.606
+values 0.35887E+01 -0.12479E-02 0.39786E-05 -0.28651E-08 0.63015E-12
+values 0.97640E+04 0.51497E+01
+values 0.32047E+01 0.12705E-02 -0.46603E-06 0.75007E-10 -0.42314E-14
+values 0.97640E+04 0.66867E+01
+values 0.38543E+01 0.23409E-03 -0.21354E-07 0.16689E-11 -0.49070E-16
+values 0.97640E+04 0.31541E+01
+values 0.43309E+01 -0.58086E-04 0.28059E-07 -0.15694E-11 0.24104E-16
+values 0.97640E+04 0.10735E+00
+values 0.23507E+01 0.58643E-03 -0.31316E-07 0.60495E-12 -0.40557E-17
+values 0.97640E+04 0.14026E+02
+values 180. 0.00193 0.607 0.70404
+values 3.5 168 2.090e7 3.057e7 2
+values 0 0.0 0.0 0.0 0.0
+values 16.0
+values 2.218e-5 273.16 42.6952 0.04556 273.16
+values 20.707
+values 0.28236E+01 -0.89478E-03 0.83060E-06 -0.16837E-09 -0.73205E-13
+values 0.29150E+05 0.35027E+01
+values 0.25421E+01 -0.27551E-04 -0.31028E-08 0.45511E-11 -0.43681E-15
+values 0.29150E+05 0.49203E+01
+values 0.25460E+01 -0.59520E-04 0.27010E-07 -0.27980E-11 0.93800E-16
+values 0.29150E+05 0.50490E+01
+values -0.97871E-02 0.12450E-02 -0.16154E-06 0.80380E-11 -0.12624E-15
+values 0.29150E+05 0.21711E+02
+values 0.16428E+02 -0.39313E-02 0.29840E-06 -0.81613E-11 0.75004E-16
+values 0.29150E+05 -0.94358E+02
+values 5. 0.0001 0. 0.57969
+values 2.5 0 0 8.211e7 1
+values 0 0.0 0.0 0.0 0.0
+values 30.0094514
+values 1.535e-8 273.16 128.59 1.394e-5 273.16
+values 223.175
+values 0.35294E+01 -0.30342E-03 0.38544E-06 0.10519E-08 -0.72777E-12
+values 0.11840E+06 0.37852E+01
+values 0.32152E+01 0.99742E-03 -0.29030E-06 0.36925E-10 -0.15994E-14
+values 0.11840E+06 0.51508E+01
+values 0.26896E+01 0.13796E-02 -0.33985E-06 0.33776E-10 -0.10427E-14
+values 0.11840E+06 0.83904E+01
+values 0.59346E+01 -0.13178E-02 0.23297E-06 -0.11733E-10 0.18402E-15
+values 0.11840E+06 -0.11079E+02
+values -0.51595E+01 0.26290E-02 -0.16254E-06 0.39381E-11 -0.34311E-16
+values 0.11840E+06 0.65896E+02
+values 5. 0.0001 0. 1.535e-8
+values 3.5 168 3.491e7 3.057e7 2
+values 1 0.0 0.0 0.0 0.0
+values 14.0094514
+values 1.077e-8 273.16 111.1246 2.418e-5 273.16
+values 108.496
+values 0.27270E+01 -0.28200E-03 0.11050E-06 -0.15510E-10 0.78470E-15
+values 0.22540E+06 0.36450E+01
+values 0.27270E+01 -0.28200E-03 0.11050E-06 -0.15510E-10 0.78470E-15
+values 0.22540E+06 0.36450E+01
+values 0.24990E+01 -0.37250E-05 0.11470E-07 -0.11020E-11 0.30780E-16
+values 0.22540E+06 0.49500E+01
+values 0.23856E+01 0.83495E-04 -0.58815E-08 0.18850E-12 -0.16120E-17
+values 0.22540E+06 0.56462E+01
+values 0.22286E+01 0.12458E-03 -0.87636E-08 0.26204E-12 -0.21674E-17
+values 0.22540E+06 0.67811E+01
+values 5. 0.0001 0. 1.077e-8
+values 2.5 0 0 1.002e8 1
+values 1 0.0 0.0 0.0 0.0
+values 15.9994514
+values 1.316e-8 273.16 42.8076 2.720e-5 273.16
+values 20.8068
+values 0.24985E+01 0.11411E-04 -0.29761E-07 0.32247E-10 -0.12376E-13
+values 0.18790E+06 0.43864E+01
+values 0.25060E+01 -0.14464E-04 0.12446E-07 -0.46858E-11 0.65549E-15
+values 0.18790E+06 0.43480E+01
+values 0.29440E+01 -0.41080E-03 0.91560E-07 -0.58480E-11 0.11900E-15
+values 0.18790E+06 0.17500E+01
+values 0.12784E+01 0.40866E-03 -0.21731E-07 0.33252E-12 0.63160E-18
+values 0.18790E+06 0.12761E+02
+values 0.12889E+01 0.43343E-03 -0.26758E-07 0.62159E-12 -0.45131E-17
+values 0.18790E+06 0.12604E+02
+values 5. 0.0001 0. 0.5799
+values 2.5 0 0 8.211e7 1
+values 1 0.0 0.0 0.0 0.0
+values 28.0194514
+values 1.576e-8 273.16 91.3302 2.600e-5 273.16
+values 218.54
+values 0.35498E+01 -0.60810E-03 0.14690E-05 -0.65091E-10 -0.35649E-12
+values 0.18260E+06 0.36535E+01
+values 0.33970E+01 0.45250E-03 0.12720E-06 -0.38790E-10 0.24590E-14
+values 0.18260E+06 0.42050E+01
+values 0.33780E+01 0.86290E-03 -0.12760E-06 0.80870E-11 -0.18800E-15
+values 0.18260E+06 0.40730E+01
+values 0.43942E+01 0.18868E-03 -0.71272E-08 -0.17511E-12 0.67176E-17
+values 0.18260E+06 -0.23693E+01
+values 0.39493E+01 0.36795E-03 -0.26910E-07 0.67110E-12 -0.58244E-17
+values 0.18260E+06 0.65472E+00
+values 5. 0.0001 0. 1.576e-8
+values 3.5 220 3.003e7 5.347e7 2
+values 1 0.0 0.0 0.0 0.0
+values 31.9994514
+values 1.541e-8 273.16 145.659 2.328e-5 273.16
+values 310.956
+values 0.32430E+01 0.11740E-02 -0.39000E-06 0.54370E-10 -0.23920E-14
+values 0.14000E+06 0.59250E+01
+values 0.32430E+01 0.11740E-02 -0.39000E-06 0.54370E-10 -0.23920E-14
+values 0.14000E+06 0.59250E+01
+values 0.51690E+01 -0.86200E-03 0.20410E-06 -0.13000E-10 0.24940E-15
+values 0.14000E+06 -0.52960E+01
+values -0.28017E+00 0.16674E-02 -0.12107E-06 0.32113E-11 -0.28349E-16
+values 0.14000E+06 0.31013E+02
+values 0.20445E+01 0.10313E-02 -0.74046E-07 0.19257E-11 -0.17461E-16
+values 0.14000E+06 0.14310E+02
+values 5. 0.0001 0. 0.72455
+values 3.5 129 2.010e7 3.771e7 2
+values 1 0.0 0.0 0.0 0.0
+values 28.02
+values 1.656e-5 273.16 91.2013 0.02407 273.16
+values 211.7116
+values 0.36748E+01 -0.12081E-02 0.23240E-05 -0.63218E-09 -0.22577E-12
+values -0.10430E+04 0.23580E+01
+values 0.32125E+01 0.10137E-02 -0.30467E-06 0.41091E-10 -0.20170E-14
+values -0.10430E+04 0.43661E+01
+values 0.31811E+01 0.89745E-03 -0.20216E-06 0.18266E-10 -0.50334E-15
+values -0.10430E+04 0.46264E+01
+values 0.96377E+01 -0.25728E-02 0.33020E-06 -0.14315E-10 0.20333E-15
+values -0.10430E+04 -0.37587E+02
+values -0.51681E+01 0.23337E-02 -0.12953E-06 0.27872E-11 -0.21360E-16
+values -0.10430E+04 0.66217E+02
+values 126.2 0.00319 0.040 1.656e-5
+values 3.5 220 3.364e7 5.347e7 2
+values 0 0.0 0.0 0.0 0.0
+strings 1.0 N2 + 1.0 M <-> 2.0 N + 1.0 M
+values 7.0e18 -1.6 9.411448e8 0.5 0.5
+values 1.0 0.0 0.0
+strings 1.0 N2 + 1.0 M <-> 2.0 N + 1.0 M
+values 1714.29 4.286 1.0 1.0 4.286
+values 1.0 4.286 4.286 1.0 1.0
+values 1.0
+strings 1.0 O2 + 1.0 M <-> 2.0 O + 1.0 M
+values 2.0e18 -1.5 4.94683e8 0.5 0.5
+values 1.0 0.0 0.0
+strings 1.0 O2 + 1.0 M <-> 2.0 O + 1.0 M
+values 0 5.0 1.0 1.0 5.0
+values 1.0 5.0 5.0 1.0 1.0
+values 1.0
+strings 1.0 NO + 1.0 M <-> 1.0 N + 1.0 O + 1.0 M
+values 5.0e12 0.0 6.27707e8 0.5 0.5
+values 1.0 0.0 0.0
+strings 1.0 NO + 1.0 M <-> 1.0 N + 1.0 O + 1.0 M
+values 0.0 22 1.0 22 22
+values 1.0 22 22 1.0 1.0
+values 1.0
+strings 1.0 NO + 1.0 O <-> 1.0 O2 + 1.0 N
+values 8.4e9 0.0 1.617073e8 1.0 0.0
+values 1.0 0.0 0.0
+strings 1.0 NO + 1.0 O <-> 1.0 O2 + 1.0 N
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 N2 + 1.0 O <-> 1.0 NO + 1.0 N
+values 6.4e14 -1.0 3.192576e8 1.0 0.0
+values 1.0 0.0 0.0
+strings 1.0 N2 + 1.0 O <-> 1.0 NO + 1.0 N
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 N + 1.0 O <-> 1.0 NO+ + 1.0 e
+values 8.8e5 1.0 2.652166e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 N + 1.0 O <-> 1.0 NO+ + 1.0 e
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 2. O <-> 1.0 O2+ + 1.0 e
+values 7.1e-01 2.7 6.701084e8 1 0
+values 1.0 0.0 0.0
+strings 2 O <-> 1.0 O2+ + 1.0 e
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 2.0 N <-> 1.0 N2+ + 1.0 e
+values 4.4e4 1.5 5.61195e8 1.0 0
+values 1.0 0.0 0.0
+strings 2.0 N <-> 1.0 N2+ + 1.0 e
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 NO+ + 1.0 O <-> 1.0 N+ + 1.0 O2
+values 1.0e9 0.5 6.418408e8 1.0 0
+values 1.0 0.0 0.0
+strings 1.0 NO+ + 1.0 O <-> 1.0 N+ + 1.0 O2
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 N+ + 1.0 N2 <-> 1.0 N2+ + 1.0 N
+values 1.0e9 0.5 1.014308e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 N+ + 1.0 N2 <-> 1.0 N2+ + 1.0 N
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 O2+ + 1.0 N <-> 1.0 N+ + 1.0 O2
+values 8.7e10 0.14 2.377804e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 O2+ + 1.0 N <-> 1.0 N+ + 1.0 O2
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 O+ + 1.0 NO <-> 1.0 N+ + 1.0 O2
+values 1.4e2 1.9 2.211524e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 O+ + 1.0 NO <-> 1.0 N+ + 1.0 O2
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 O2+ + 1.0 N2 <-> 1.0 N2+ + 1.0 O2
+values 9.9e9 0 3.383798e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 O2+ + 1.0 N2 <-> 1.0 N2+ + 1.0 O2
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 O2+ + 1.0 O <-> 1.0 O+ + 1.0 O2
+values 4.0e9 -0.09 1.49652e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 O2+ + 1.0 O <-> 1.0 O+ + 1.0 O2
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 NO+ + 1.0 N <-> 1.0 O+ + 1.0 N2
+values 3.4e10 -1.08 1.064192e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 NO+ + 1.0 N <-> 1.0 O+ + 1.0 N2
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 NO+ + 1.0 O2 <-> 1.0 O2+ + 1.0 NO
+values 2.4e10 0.41 2.710364e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 NO+ + 1.0 O2 <-> 1.0 O2+ + 1.0 NO
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 NO+ + 1.0 O <-> 1.0 O2+ + 1.0 N
+values 7.2e09 0.29 4.040604e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 NO+ + 1.0 O <-> 1.0 O2+ + 1.0 N
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 O+ + 1.0 N2 <-> 1.0 N2+ + 1.0 O
+values 9.1e08 0.36 1.895592e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 O+ + 1.0 N2 <-> 1.0 N2+ + 1.0 O
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 NO+ + 1.0 N <-> 1.0 N2+ + 1.0 O
+values 7.2e10 0 2.95147e8 1 0
+values 1.0 0.0 0.0
+strings 1.0 NO+ + 1.0 N <-> 1.0 N2+ + 1.0 O
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 O + 1.0 e <-> 1.0 O+ + 2.0 e
+values 3.9e30 -3.78 1.317769e9 0.5 0.5
+values 0.5 0.5 0.0
+strings 1.0 O + 1.0 e <-> 1.0 O+ + 2.0 e
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+strings 1.0 N + 1.0 e <-> 1.0 N+ + 2.0 e
+values 2.5e31 -3.82 1.4017404e9 0.5 0.5
+values 0.5 0.5 0.0
+strings 1.0 N + 1.0 e <-> 1.0 N+ + 2.0 e
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0 1.0 1.0 1.0 1.0
+values 1.0
+values 5.486e-4
+values 9.015e-11 273.16 2.5527e-4 5.152e-3 273.16
+values 2.3059e-2
+values 5. 0.0001 0. 9.015e-11
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11734E+02
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11734E+02
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11733E+02
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11733E+02
+values 0.25000E+01 0.00000E+00 0.00000E+00 0.00000E+00 0.00000E+00
+values -0.74542E+03 -0.11733E+02
+values 2 1011 10 0.0 0.0
+values 0.000000e+000 2.006550e-004 5.836857e-002 3.894943e-002 1.533163e-001
+values 0.000000e+000 0.000000e+000 0.000000e+000 0.000000e+000 0.000000e+000
+values 1011
+values 300
+values 0.000000e+000 0.000000e+000 2.324514e-001 0.000000e+000 0.000000e+000
+values 0.000000e+000 0.000000e+000 0.000000e+000 0.000000e+000 0.000000e+000
+values 102.5 1011 8960 0.0 0.0
+values 0.000000e+000 2.006550e-004 5.836857e-002 3.894943e-002 1.533163e-001
+values 0.000000e+000 0.000000e+000 0.000000e+000 0.000000e+000 0.000000e+000
+values 1011
+values 0.2 1 500
+eqslct 101
+icslct 194
+mbcons 5
+seq# type modi info
+1 50 1 195 body
+2 50 1 195 head
+3 49 1 197 inlet
+4 3 0 0 outlet
+5 6 0 0 symmetry
+1 17 196
+2 17 196
+3 1 198
+octree begin
+toldup 1.000000e-008
+tolins 1.000000e-006
+toldfn 1.000000e-006
+tolzco 1.000000e-006
+typzco 2
+typzco_factor 0.100000
+trxdir 1
+trydir 1
+trzdir 0
+dfcmax 1.000000e+000
+octree end
+physics begin
+meq_eqsets 0
+meq_eqsgrp 0
+meq_icslct 0
+meq_inityp 0
+cht_matprp 0
+absour 0
+absour_selftune 1
+cldriver 0
+rotor_model1 0
+anchor_pressure 0
+moddif 0
+moddif_type 2
+icsrot 0
+prerot 0
+preacc_opt 0
+preacc_dti 0.05
+pretyp 1
+ipreof 20
+prebet 5.000000e-002
+previs 5.000000e-002
+prevel 1.000000e-006
+prevlo 1.000000e-003
+pfloor 0.000000e+000
+gasnam N2
+gasgam 1.400000
+gasmwt 28.950000
+advcon 1.000000e+000
+difcon 1.000000e+000
+ed_con 1.000000e+000
+ed_cap 0.000000e+000
+iunits 0
+lenuni m
+masuni kg
+temuni K
+timuni s
+grduni m
+inityp 0
+qcvrti 0
+qcvrto 0
+ifrpow 0
+ifreac 1
+ifrebx 0
+frctin 2
+temulx 2.000000e-001
+frcint 1
+frclim 0
+frclif 0.050000
+frccfl 1
+ifscon 1
+iftrds 0
+ifrsrc 0
+ifvols 0
+ifvelp 0
+ifrmai 0
+frcxmn 0.000000e+000
+frcxmx 0.000000e+000
+frcymn 0.000000e+000
+frcymx 0.000000e+000
+frczmn 0.000000e+000
+frczmx 0.000000e+000
+frsrcu 0.000000
+frsrcl 1.000000
+frsrct 1.000000
+frsrcm 1.000000
+istiff 0
+sureac 0
+surspe 0
+surmap 0
+toltem 1.000000e-005
+tolfrc 1.000000e-005
+tnoneq_numeqns 1
+edp_yesno 0
+edp_model 0
+edp_coefvm 0.500000
+edp_coefcl 0.500000
+edp_ifbuoy 0
+edp_gravtx 0.000000
+edp_gravty 0.000000
+edp_gravtz 0.000000
+sourc1 0
+sourc2 0
+ifaxix 1
+ifaxiy 0
+ifwzro 1
+ifaxst 0
+ifaxsw 0
+ifswrl 0
+swrxmn 0.000000e+000
+swrxmx 0.000000e+000
+swrymn 0.000000e+000
+swrymx 0.000000e+000
+swrzmn 0.000000e+000
+swrzmx 0.000000e+000
+swreta 0.500000
+ifblck 0
+blkxmn 0.000000e+000
+blkxmx 0.000000e+000
+blkymn 0.000000e+000
+blkymx 0.000000e+000
+blkzmn 0.000000e+000
+blkzmx 0.000000e+000
+ipbulk 0
+bulkpr 0.000000
+irbulk 0
+bulkro 0.000000e+000
+bulktm 2.880000e+002
+presab 0.000000e+000
+presmn -1.000000e+020
+presmx 1.000000e+020
+tempmn -1.000000e+000
+tempmx 1.000000e+020
+univgc 8314.000000
+refmwt 1.000000
+reflen 1.000000
+reftem 1.000000
+refden 1.000000
+refvel 50.0
+refpre 1.000000
+refpgf 101325.000000
+ifbuoy 0
+gravtx 0.000000
+gravty 0.000000
+gravtz 0.000000
+grvcnx 0.000000e+000
+grvcny 0.000000e+000
+grvcnz 0.000000e+000
+grvbet 0.003000
+liqgas 0
+vislaw 0
+refmuu 1.000000e+000
+refkap 1.000000e+000
+prndtl 0.72
+prlatu 0.800000
+schmla 0.525000
+schmtu 0.700000
+rmuusl 1.716000e-005
+tmuusl 273.110000
+smuusl 111.000000
+rkapsl 2.410000e-002
+tkapsl 273.110000
+skapsl 194.000000
+liqtlo 0.0
+liqtup 5000.0
+yppfac 1.000000
+ifporo 0
+ifpmut 0
+isporo 0
+ifcjht 0
+ifnlas 0
+ls_numeqns 0
+ntrbst 11
+iftold 0
+smagcf 0.050000
+lnstyp 3
+lnsdtm 1
+lnsbox 0
+mnfltr 0.000000e+000
+sync_alpha 1
+nlas_allscales 0
+rfg_sample_modes 100
+mulnyq 4
+ininls 0
+rfg_rseed 1234567
+ifvspt 0
+ifmuon 0
+ifdpds 0
+ifwfne 1
+ifwfol 0
+ifwfbc 3
+ifcomp 1
+ifmccw 1
+ifskar 0
+ifpope 0
+ifbrad 0
+iftrat 0
+iftrfs 0
+ifmbsl 0
+iftcon 1
+iftrbf 0
+turbf1 1.000000
+turbf2 1.000000
+turbf3 1.000000
+turbf4 1.000000
+turbf5 1.000000
+turbf6 1.000000
+turbf7 1.000000
+trurlx 1.000000
+kmxval 1.000000e+020
+tmnval 1.000000e-012
+maxmut 1.000000e+010
+turlim 100.000000
+turxyz 0
+cgtsof 0
+turxmn 0.000000e+000
+turxmx 0.000000e+000
+turymn 0.000000e+000
+turymx 0.000000e+000
+turzmn 0.000000e+000
+turzmx 0.000000e+000
+shaper 0
+physics end
+probe begin
+probe end
+debug begin
+debug end
+guiopts begin
+turbi_lev 1
+turbi_len 1
+turbi_mutmu 5.000000e+001
+turbi_jet 0
+turbi_int 1
+turbi_tlev 3.000000e-002
+turbi_tlen 1.000000e-002
+turbi_tfrs 1.000000e-004
+turbi_yp 1.000000e+000
+turbi_replen 1.000000e+000
+auto_pres 1.013250e+005
+auto_temp 2.880000e+002
+auto_u 3.000000e+001
+auto_v 0.000000e+000
+auto_w 0.000000e+000
+auto_tlvl 2.000000e-002
+auto_tlnl 1.000000e-002
+auto_tl 1
+auto_lt 0
+auto_eqinf 0
+auto_ininf 0
+auto_bpinf 0
+auto_mutmu 10.000000
+aero_intyp 1
+aero_unit 1
+aero_pres 1.013250e+005
+aero_temp 2.880000e+002
+aero_deltat 0.000000e+000
+aero_u 3.000000e+001
+aero_v 0.000000e+000
+aero_w 0.000000e+000
+aero_tlvl 2.000000e-003
+aero_tlnl 1.000000e-001
+aero_tl 1
+aero_lt 0
+aero_eqinf 0
+aero_ininf 0
+aero_bcinf 0
+aero_altid 1.000000e+001
+aero_ma 8.000000e-001
+aero_alpha 0.000000e+000
+aero_beta 0.000000e+000
+aero_plane 0
+aero_re 1.000000e+006
+aero_mutmu 10.000000
+incomp_tlvl 5.000000e-002
+incomp_tlnl 1.000000e-002
+incomp_eqinf 0
+incomp_ininf 0
+incomp_bpinf 0
+guiopts end

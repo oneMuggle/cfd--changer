@@ -148,3 +148,69 @@ def test_report_dict_after_run():
     assert "path" in first
     assert "params" in first
     assert "applied" in first
+
+
+# --- available_vars + 缓存(Task 4)-------------------------------------
+
+
+def test_available_vars_none_returns_enum_only():
+    """无模板:仅枚举轴,3 项。"""
+    ctrl = SweepController()
+    specs = ctrl.available_vars(None)
+    assert len(specs) == 3
+    assert {s.key for s in specs} == {"turbulence", "energy", "gas"}
+
+
+def test_available_vars_caches_per_template_path(monkeypatch):
+    """同 template_path 二次调用不打文件(测 cache 命中)。"""
+    ctrl = SweepController()
+    call_count = {"n": 0}
+
+    def fake_parse(path):
+        call_count["n"] += 1
+        return []  # 模拟空 InpFile
+
+    # monkeypatch 内部 _parse_inp
+    from inp_tool_gui.widgets import sweep_var_combo
+    monkeypatch.setattr(sweep_var_combo, "_parse_inp", fake_parse)
+
+    ctrl.available_vars("/tmp/a.inp")
+    ctrl.available_vars("/tmp/a.inp")  # 二次调用,期望不递增 call_count
+    assert call_count["n"] == 1
+
+
+def test_available_vars_different_paths_hit_cache_independently(monkeypatch):
+    """不同 template_path 各自解析一次,共用 path 二次命中。"""
+    ctrl = SweepController()
+    call_count = {"n": 0}
+
+    def fake_parse(path):
+        call_count["n"] += 1
+        return []
+
+    from inp_tool_gui.widgets import sweep_var_combo
+    monkeypatch.setattr(sweep_var_combo, "_parse_inp", fake_parse)
+
+    ctrl.available_vars("/tmp/a.inp")
+    ctrl.available_vars("/tmp/b.inp")
+    assert call_count["n"] == 2
+    ctrl.available_vars("/tmp/a.inp")  # 二次
+    ctrl.available_vars("/tmp/b.inp")  # 二次
+    assert call_count["n"] == 2  # 没新增
+
+
+def test_available_vars_failed_parse_not_cached(monkeypatch):
+    """解析失败不缓存:重试时会再调一次 _parse_inp。"""
+    ctrl = SweepController()
+    call_count = {"n": 0}
+
+    def fake_parse_fail(path):
+        call_count["n"] += 1
+        raise IOError("模拟失败")
+
+    from inp_tool_gui.widgets import sweep_var_combo
+    monkeypatch.setattr(sweep_var_combo, "_parse_inp", fake_parse_fail)
+
+    ctrl.available_vars("/tmp/bad.inp")
+    ctrl.available_vars("/tmp/bad.inp")
+    assert call_count["n"] == 2  # 不缓存,重试

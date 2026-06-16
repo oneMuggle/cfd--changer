@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from PySide2.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -36,6 +37,7 @@ from PySide2.QtWidgets import (
 
 from inp_tool.i18n_gui import tg
 from inp_tool_gui.controllers.sweep_controller import SweepController
+from inp_tool_gui.widgets.sweep_var_combo import VarSpec  # 新增(Task 7)
 
 
 class SweepForm(QWidget):
@@ -58,28 +60,39 @@ class SweepForm(QWidget):
 
         # 模板路径
         tpl_row = QHBoxLayout()
+        self._lbl_tpl = QLabel(tg("sweep.lbl.template"), self)
+        self._lbl_tpl.setMinimumWidth(80)
         self._edit_tpl = QLineEdit(self)
         self._edit_tpl.editingFinished.connect(self._sync_form_to_controller)
         self._btn_tpl = QPushButton("浏览...", self)
         self._btn_tpl.clicked.connect(self._pick_template)
+        tpl_row.addWidget(self._lbl_tpl)
         tpl_row.addWidget(self._edit_tpl, 1)
         tpl_row.addWidget(self._btn_tpl)
         root.addLayout(tpl_row)
 
         # 输出目录
         out_row = QHBoxLayout()
+        self._lbl_out = QLabel(tg("sweep.lbl.output"), self)
+        self._lbl_out.setMinimumWidth(80)
         self._edit_out = QLineEdit(self)
         self._edit_out.editingFinished.connect(self._sync_form_to_controller)
         self._btn_out = QPushButton("浏览...", self)
         self._btn_out.clicked.connect(self._pick_output)
+        out_row.addWidget(self._lbl_out)
         out_row.addWidget(self._edit_out, 1)
         out_row.addWidget(self._btn_out)
         root.addLayout(out_row)
 
         # 命名
+        naming_row = QHBoxLayout()
+        self._lbl_naming = QLabel(tg("sweep.lbl.naming"), self)
+        self._lbl_naming.setMinimumWidth(80)
         self._edit_naming = QLineEdit(self)
         self._edit_naming.editingFinished.connect(self._sync_form_to_controller)
-        root.addWidget(self._edit_naming)
+        naming_row.addWidget(self._lbl_naming)
+        naming_row.addWidget(self._edit_naming, 1)
+        root.addLayout(naming_row)
 
         # Sweep 轴表
         axes_box = QGroupBox(tg("sweep.title.sweeps_axes"), self)
@@ -182,21 +195,21 @@ class SweepForm(QWidget):
             raise ValueError(tg("sweep.live.need_output"))
         sweeps_dict: Dict[str, List[Any]] = {}
         for r in range(self._axes_table.rowCount()):
-            ki = self._axes_table.item(r, 0)
-            vi = self._axes_table.item(r, 1)
-            if not ki or not vi:
+            spec = self._spec_for_row(r)
+            if spec is None:
                 continue
-            key = ki.text().strip()
-            if not key:
-                continue
-            raw = vi.text().strip()
-            try:
-                vals = [self._parse_scalar(x) for x in raw.split(",") if x.strip()]
-            except ValueError as e:
-                raise ValueError(
-                    tg("sweep.live.invalid_axis", key=key, val=raw)
-                ) from e
-            sweeps_dict[key] = vals
+            key = spec.key
+            cell = self._axes_table.cellWidget(r, 1)
+            if isinstance(cell, QLineEdit):
+                raw = cell.text().strip()
+                try:
+                    vals = [self._parse_scalar(x) for x in raw.split(",") if x.strip()]
+                except ValueError as e:
+                    msg = tg("sweep.live.invalid_axis").replace("{key}", key).replace("{val}", raw)
+                    raise ValueError(msg) from e
+                sweeps_dict[key] = vals
+            elif isinstance(cell, QLabel):
+                sweeps_dict[key] = list(spec.enum_values or ())
         return {
             "template": self._edit_tpl.text().strip(),
             "output_dir": self._edit_out.text().strip(),
@@ -206,21 +219,25 @@ class SweepForm(QWidget):
 
     def _sync_form_to_controller(self) -> None:
         """把表单同步到 controller(失焦触发)。"""
+        # 单元级校验(状态栏提示,不阻断)
+        for r in range(self._axes_table.rowCount()):
+            err = self._validate_value_cell(r)
+            if err:
+                self._lbl_status.setText(err)
+                return
         try:
             d = self._collect_to_dict()
         except ValueError as e:
-            # 未填完整时:仅当 controller 已有 load 才更新状态,避免打扰空表单用户输入
             if self._sweep_ctrl.is_loaded:
                 self._lbl_status.setText(str(e))
             return
         try:
             self._sweep_ctrl.load_from_dict(d)
         except Exception as e:
-            self._lbl_status.setText(
-                tg("sweep.live.sync_fail", err=str(e))
-            )
+            self._lbl_status.setText(tg("sweep.live.sync_fail", err=str(e)))
             return
         self._update_status()
+        self._scan_orphan_axes()
 
     def _update_status(self) -> None:
         if not self._sweep_ctrl.is_loaded:
@@ -235,19 +252,169 @@ class SweepForm(QWidget):
         self._btn_run_dry.setEnabled(True)
         self._btn_run.setEnabled(True)
 
-    def _on_axis_changed(self, _item) -> None:
-        """QTableWidget itemChanged 触发同步。"""
+    def _on_axis_changed(self, _idx_or_item=None) -> None:
+        """QComboBox.currentIndexChanged 或 QTableWidget.itemChanged 触发。"""
+        sender = self.sender()
+        row = -1
+        for r in range(self._axes_table.rowCount()):
+            if self._axes_table.cellWidget(r, 0) is sender:
+                row = r
+                break
+        if row < 0:
+            return
+        spec = self._spec_for_row(row)
+        if spec is None:
+            return
+        old_text = ""
+        old_cell = self._axes_table.cellWidget(row, 1)
+        if isinstance(old_cell, QLineEdit):
+            old_text = old_cell.text()
+        new_cell = self._make_value_cell_for_kind(spec)
+        if isinstance(new_cell, QLineEdit):
+            new_cell.setText(old_text)
+            new_cell.editingFinished.connect(self._sync_form_to_controller)
+        self._axes_table.setCellWidget(row, 1, new_cell)
         self._sync_form_to_controller()
+        self._scan_orphan_axes()
 
-    def _append_axis_row(self, key: str, val: Any) -> None:
+    def _spec_for_row(self, row: int) -> Optional[VarSpec]:
+        """取一行的 VarSpec(从 combobox userData)。"""
+        combo = self._axes_table.cellWidget(row, 0)
+        if not isinstance(combo, QComboBox):
+            return None
+        key = combo.currentData()
+        if not key:
+            return None
+        for s in self._sweep_ctrl.available_vars(self._sweep_ctrl.template):
+            if s.key == key:
+                return s
+        return VarSpec(key=key, label=key + " (未知)", kind="str")
+
+    def _validate_value_cell(self, row: int) -> Optional[str]:
+        """校验一行的值 cell;返回错误信息或 None(OK)。"""
+        spec = self._spec_for_row(row)
+        if spec is None:
+            return None
+        cell = self._axes_table.cellWidget(row, 1)
+        if not isinstance(cell, QLineEdit):
+            return None
+        raw = cell.text().strip()
+        if not raw:
+            return None
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        if spec.kind == "int":
+            for i, p in enumerate(parts, start=1):
+                try:
+                    int(p)
+                except ValueError:
+                    tmpl = tg("sweep.live.invalid_int")
+                    return tmpl.replace("{key}", spec.key).replace("{idx}", str(i))
+        elif spec.kind == "float":
+            for i, p in enumerate(parts, start=1):
+                try:
+                    float(p.replace("d", "e").replace("D", "E"))
+                except ValueError:
+                    tmpl = tg("sweep.live.invalid_float")
+                    return tmpl.replace("{key}", spec.key).replace("{idx}", str(i))
+        return None
+
+    def _make_combo_for_row(self, spec: Optional[VarSpec]) -> QComboBox:
+        """根据当前 controller 模板,生成含所有可选变量的 QComboBox。"""
+        template = self._sweep_ctrl.template
+        specs = self._sweep_ctrl.available_vars(template)
+        combo = QComboBox(self)
+        for s in specs:
+            combo.addItem(s.label, userData=s.key)
+        # 失效键(不在当前模板中的)——额外加一项保留原 key,以便 _scan_orphan_axes 检测
+        if spec is not None and not any(s.key == spec.key for s in specs):
+            combo.insertItem(0, spec.label, userData=spec.key)
+        if spec is not None:
+            for i in range(combo.count()):
+                if combo.itemData(i) == spec.key:
+                    combo.setCurrentIndex(i)
+                    break
+        return combo
+
+    def _make_value_cell_for_kind(self, spec: VarSpec) -> QWidget:
+        """按 spec.kind 生成值 cell:enum→QLabel(不可编辑),其他→QLineEdit。"""
+        if spec.kind == "enum":
+            values = spec.enum_values or ()
+            lbl = QLabel(", ".join(values), self)
+            lbl.setStyleSheet("color: #555; font-style: italic;")
+            return lbl
+        return QLineEdit(self)
+
+    def _append_axis_row(
+        self,
+        key: str = "",
+        raw_val: Any = "",
+    ) -> None:
+        """追加一行:第 0 列 QComboBox(选变量),第 1 列 QLineEdit/QLabel(值)。"""
         r = self._axes_table.rowCount()
         self._axes_table.insertRow(r)
-        self._axes_table.setItem(r, 0, QTableWidgetItem(key))
-        if isinstance(val, list):
-            text = ", ".join(str(x) for x in val)
+
+        specs = self._sweep_ctrl.available_vars(self._sweep_ctrl.template)
+        spec = None
+        for s in specs:
+            if s.key == key:
+                spec = s
+                break
+        if spec is None and key:
+            spec = VarSpec(key=key, label=key + " (未知)", kind="str")
+
+        # 第 0 列:QComboBox
+        combo = self._make_combo_for_row(spec)
+        self._axes_table.setCellWidget(r, 0, combo)
+        combo.currentIndexChanged.connect(self._on_axis_changed)
+
+        # 第 1 列:按 kind
+        if spec is not None:
+            cell = self._make_value_cell_for_kind(spec)
+            if isinstance(cell, QLineEdit):
+                text = ", ".join(str(x) for x in raw_val) if isinstance(raw_val, list) else str(raw_val or "")
+                cell.setText(text)
+                cell.editingFinished.connect(self._sync_form_to_controller)
+            self._axes_table.setCellWidget(r, 1, cell)
+
+    def _mark_row_orphan(self, r: int) -> None:
+        """标记行为失效(红底 + tooltip)。"""
+        for col in (0, 1):
+            w = self._axes_table.cellWidget(r, col)
+            if w is not None:
+                w.setStyleSheet("background-color: #FFD6D6;")
+                w.setToolTip("此变量不在当前模板中,请删除或重新选模板")
+
+    def _mark_row_normal(self, r: int) -> None:
+        """清除失效标记。"""
+        for col in (0, 1):
+            w = self._axes_table.cellWidget(r, col)
+            if w is not None:
+                w.setStyleSheet("")
+
+    def _scan_orphan_axes(self) -> int:
+        """扫描所有行,标记失效轴;返回失效数。"""
+        valid_keys = {s.key for s in self._sweep_ctrl.available_vars(self._sweep_ctrl.template)}
+        orphan_count = 0
+        for r in range(self._axes_table.rowCount()):
+            spec = self._spec_for_row(r)
+            if spec is None:
+                continue
+            if spec.key in valid_keys:
+                self._mark_row_normal(r)
+            else:
+                self._mark_row_orphan(r)
+                orphan_count += 1
+        if orphan_count > 0:
+            msg = tg("sweep.live.orphan_axes").replace("{n}", str(orphan_count))
+            self._lbl_status.setText(msg)
+            self._btn_run.setEnabled(False)
+            self._btn_run_dry.setEnabled(False)
         else:
-            text = str(val) if val is not None else ""
-        self._axes_table.setItem(r, 1, QTableWidgetItem(text))
+            if self._sweep_ctrl.is_loaded:
+                self._lbl_status.setText(tg("sweep.live.sync_ok"))
+                self._btn_run.setEnabled(True)
+                self._btn_run_dry.setEnabled(True)
+        return orphan_count
 
     @staticmethod
     def _parse_scalar(s: str) -> Any:
@@ -296,6 +463,7 @@ class SweepForm(QWidget):
             )
             return
         self._sync_from_controller()  # 加载后填表单
+        self._scan_orphan_axes()
 
     def _pick_json(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -315,6 +483,7 @@ class SweepForm(QWidget):
             )
             return
         self._sync_from_controller()  # 加载后填表单
+        self._scan_orphan_axes()
 
     def _save_yaml(self) -> None:
         try:

@@ -19,6 +19,9 @@ from inp_tool.sweep import (
     generate as sweep_generate,
 )
 
+from inp_tool_gui.widgets import sweep_var_combo  # noqa: E402
+from inp_tool_gui.widgets.sweep_var_combo import VarSpec  # noqa: E402
+
 
 class SweepController:
     """GUI 的 sweep 控制器,包装 :class:`CaseSweep`。"""
@@ -26,6 +29,7 @@ class SweepController:
     def __init__(self) -> None:
         self._sweep: Optional[CaseSweep] = None
         self._last_report: Optional[SweepReport] = None
+        self._var_cache: Dict[Optional[str], List[VarSpec]] = {}
 
     # --- 状态查询 --------------------------------------------------------
 
@@ -33,6 +37,37 @@ class SweepController:
     def is_loaded(self) -> bool:
         """是否已成功 load 一个 sweep 配置。"""
         return self._sweep is not None
+
+    def available_vars(self, template_path: Optional[str]) -> List[VarSpec]:
+        """根据模板路径返回可选 :class:`VarSpec` 列表(枚举轴 + .inp 变量)。
+
+        缓存策略:同一 template_path(str 规范化)只解析一次。
+        解析失败时不缓存,下次调用重试。
+
+        Args:
+            template_path: .inp 路径;None 或空串 → 仅枚举轴。
+        """
+        # cache key 规范化(空串 → None,其他 → str)
+        key = template_path if (template_path and str(template_path).strip()) else None
+        if key in self._var_cache:
+            return self._var_cache[key]
+        # key 为 None:仅枚举轴,直接 cache
+        if key is None:
+            result = sweep_var_combo._enum_axis_specs()
+            self._var_cache[None] = result
+            return result
+        # key 为 path:直接调 sweep_var_combo._parse_inp(走模块属性查找,
+        # 以便被 monkeypatch.setattr 替换)。这样可以捕获异常并区分
+        # "解析失败"与"成功解析出空文件"。
+        enum_specs = sweep_var_combo._enum_axis_specs()
+        try:
+            inp_specs = sweep_var_combo._parse_inp(key)
+        except Exception:
+            # 解析失败:退化为仅枚举轴,但不缓存(下次重试)
+            return enum_specs
+        result = enum_specs + inp_specs
+        self._var_cache[key] = result
+        return result
 
     @property
     def template(self) -> Optional[str]:
