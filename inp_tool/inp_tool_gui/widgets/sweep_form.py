@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from PySide2.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -36,6 +37,7 @@ from PySide2.QtWidgets import (
 
 from inp_tool.i18n_gui import tg
 from inp_tool_gui.controllers.sweep_controller import SweepController
+from inp_tool_gui.widgets.sweep_var_combo import VarSpec  # 新增(Task 7)
 
 
 class SweepForm(QWidget):
@@ -250,15 +252,74 @@ class SweepForm(QWidget):
         """QTableWidget itemChanged 触发同步。"""
         self._sync_form_to_controller()
 
-    def _append_axis_row(self, key: str, val: Any) -> None:
+    def _make_combo_for_row(self, spec: Optional[VarSpec]) -> QComboBox:
+        """根据当前 controller 模板,生成含所有可选变量的 QComboBox。"""
+        template = self._sweep_ctrl.template
+        specs = self._sweep_ctrl.available_vars(template)
+        combo = QComboBox(self)
+        for s in specs:
+            combo.addItem(s.label, userData=s.key)
+        if spec is not None:
+            for i in range(combo.count()):
+                if combo.itemData(i) == spec.key:
+                    combo.setCurrentIndex(i)
+                    break
+        return combo
+
+    def _make_value_cell_for_kind(self, spec: VarSpec) -> QWidget:
+        """按 spec.kind 生成值 cell:enum→QLabel(不可编辑),其他→QLineEdit。"""
+        if spec.kind == "enum":
+            values = spec.enum_values or ()
+            lbl = QLabel(", ".join(values), self)
+            lbl.setStyleSheet("color: #555; font-style: italic;")
+            return lbl
+        return QLineEdit(self)
+
+    def _append_axis_row(
+        self,
+        key: str = "",
+        raw_val: Any = "",
+    ) -> None:
+        """追加一行:第 0 列 QComboBox(选变量),第 1 列 QLineEdit/QLabel(值)。"""
         r = self._axes_table.rowCount()
         self._axes_table.insertRow(r)
-        self._axes_table.setItem(r, 0, QTableWidgetItem(key))
-        if isinstance(val, list):
-            text = ", ".join(str(x) for x in val)
-        else:
-            text = str(val) if val is not None else ""
-        self._axes_table.setItem(r, 1, QTableWidgetItem(text))
+
+        specs = self._sweep_ctrl.available_vars(self._sweep_ctrl.template)
+        spec = None
+        for s in specs:
+            if s.key == key:
+                spec = s
+                break
+        if spec is None and key:
+            spec = VarSpec(key=key, label=key + " (未知)", kind="str")
+
+        # 第 0 列:QComboBox
+        combo = self._make_combo_for_row(spec)
+        self._axes_table.setCellWidget(r, 0, combo)
+        combo.currentIndexChanged.connect(self._on_axis_changed)
+
+        # 第 1 列:按 kind
+        if spec is not None:
+            cell = self._make_value_cell_for_kind(spec)
+            if isinstance(cell, QLineEdit):
+                text = ", ".join(str(x) for x in raw_val) if isinstance(raw_val, list) else str(raw_val or "")
+                cell.setText(text)
+                cell.editingFinished.connect(self._sync_form_to_controller)
+            self._axes_table.setCellWidget(r, 1, cell)
+
+    def _mark_row_orphan(self, r: int) -> None:
+        """标记行为失效(红底)。Task 9 加 tooltip 完整化。"""
+        for col in (0, 1):
+            w = self._axes_table.cellWidget(r, col)
+            if w is not None:
+                w.setStyleSheet("background-color: #FFD6D6;")
+
+    def _mark_row_normal(self, r: int) -> None:
+        """清除失效标记。"""
+        for col in (0, 1):
+            w = self._axes_table.cellWidget(r, col)
+            if w is not None:
+                w.setStyleSheet("")
 
     @staticmethod
     def _parse_scalar(s: str) -> Any:

@@ -126,3 +126,39 @@ def test_sweep_form_yaml_load_fills_fields(qapp, tmp_path):
     assert form._edit_tpl.text() == "t.inp"
     assert form._edit_out.text() == "o"
     assert form._axes_table.rowCount() == 1
+
+
+# --- Task 7:轴表 cell widget 化测试 ---------------------------------
+
+
+def test_sweep_form_axes_table_uses_combobox_cells(qapp):
+    """轴表第 0 列 cell 是 QComboBox(非 QTableWidgetItem)。"""
+    from PySide2.QtWidgets import QComboBox, QLabel, QLineEdit
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    form._append_axis_row("turbulence", "sst")  # 触发 cell widget 构造
+    cell = form._axes_table.cellWidget(0, 0)
+    assert isinstance(cell, QComboBox), "got {}".format(type(cell))
+    cell1 = form._axes_table.cellWidget(0, 1)
+    assert isinstance(cell1, (QLabel, QLineEdit))
+
+
+def test_sweep_form_axes_combobox_populated_with_vars(qapp):
+    """combobox items 来自 controller.available_vars(当前模板)。"""
+    from PySide2.QtWidgets import QComboBox
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    form._append_axis_row("turbulence", "sst")
+    cell = form._axes_table.cellWidget(0, 0)
+    assert isinstance(cell, QComboBox)
+    labels = [cell.itemText(i) for i in range(cell.count())]
+    # 至少含 3 个枚举轴(label 形式为 "key (枚举:...)")
+    assert any(lbl.startswith("turbulence") for lbl in labels)
+    assert any(lbl.startswith("energy") for lbl in labels)
+    assert any(lbl.startswith("gas") for lbl in labels)
