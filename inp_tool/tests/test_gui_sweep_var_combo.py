@@ -121,7 +121,7 @@ def test_enumerate_vars_real_inp_contains_enum_and_inp_vars():
     for s in specs:
         if s.kind == "enum":
             continue
-        assert "." in s.key, "非枚举轴 key 缺 block 路径: {}".format(s.key)
+        assert ("." in s.key) or (s.block == "<top>"), "非枚举轴 key 格式异常: {}".format(s.key)
         # label 含 [kind] 信息
         assert "[" in s.label and "]" in s.label
         # block / keyword / value_idx 三件套齐全

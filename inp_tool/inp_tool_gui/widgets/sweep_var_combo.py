@@ -74,10 +74,25 @@ def _enum_axis_specs() -> List[VarSpec]:
 def _parse_inp(path: str) -> List[VarSpec]:
     """解析 .inp,生成所有 (block, keyword, value_idx) 的 VarSpec。
 
-    仅枚举块内语句(顶层语句一般不参与 sweep,跳过)。
+    包含两类语句:
+    - 顶层语句 ``inp.top_stmts``(block 字段填 ``"<top>"``,key 无 ``.`` 前缀)
+    - 块内语句 ``inp.block_list[].statements``(block 填块名,key 形如
+      ``block.keyword[idx]``)
     """
     inp = parser.parse_file(path)
     out: List[VarSpec] = []
+    # 顶层语句:celltypes / infsets / runtype / ... — Sweep 重要来源
+    for stmt in inp.top_stmts:
+        for vi, v in enumerate(stmt.values):
+            kind = _infer_kind_for_sweep(v.typed)
+            raw = str(v.typed) if v.typed is not None else ""
+            key = "{}[{}]".format(stmt.keyword, vi)
+            label = "{} [{}] = {}".format(key, kind, raw)
+            out.append(VarSpec(
+                key=key, label=label, kind=kind,
+                block="<top>", keyword=stmt.keyword, value_idx=vi,
+            ))
+    # 块内语句
     for blk in inp.block_list:
         for stmt in blk.statements:
             for vi, v in enumerate(stmt.values):
