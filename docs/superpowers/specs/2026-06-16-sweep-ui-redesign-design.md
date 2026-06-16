@@ -388,7 +388,7 @@ def expand_cartesian(spec: SweepSpec) -> List[Dict[str, Any]]: ...  # v1 路径
 
 **语义要点**:
 - `evaluate_condition` 多 predicate → 全部 AND;空 predicates → True
-- `expand_with_conditions` 对笛卡尔积每个 case 跑所有 condition 的 `when`;若某 condition 不满足 → 跳过该 case;满足 → 应用 `then`:从 case.values 删除 `disable_axes` 列、`extras` 字段填 `set_extra` 的内容
+- `expand_with_conditions` 对笛卡尔积每个 case 找第一条 when 命中的 rule,应用其 `then`(从 case.values 删除 `disable_axes` 列、`extras` 字段填 `set_extra` 的内容)。若无 rule 命中,该 case 保留原样(miss → keep,不被条件过滤掉)
 - `set_extra` 仅是字面量键值对(暂不支持表达式);后续 sweep 生成器在 apply 时把它注入到生成的 .inp 文件(通过 `inp_tool.editor` API)
 
 ### 6.2 兼容性
