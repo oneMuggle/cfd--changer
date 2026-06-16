@@ -237,6 +237,7 @@ class SweepForm(QWidget):
             self._lbl_status.setText(tg("sweep.live.sync_fail", err=str(e)))
             return
         self._update_status()
+        self._scan_orphan_axes()
 
     def _update_status(self) -> None:
         if not self._sweep_ctrl.is_loaded:
@@ -274,6 +275,7 @@ class SweepForm(QWidget):
             new_cell.editingFinished.connect(self._sync_form_to_controller)
         self._axes_table.setCellWidget(row, 1, new_cell)
         self._sync_form_to_controller()
+        self._scan_orphan_axes()
 
     def _spec_for_row(self, row: int) -> Optional[VarSpec]:
         """取一行的 VarSpec(从 combobox userData)。"""
@@ -323,6 +325,9 @@ class SweepForm(QWidget):
         combo = QComboBox(self)
         for s in specs:
             combo.addItem(s.label, userData=s.key)
+        # 失效键(不在当前模板中的)——额外加一项保留原 key,以便 _scan_orphan_axes 检测
+        if spec is not None and not any(s.key == spec.key for s in specs):
+            combo.insertItem(0, spec.label, userData=spec.key)
         if spec is not None:
             for i in range(combo.count()):
                 if combo.itemData(i) == spec.key:
@@ -372,11 +377,12 @@ class SweepForm(QWidget):
             self._axes_table.setCellWidget(r, 1, cell)
 
     def _mark_row_orphan(self, r: int) -> None:
-        """标记行为失效(红底)。Task 9 加 tooltip 完整化。"""
+        """标记行为失效(红底 + tooltip)。"""
         for col in (0, 1):
             w = self._axes_table.cellWidget(r, col)
             if w is not None:
                 w.setStyleSheet("background-color: #FFD6D6;")
+                w.setToolTip("此变量不在当前模板中,请删除或重新选模板")
 
     def _mark_row_normal(self, r: int) -> None:
         """清除失效标记。"""
@@ -384,6 +390,31 @@ class SweepForm(QWidget):
             w = self._axes_table.cellWidget(r, col)
             if w is not None:
                 w.setStyleSheet("")
+
+    def _scan_orphan_axes(self) -> int:
+        """扫描所有行,标记失效轴;返回失效数。"""
+        valid_keys = {s.key for s in self._sweep_ctrl.available_vars(self._sweep_ctrl.template)}
+        orphan_count = 0
+        for r in range(self._axes_table.rowCount()):
+            spec = self._spec_for_row(r)
+            if spec is None:
+                continue
+            if spec.key in valid_keys:
+                self._mark_row_normal(r)
+            else:
+                self._mark_row_orphan(r)
+                orphan_count += 1
+        if orphan_count > 0:
+            msg = tg("sweep.live.orphan_axes").replace("{n}", str(orphan_count))
+            self._lbl_status.setText(msg)
+            self._btn_run.setEnabled(False)
+            self._btn_run_dry.setEnabled(False)
+        else:
+            if self._sweep_ctrl.is_loaded:
+                self._lbl_status.setText(tg("sweep.live.sync_ok"))
+                self._btn_run.setEnabled(True)
+                self._btn_run_dry.setEnabled(True)
+        return orphan_count
 
     @staticmethod
     def _parse_scalar(s: str) -> Any:
@@ -432,6 +463,7 @@ class SweepForm(QWidget):
             )
             return
         self._sync_from_controller()  # 加载后填表单
+        self._scan_orphan_axes()
 
     def _pick_json(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -451,6 +483,7 @@ class SweepForm(QWidget):
             )
             return
         self._sync_from_controller()  # 加载后填表单
+        self._scan_orphan_axes()
 
     def _save_yaml(self) -> None:
         try:

@@ -221,3 +221,59 @@ def test_sweep_form_accepts_float_d_notation(qapp, monkeypatch):
     cell.editingFinished.emit()
     text = form._lbl_status.text()
     assert "不是浮点" not in text
+
+
+def test_sweep_form_orphan_axis_disables_run_button(monkeypatch):
+    """失效轴(不在当前模板的)→ 红底 + 运行按钮禁用。"""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide2.QtWidgets import QApplication
+    import sys
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.controllers.sweep_controller import SweepController
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    def fake_available(template_path=None):
+        return [VarSpec(
+            key="good", label="good [int] = 1", kind="int",
+            block="b", keyword="good", value_idx=0,
+        )]
+    monkeypatch.setattr(ctrl, "available_vars", fake_available)
+
+    form._append_axis_row("good", "1")
+    form._append_axis_row("orphan", "1")
+    form._scan_orphan_axes()
+
+    assert not form._btn_run.isEnabled()
+    assert not form._btn_run_dry.isEnabled()
+    assert "未识别" in form._lbl_status.text() or "失效" in form._lbl_status.text()
+
+
+def test_sweep_form_no_orphan_no_disabled_message(monkeypatch):
+    """无失效轴:状态栏无「未识别」字样。"""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide2.QtWidgets import QApplication
+    import sys
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.controllers.sweep_controller import SweepController
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    ctrl = SweepController()
+    form = SweepForm(ctrl)
+    def fake_available(template_path=None):
+        return [
+            VarSpec(key="a", label="a [int] = 1", kind="int", block="b", keyword="a", value_idx=0),
+            VarSpec(key="b", label="b [int] = 2", kind="int", block="b", keyword="b", value_idx=0),
+        ]
+    monkeypatch.setattr(ctrl, "available_vars", fake_available)
+    form._append_axis_row("a", "1")
+    form._append_axis_row("b", "2")
+    form._scan_orphan_axes()
+    assert "未识别" not in form._lbl_status.text()
