@@ -1,0 +1,25 @@
+# Default preset: 跨音速 baseline
+# 用于 0.6 <= M <= 1.4 的跨音速流场(翼型激波/失速、进气道、压气机叶栅等)。
+# 关键现象: M ~ 1.0 附近产生激波;亚/超音速段行为差异显著,需用 condition 区分。
+version: 2
+name: transonic-baseline
+tags: [transonic, medium-speed]
+created_at: 2026-06-16T10:00:00
+updated_at: 2026-06-16T10:00:00
+author: onemuggle
+
+sweeps:
+  turbulence: [sst, kw, sa]
+  mach:
+    range: [0.6, 1.4, 0.2]
+
+conditions:
+  - when:
+      mach: "<1.0"
+    then:
+      disable_axes: [turbulence]        # 亚音速区不依赖湍流模型,跳过该轴
+  - when:
+      mach: ">=1.0"
+    then:
+      set_extra:                        # 跨/超音速:启动湍流初始化
+        - [turb_init, "yes"]

@@ -2,7 +2,12 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import pkgutil
 import yaml
+
+# 打包在 inp_tool_gui.resources.default_presets 下的种子文件目录(package 内 data path)。
+# 在用户首次启动 GUI 时由 seed_default_presets() 拷到 ~/.config/cfd--changer/presets/。
+_DEFAULT_PRESETS_PKG = "inp_tool_gui.resources.default_presets"
 
 
 @dataclass(frozen=True)
@@ -88,3 +93,44 @@ class PresetLibrary:
             return None
         p = self.user_dir / f"{ref}.yaml"
         return p if p.exists() else None
+
+
+# 模块内置的种子 preset 文件名清单(必须在 inp_tool_gui.resources.default_presets 下存在)。
+# 增加新默认 preset 时同步更新这里,否则不会自动拷到用户目录。
+_BUILTIN_PRESETS: Tuple[str, ...] = ("low-speed.yaml", "transonic.yaml", "high-speed.yaml")
+
+
+def seed_default_presets(user_preset_dir: Path) -> List[Path]:
+    """把包内置的 3 个默认 preset 拷到用户目录(不覆盖已有文件)。
+
+    用途:GUI 启动时若 ``~/.config/cfd--changer/presets/`` 不存在或为空,
+    调用本函数把 ``inp_tool_gui.resources.default_presets`` 下的种子 yaml
+    拷过去作为初始内容。已有同名文件保留,绝不覆盖(避免破坏用户修改)。
+
+    Args:
+        user_preset_dir: 用户 preset 目录(尚不存在也可,会自动创建)。
+
+    Returns:
+        本次实际新写入的文件路径列表(已存在的不会出现在结果里)。
+
+    Notes:
+        - 使用 ``pkgutil.get_data`` 而不是 ``importlib.resources.files``,
+          因为 ``files()`` 是 3.9+ API,而本项目要求 Python 3.8 兼容。
+        - ``pkgutil.get_data`` 在 zipapp/PyInstaller 冻结包下也工作良好。
+    """
+    target_dir = Path(user_preset_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    copied: List[Path] = []
+    for name in _BUILTIN_PRESETS:
+        target = target_dir / name
+        if target.exists():
+            # 用户已有同名文件,保留不动(避免覆盖用户自定义)。
+            continue
+        data = pkgutil.get_data(_DEFAULT_PRESETS_PKG, name)
+        if data is None:
+            # 包内种子缺失:跳过(不抛错,保持 GUI 启动容错)。
+            continue
+        target.write_bytes(data)
+        copied.append(target)
+    return copied

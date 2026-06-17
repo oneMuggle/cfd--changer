@@ -1,0 +1,16 @@
+# Default preset: 亚音速 / 不可压 baseline
+# 用于 M < 0.3 的不可压流场(汽车外气动、低速风机、建筑绕流等)。
+# 典型应用: 雷诺数主导,可压效应可忽略。
+version: 2
+name: low-speed-baseline
+tags: [baseline, low-speed, incompressible]
+created_at: 2026-06-16T10:00:00
+updated_at: 2026-06-16T10:00:00
+author: onemuggle
+
+sweeps:
+  turbulence: [sst, kw]
+  mach:
+    range: [0.0, 0.6, 0.2]
+
+conditions: []

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - feat(engine): Sweep v2 condition 原语(ConditionPredicate / ConditionWhen / ConditionalRule / ExpandedCase + parse_condition / evaluate_condition / expand_with_conditions)— first-match-wins 语义,miss → keep
 - feat(model): SweepConfigStore 模型层(AxisSpec frozen dataclass + ConfigStore frozen dataclass with replace/replace_sweep/remove_sweep/add_condition + PresetLibrary 用户级+团队级 preset CRUD + SweepControllerV2 load/dump YAML v2 + v1→v2 自动升级)— 纯 Python,无 PySide2 依赖;为 Phase 3-7 GUI 三视图提供单向数据流基座
 - refactor(gui): SweepFormView 替换旧 SweepForm(ConfigStore 单向数据流 + store_changed signal)— main_window 已切换;旧 SweepForm 标 deprecated 但保留 import 兼容 shim(可接 ConfigStore 或旧 SweepController);EnumChecklistDialog 新增(枚举多选)
+- feat(cli): `inp-tool migrate-sweep-v1 src dst` 子命令(把 v1 sweep YAML 升级到 v2 schema,自动加 `version: 2` + 默认 `conditions: []`)
+- feat(model): 3 个默认 preset(`low-speed-baseline` 亚音速 / `transonic-baseline` 跨音速含 2 conditions / `high-speed-baseline` 高超声速)+ `PresetLibrary.seed_default_presets(user_dir)` 首次启动自动 copy(Python 3.8 兼容,用 `pkgutil.get_data` 读包内资源)
 - feat(gui): SweepWizard 4-step 向导骨架(Step 1 模板/输出/命名 + Step 2 选轴+设值含 VariableTreeWidget + Step 3 条件依赖 when/then 子表单 + Step 4 预览+Dry/Run 按钮)— 共享 ConfigStore 单向数据流,各 step emit store_changed 统一汇入;Phase 7 接 main_window 顶部 tab
 - feat(gui): SweepYamlEditorView 容器(YamlEditor 文本编辑器带 YAML 关键词高亮 + 行号侧栏 + 错误行红点 + 200ms debounce schema lint + VariableTreeWidget 侧栏 + Preset 列表 + 实时 case 预览表)— 3 pane QSplitter 布局;Phase 7 接 main_window 顶部 tab
 

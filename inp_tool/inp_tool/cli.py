@@ -153,7 +153,7 @@ def _parse_csv_floats(s: str):
 # ============================================================
 # Shell 补全 (Phase D)
 # ============================================================
-_SUBCOMMANDS = ["parse", "get", "set", "diff", "info", "sweep", "completion", "shell"]
+_SUBCOMMANDS = ["parse", "get", "set", "diff", "info", "sweep", "completion", "shell", "migrate-sweep-v1"]
 
 
 def _bash_completion() -> str:
@@ -564,6 +564,25 @@ def cmd_sweep(args):
             print(f"  - {c.case_id}  ({params_str})")
     if cs.manifest_path and not args.dry_run:
         print(f"[sweep] manifest -> {cs.manifest_path}")
+    return 0
+
+
+def cmd_migrate_sweep_v1(args):
+    """迁移 v1 sweep YAML 到 v2 schema(自动加 version: 2 + conditions: [])。
+
+    v1 文件无 version 字段;v2 文件带 version: 2。SweepControllerV2 内部自动
+    识别:无 version → 升级到 v2;带 version: 2 → 直接 pass-through。
+    """
+    from inp_tool_gui.controllers.sweep_controller_v2 import SweepControllerV2
+
+    if not os.path.isfile(args.src):
+        print(f"migrate-sweep-v1: source not found: {args.src}", file=sys.stderr)
+        return 2
+
+    ctrl = SweepControllerV2()
+    store = ctrl.load_yaml(args.src)
+    ctrl.dump_yaml(store, args.dst)
+    print(f"已迁移 {args.src} → {args.dst}(v2 schema)")
     return 0
 
 
@@ -1364,6 +1383,15 @@ def main(argv=None):
         help='v0.10.0: 不切气体类型,默认切。',
     )
     sw.set_defaults(func=cmd_sweep)
+
+    # === v0.15.0:sweep YAML 迁移子命令(v1 → v2) ===
+    sm = sub.add_parser(
+        'migrate-sweep-v1',
+        help='迁移 sweep YAML 从 v1 schema 到 v2(自动加 version: 2 + conditions: [])',
+    )
+    sm.add_argument('src', help='源 v1 YAML 路径')
+    sm.add_argument('dst', help='目标 v2 YAML 路径')
+    sm.set_defaults(func=cmd_migrate_sweep_v1)
 
     sc = sub.add_parser('completion', help='输出 shell 补全脚本 (bash/zsh/fish)')
     sc.add_argument('shell', choices=['bash', 'zsh', 'fish'], help='目标 shell')
