@@ -22,7 +22,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from enum import Enum
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 from .model import InpFile
 from .parser import parse_file
@@ -1380,3 +1380,134 @@ def generate(sweep: CaseSweep, dry_run: bool = False, force: bool = False) -> Sw
 def _iso_now() -> str:
     from datetime import datetime
     return datetime.now().isoformat(timespec="seconds")
+
+
+# ============================================================
+# Sweep v2 (Phase 1):condition 原语
+# ============================================================
+@dataclass(frozen=True)
+class ConditionPredicate:
+    """单变量 op val。"""
+    key: str
+    op: str        # "<", "<=", "==", "!=", ">=", ">"
+    value: Any     # 已按 YAML 推断的类型(int/float/str/bool)
+
+
+_VALID_OPS = ("<", "<=", "==", "!=", ">=", ">")
+_OP_PATTERN = re.compile(r"^(<=|!=|==|>=|[<>])(.*)$")
+
+
+@dataclass(frozen=True)
+class ConditionWhen:
+    """多变量 AND 关系;predicates 空 → 永真。"""
+    predicates: Tuple[ConditionPredicate, ...] = ()
+
+
+def _infer_value(s: str) -> Any:
+    s = s.strip()
+    if s.lower() == "true":
+        return True
+    if s.lower() == "false":
+        return False
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return s
+
+
+def parse_condition(when_dict: Dict[str, str]) -> ConditionWhen:
+    """YAML raw {key: '<op><val>'} → 解析后的 ConditionWhen。"""
+    predicates = []
+    for key, expr in when_dict.items():
+        stripped = expr.strip()
+        m = _OP_PATTERN.match(stripped)
+        if not m:
+            # 若首字符是符号(说明用户想写 op 但 op 无效),报"unknown operator"
+            if stripped and not stripped[0].isalnum() and stripped[0] != "_":
+                raise ValueError(f"unknown operator {stripped[0]!r} in condition for {key!r}")
+            raise ValueError(f"condition '{key}={expr!r}': cannot parse operator")
+        op, val_str = m.group(1), m.group(2)
+        if op not in _VALID_OPS:
+            raise ValueError(f"unknown operator {op!r} in condition for {key!r}")
+        predicates.append(ConditionPredicate(key=key, op=op, value=_infer_value(val_str)))
+    return ConditionWhen(predicates=tuple(predicates))
+
+
+@dataclass(frozen=True)
+class ConditionThen:
+    disable_axes: Tuple[str, ...] = ()
+    set_extra: Tuple[Tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class ConditionalRule:
+    when: ConditionWhen
+    then: ConditionThen
+
+
+def _compare(op: str, lhs: Any, rhs: Any) -> bool:
+    if op == "<":
+        return lhs < rhs
+    if op == "<=":
+        return lhs <= rhs
+    if op == "==":
+        return lhs == rhs
+    if op == "!=":
+        return lhs != rhs
+    if op == ">=":
+        return lhs >= rhs
+    if op == ">":
+        return lhs > rhs
+    raise ValueError(f"unknown operator {op!r}")
+
+
+def evaluate_condition(when: ConditionWhen, case: Dict[str, Any]) -> bool:
+    """AND 语义:全部 predicate 满足才 True。"""
+    for p in when.predicates:
+        if p.key not in case:
+            return False
+        if not _compare(p.op, case[p.key], p.value):
+            return False
+    return True
+
+
+@dataclass(frozen=True)
+class ExpandedCase:
+    """含 set_extra 应用结果;disable_axes 已过滤(不出现)。"""
+    values: Dict[str, Any]
+    extras: Tuple[Tuple[str, str], ...] = ()
+
+
+def expand_with_conditions(
+    spec: SweepSpec,
+    conditions: Tuple[ConditionalRule, ...] = (),
+) -> List[ExpandedCase]:
+    """v2 展开:笛卡尔积 + first-match-wins condition。
+
+    语义(spec §6.1):
+    - 笛卡尔积对 spec.values 展开,得到 raw cases
+    - 对每个 raw case,找第一条 when 命中的 rule,应用其 then
+      (从 values 删除 disable_axes 列,extras 字段填 set_extra 的内容)
+    - 若无 rule 命中,该 case 保留原样(miss → keep,不被条件过滤掉)
+    """
+    raw_cases = expand_cartesian(spec)
+    out: List[ExpandedCase] = []
+    for raw in raw_cases:
+        hit_rule = None
+        for rule in conditions:
+            if evaluate_condition(rule.when, raw):
+                hit_rule = rule
+                break
+        if hit_rule is None:
+            # miss → keep (case 不被条件过滤掉,只是不带 extras)
+            out.append(ExpandedCase(values=raw, extras=()))
+            continue
+        # apply then
+        values = {k: v for k, v in raw.items() if k not in hit_rule.then.disable_axes}
+        out.append(ExpandedCase(values=values, extras=hit_rule.then.set_extra))
+    return out
