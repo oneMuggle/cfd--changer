@@ -536,14 +536,12 @@ __all__: List[str] = [
     "YamlEditorWidget",
     "YamlHighlighter",
     "LineNumberArea",
-    "SweepYamlEditorView",
 ]
 
 
-#: 容器 widget 的实际实现位于 :mod:`sweep_yaml_editor_view` 模块。
-#: 在这里 re-export 是为了保持向后兼容的 import 路径
-#: (``inp_tool_gui.widgets.sweep_yaml_editor.SweepYamlEditorView``),
-#: Task 5.1/5.2/5.3 的测试和外部代码都依赖此路径。
-from inp_tool_gui.widgets.sweep_yaml_editor_view import (  # noqa: E402,F401
-    SweepYamlEditorView,
-)
+#: ``SweepYamlEditorView`` 的实际实现位于 :mod:`sweep_yaml_editor_view` 模块。
+#: Task 5.3 / PR #53 在这里写了一个 re-export,导致
+#: ``sweep_yaml_editor_view`` 引用本文件 → 本文件又引用 view 的循环 import。
+#: 改从 :mod:`sweep_yaml_editor_view` 直接 import SweepYamlEditorView:
+#:   ``from inp_tool_gui.widgets.sweep_yaml_editor_view import SweepYamlEditorView``
+#: 旧 import 路径通过外部 stub 兼容(测试和 main_window.py 都已更新)

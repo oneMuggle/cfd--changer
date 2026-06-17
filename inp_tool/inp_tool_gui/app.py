@@ -44,6 +44,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     app = QApplication(list(argv) if argv is not None else sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
+    # Phase 7 / Task 7.3: 首次启动时 seed 3 个默认 preset 到用户目录
+    # (low-speed / transonic / high-speed)
+    try:
+        from pathlib import Path
+        from inp_tool_gui.preset_library import seed_default_presets
+        user_preset_dir = Path.home() / ".config" / "cfd--changer" / "presets"
+        seed_default_presets(user_preset_dir)
+    except Exception as _e:  # 启动失败不能阻塞 GUI;preset 缺失可后续手工添加
+        import sys as _sys
+        print(f"warning: failed to seed default presets: {_e}", file=_sys.stderr)
     window = build_window()
     window.show()
     return app.exec_()

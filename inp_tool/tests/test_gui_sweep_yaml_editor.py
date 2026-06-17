@@ -228,6 +228,7 @@ def test_editor_set_error_line(qapp):
 
 def test_editor_syntax_highlighter_attached(qapp):
     """高亮器应已 attach 到内部 editor 的 document。"""
+    # YamlEditorWidget + YamlHighlighter 都在 sweep_yaml_editor(基础 widget)
     from inp_tool_gui.widgets.sweep_yaml_editor import (
         YamlEditorWidget,
         YamlHighlighter,
@@ -259,7 +260,7 @@ def test_editor_text_changes_after_edit(qapp):
 
 
 def test_yaml_editor_view_creates_from_store(qapp):
-    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.widgets.sweep_yaml_editor_view import SweepYamlEditorView
     from inp_tool_gui.models.config_store import ConfigStore
     store = ConfigStore(template="t", output_dir="/o", naming="case",
                          preset_ref=None, sweeps={}, conditions=())
@@ -269,7 +270,7 @@ def test_yaml_editor_view_creates_from_store(qapp):
 
 def test_yaml_editor_view_set_store_updates_editor(qapp):
     """外部 set_store → YAML 编辑器文本更新。"""
-    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.widgets.sweep_yaml_editor_view import SweepYamlEditorView
     from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
 
     v = SweepYamlEditorView(ConfigStore(template="", output_dir="", naming="case",
@@ -291,7 +292,7 @@ def test_yaml_editor_view_set_store_updates_editor(qapp):
 
 def test_yaml_editor_view_preview_table_populated(qapp):
     """store 有 3 个 case → 预览表 3 行。"""
-    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.widgets.sweep_yaml_editor_view import SweepYamlEditorView
     from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
 
     store = ConfigStore(
@@ -306,7 +307,7 @@ def test_yaml_editor_view_preview_table_populated(qapp):
 
 def test_yaml_editor_view_variable_tree_inserts_key(qapp, monkeypatch):
     """variable_picked → YAML 编辑器光标处插入 key。"""
-    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.widgets.sweep_yaml_editor_view import SweepYamlEditorView
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
     from inp_tool_gui.models.config_store import ConfigStore
 
@@ -324,7 +325,7 @@ def test_yaml_editor_view_variable_tree_inserts_key(qapp, monkeypatch):
 
 def test_yaml_editor_view_preset_doubleclick_loads(qapp, tmp_path):
     """preset 列表双击 → 加载 preset YAML 到编辑器 + emit preset_loaded。"""
-    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.widgets.sweep_yaml_editor_view import SweepYamlEditorView
     from inp_tool_gui.preset_library import PresetLibrary
     from inp_tool_gui.models.config_store import ConfigStore
 
