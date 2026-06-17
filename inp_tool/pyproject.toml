@@ -71,7 +71,19 @@ inp-tool-gui = "inp_tool_gui.app:main"   # v0.10 新增
 "Source" = "https://example.invalid/cfd++changer"
 
 [tool.setuptools]
-packages = ["inp_tool", "inp_tool_gui"]
+packages = [
+    "inp_tool",
+    "inp_tool_gui",
+    "inp_tool_gui.resources",
+    "inp_tool_gui.resources.default_presets",
+]
+
+[tool.setuptools.package-data]
+inp_tool_gui = [
+    "resources/inp-tool-gui.ico",
+    "resources/inp-tool-gui.png",
+    "resources/default_presets/*.yaml",
+]
 
 [tool.setuptools.dynamic]
 version = {attr = "inp_tool.__version__"}
