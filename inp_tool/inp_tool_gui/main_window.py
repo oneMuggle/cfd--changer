@@ -21,6 +21,7 @@ from PySide2.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QShortcut,
     QStatusBar,
     QTabWidget,
     QToolBar,
@@ -44,6 +45,8 @@ from inp_tool_gui.widgets.preset_dialog import PresetDialog
 # (Phase 3 / Task 3.3 — 切换到 ConfigStore 单向数据流)。
 from inp_tool_gui.widgets.sweep_form import SweepForm  # noqa: F401
 from inp_tool_gui.widgets.sweep_form_view import SweepFormView
+from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
 from inp_tool_gui.widgets.value_editor import ValueEditorDialog
 
 
@@ -185,7 +188,11 @@ class MainWindow(QMainWindow):
         # Phase 3 / Task 3.3: 改用 SweepFormView(ConfigStore 单向数据流)。
         # ``SweepForm`` 保留为 import-compat 兼容类(见 sweep_form.py),
         # 这里不再直接构造。完整 v2 controller 接线留给 Task 3.4。
-        self._sweep_initial_store = ConfigStore(
+        #
+        # Phase 7 / Task 7.1: Sweep 顶层 tab 改为内嵌 QTabWidget,
+        # 包 3 个子视图(Wizard / Form / YAML),共享一个 ConfigStore。
+        # 改一个 view → 其他 view 经 _on_view_store_changed 同步刷。
+        self._sweep_store = ConfigStore(
             template="",
             output_dir="",
             naming="case",
@@ -193,13 +200,53 @@ class MainWindow(QMainWindow):
             sweeps={},
             conditions=(),
         )
-        self.sweep_form = SweepFormView(self._sweep_initial_store, self)
+        # 向后兼容别名(老测试可能引用 self.sweep_form / _sweep_initial_store)
+        self._sweep_initial_store = self._sweep_store
 
-        def _on_store_changed(new_store):
-            # TODO: full v2 controller integration in Task 3.4
+        self._sweep_wizard = SweepWizard(self._sweep_store, self)
+        self._sweep_form = SweepFormView(self._sweep_store, self)
+        self.sweep_form = self._sweep_form  # 旧属性别名(测试用)
+        self._sweep_yaml = SweepYamlEditorView(self._sweep_store, self)
+
+        def _on_view_store_changed(new_store):
+            """任一子 view store_changed → 推回中央 store + 同步到其他 view。"""
+            if not isinstance(new_store, ConfigStore):
+                return
+            if new_store == self._sweep_store:
+                return  # 无变化
+            self._sweep_store = new_store
             self._sweep_initial_store = new_store
-        self.sweep_form.store_changed.connect(_on_store_changed)
-        self.tabs.addTab(self.sweep_form, tg("tab.sweep_zh"))
+            # 同步到另外两个 view(避免回环:相同对象 → _sync_from_store 内部判等)
+            for v in (self._sweep_wizard, self._sweep_form, self._sweep_yaml):
+                if v is self.sender():
+                    continue
+                v._sync_from_store(new_store)
+
+        self._sweep_wizard.store_changed.connect(_on_view_store_changed)
+        self._sweep_form.store_changed.connect(_on_view_store_changed)
+        self._sweep_yaml.store_changed.connect(_on_view_store_changed)
+
+        # 内嵌 QTabWidget 包 3 个子视图
+        self._sweep_tab = QTabWidget(self)
+        self._sweep_tab.setObjectName("SweepInnerTabs")
+        self._sweep_tab.addTab(self._sweep_wizard, tg("sweep.tab.wizard"))
+        self._sweep_tab.addTab(self._sweep_form, tg("sweep.tab.form"))
+        self._sweep_tab.addTab(self._sweep_yaml, tg("sweep.tab.yaml"))
+        self.tabs.addTab(self._sweep_tab, tg("tab.sweep_zh"))
+
+        # Ctrl+1/2/3 切子 tab 快捷键
+        self._shortcut_wizard = QShortcut(QKeySequence("Ctrl+1"), self)
+        self._shortcut_wizard.activated.connect(
+            lambda: self._sweep_tab.setCurrentIndex(0)
+        )
+        self._shortcut_form = QShortcut(QKeySequence("Ctrl+2"), self)
+        self._shortcut_form.activated.connect(
+            lambda: self._sweep_tab.setCurrentIndex(1)
+        )
+        self._shortcut_yaml = QShortcut(QKeySequence("Ctrl+3"), self)
+        self._shortcut_yaml.activated.connect(
+            lambda: self._sweep_tab.setCurrentIndex(2)
+        )
 
         self.diff_viewer = DiffViewer(self.diff_ctrl, self)
         self.tabs.addTab(self.diff_viewer, tg("tab.diff"))

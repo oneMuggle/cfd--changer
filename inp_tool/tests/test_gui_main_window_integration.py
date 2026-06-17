@@ -228,10 +228,17 @@ def test_main_window_has_search_bar_above_tree(qapp):
 
 
 def test_main_window_has_sweep_tab(qapp):
-    """v0.16.1:Sweep 顶层 tab 翻译为"批量算例" / "&Batch Cases",
-    不再含 File/Live 子 QTabWidget(Change 3 把实时编辑直接集成进 SweepForm)。
+    """v0.16.1:Sweep 顶层 tab 翻译为"批量算例" / "&Batch Cases"。
+
+    Phase 7 / Task 7.1: Sweep 顶层 tab 现在包一个内嵌 QTabWidget,
+    含 3 个子视图(Wizard / Form / YAML),共享一个 ConfigStore。
+    ``sweep_form`` 仍作为 Form 子视图的别名(向后兼容老测试)。
     """
     from inp_tool_gui.main_window import MainWindow
+    from inp_tool_gui.widgets.sweep_form_view import SweepFormView
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from PySide2.QtWidgets import QTabWidget
     from inp_tool.i18n_gui import tg
 
     win = MainWindow()
@@ -244,8 +251,81 @@ def test_main_window_has_sweep_tab(qapp):
                 sweep_idx = i
                 break
         assert sweep_idx is not None, "MainWindow 没有 Sweep 顶层 tab"
-        # v0.16.1:Sweep tab 容器就是 SweepForm(不再有子 QTabWidget)
-        assert win.tabs.widget(sweep_idx) is win.sweep_form
+        # Phase 7:Sweep 顶层 tab 容器是内嵌 QTabWidget
+        inner = win.tabs.widget(sweep_idx)
+        assert isinstance(inner, QTabWidget)
+        assert inner.count() == 3
+        # 3 个子视图:Wizard / SweepFormView / SweepYamlEditorView
+        assert isinstance(inner.widget(0), SweepWizard)
+        assert isinstance(inner.widget(1), SweepFormView)
+        assert isinstance(inner.widget(2), SweepYamlEditorView)
+        # 向后兼容别名
+        assert win.sweep_form is win._sweep_form
+        assert win._sweep_initial_store is win._sweep_store
+    finally:
+        win.close()
+        win.deleteLater()
+
+
+def test_sweep_inner_tab_shortcuts_switch_views(qapp):
+    """Phase 7 / Task 7.1:Ctrl+1/2/3 切 Sweep 子 tab(Wizard/Form/YAML)。"""
+    from inp_tool_gui.main_window import MainWindow
+    from inp_tool.i18n_gui import tg
+    from PySide2.QtGui import QKeySequence
+
+    win = MainWindow()
+    try:
+        # 找内嵌 Sweep tab
+        inner = None
+        for i in range(win.tabs.count()):
+            if tg("tab.sweep_zh") in win.tabs.tabText(i):
+                inner = win.tabs.widget(i)
+                break
+        assert inner is not None
+        assert inner.count() == 3
+        # 默认是 0(Wizard)
+        assert inner.currentIndex() == 0
+        # 触发 Ctrl+2 → 切到 Form
+        win._shortcut_form.activated.emit()
+        assert inner.currentIndex() == 1
+        # 触发 Ctrl+3 → 切到 YAML
+        win._shortcut_yaml.activated.emit()
+        assert inner.currentIndex() == 2
+        # 触发 Ctrl+1 → 回到 Wizard
+        win._shortcut_wizard.activated.emit()
+        assert inner.currentIndex() == 0
+    finally:
+        win.close()
+        win.deleteLater()
+
+
+def test_sweep_subviews_share_config_store(qapp):
+    """3 个子视图共享一个 ConfigStore:改 wizard → form 应同步(经 _on_view_store_changed)。
+
+    这里直接调 wizard 的 store_changed emit(模拟"用户在 wizard 改了字段")。
+    """
+    from inp_tool_gui.main_window import MainWindow
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    win = MainWindow()
+    try:
+        # 初始 store 模板路径应为空
+        assert win._sweep_store.template == ""
+        assert win._sweep_form._edit_tpl.text() == ""
+        assert win._sweep_wizard._edit_tpl.text() == ""
+
+        # 构造新 store(模拟 wizard 改 template)
+        new_store = win._sweep_store.replace(template="/tmp/foo.inp")
+        # 直接 emit(等同用户 editingFinished 触发的 wizard.store_changed)
+        win._sweep_wizard.store_changed.emit(new_store)
+
+        # 中央 store 已更新
+        assert win._sweep_store.template == "/tmp/foo.inp"
+        # Form 子视图应同步(setText 被 _sync_from_store 调过)
+        assert win._sweep_form._edit_tpl.text() == "/tmp/foo.inp"
+        # YAML 子视图应同步(序列化回文本)
+        yaml_text = win._sweep_yaml._editor.toPlainText()
+        assert "/tmp/foo.inp" in yaml_text
     finally:
         win.close()
         win.deleteLater()
