@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - fix(gui): SweepForm 值 cell 不可编辑(enum 渲染为 QLabel + spec=None 时不创建 cell),改为统一 QLineEdit,允许用户对枚举轴做子集 sweep,并加 enum 校验(i18n key `sweep.live.invalid_enum`)
 
 ### Added
+- feat(gui): Phase 7 三视图 tab 整合 — 顶部 tab 嵌入 main_window,共享 ConfigStore 单向数据流,Ctrl+1/2/3 切向导/自由表单/YAML 子 tab;启动时 `seed_default_presets` 自动 copy 3 个默认 preset(low-speed-baseline / transonic-baseline / high-speed-baseline)到 `~/.config/cfd--changer/presets/`
 - feat(engine): Sweep v2 condition 原语(ConditionPredicate / ConditionWhen / ConditionalRule / ExpandedCase + parse_condition / evaluate_condition / expand_with_conditions)— first-match-wins 语义,miss → keep
 - feat(model): SweepConfigStore 模型层(AxisSpec frozen dataclass + ConfigStore frozen dataclass with replace/replace_sweep/remove_sweep/add_condition + PresetLibrary 用户级+团队级 preset CRUD + SweepControllerV2 load/dump YAML v2 + v1→v2 自动升级)— 纯 Python,无 PySide2 依赖;为 Phase 3-7 GUI 三视图提供单向数据流基座
 - refactor(gui): SweepFormView 替换旧 SweepForm(ConfigStore 单向数据流 + store_changed signal)— main_window 已切换;旧 SweepForm 标 deprecated 但保留 import 兼容 shim(可接 ConfigStore 或旧 SweepController);EnumChecklistDialog 新增(枚举多选)
