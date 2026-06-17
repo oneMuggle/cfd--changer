@@ -27,6 +27,7 @@ from PySide2.QtWidgets import (
 
 from inp_tool.i18n_gui import tg
 from inp_tool_gui.models.config_store import ConfigStore
+from inp_tool_gui.widgets.sweep_wizard_step2 import SweepWizardStep2
 
 
 _STEP_TITLES = (
@@ -95,7 +96,10 @@ class SweepWizard(QWidget):
         # QStackedWidget 含 4 页
         self._stack = QStackedWidget(self)
         self._stack.addWidget(self._build_step1())  # index 0
-        self._stack.addWidget(self._build_placeholder("wizard.todo.step2"))  # 1
+        # Step 2:实例化并连接 store_changed → _set_store
+        self._step2 = SweepWizardStep2(self._store, self)
+        self._step2.store_changed.connect(self._on_step2_store_changed)
+        self._stack.addWidget(self._step2)  # 1
         self._stack.addWidget(self._build_placeholder("wizard.todo.step3"))  # 2
         self._stack.addWidget(self._build_placeholder("wizard.todo.step4"))  # 3
         root.addWidget(self._stack, 1)
@@ -191,6 +195,32 @@ class SweepWizard(QWidget):
         finally:
             for w in widgets:
                 w.blockSignals(False)
+        # 同步 Step 2:重新从 store 刷新右侧表 + 用当前 template 重新枚举变量
+        if hasattr(self, "_step2"):
+            self._step2.tree.set_template_path(store.template)
+            self._step2.refresh_from_store(store)
+
+    # --- Step 2 数据流 -------------------------------------------------
+
+    def _on_step2_store_changed(self, new_store: object) -> None:
+        """Step 2 add/remove 轴 → 用 wizard 自己的 _set_store 推进 store。
+
+        与 Step 1 共享同一 emit 出口,这样外部消费者只监听一个信号。
+        """
+        if not isinstance(new_store, ConfigStore):
+            return
+        if new_store == self._store:
+            return  # 无变化
+        self._set_store(new_store)
+
+    def _set_store(self, new_store: ConfigStore) -> None:
+        """内部:set self._store + emit store_changed(供 Step 2 调用)。
+
+        与 ``_emit_store`` 不同:这里**不**调 ``self._store.replace``,
+        因为 new_store 已经由 Step 2 自己构造好;避免重复 replace。
+        """
+        self._store = new_store
+        self.store_changed.emit(new_store)
 
     # --- form -> store 数据流 ------------------------------------------
 
@@ -227,6 +257,9 @@ class SweepWizard(QWidget):
             # 无变化(用户编辑了又改回原值)→ 不发信号
             return
         self._store = new_store
+        # template 字段变化 → 同步刷 Step 2 的变量树(让用户看到对应模板的变量)
+        if "template" in kwargs and hasattr(self, "_step2"):
+            self._step2.tree.set_template_path(new_store.template)
         self.store_changed.emit(new_store)
 
     # --- 步骤切换 -------------------------------------------------------

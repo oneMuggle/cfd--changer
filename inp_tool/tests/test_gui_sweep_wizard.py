@@ -349,3 +349,369 @@ def test_wizard_browse_output_cancel_no_emit(qapp, monkeypatch):
     w.store_changed.connect(lambda s: received.append(s))
     w._btn_out.click()
     assert received == []
+
+
+# --- Step 2(选轴 + 设值)— Task 4.3 ------------------------------------
+
+
+def test_wizard_step2_widget_present(qapp):
+    """wizard 必须暴露 _step2(SweepWizardStep2 实例)。"""
+    from inp_tool_gui.widgets.sweep_wizard_step2 import SweepWizardStep2
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    store = _make_store()
+    w = SweepWizard(store)
+    assert isinstance(w._step2, SweepWizardStep2)
+
+
+def test_wizard_step2_initial_table_empty(qapp):
+    """初始 store.sweeps 为空 → 表格无 row。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    store = _make_store()
+    w = SweepWizard(store)
+    assert w._step2._table.rowCount() == 0
+    assert w._step2.selected == {}
+
+
+def test_wizard_step2_refresh_from_store_populates_table(qapp):
+    """外部 replace → step2 表格重建。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import AxisSpec
+    store = _make_store()
+    w = SweepWizard(store)
+    new_store = store.replace_sweep(
+        "mach", AxisSpec(kind="range", range_min=0, range_max=2, range_step=1),
+    )
+    w._sync_from_store(new_store)
+    assert w._step2._table.rowCount() == 1
+    # 第 0 行第 0 列是 "mach"
+    key_item = w._step2._table.item(0, 0)
+    assert key_item.text() == "mach"
+
+
+def test_wizard_step2_add_axis_via_method(qapp):
+    """调 step2.add_axis('turbulence') → store_changed 触发,sweeps dict 更新。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore
+    from inp_tool_gui.widgets.sweep_wizard_step2 import SweepWizardStep2
+    store = ConfigStore(template="t", output_dir="o", naming="case",
+                        preset_ref=None, sweeps={}, conditions=())
+    w = SweepWizard(store)
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    w._step2.add_axis("turbulence")  # 直接调方法 (不需要真实拖拽)
+    assert any("turbulence" in s.sweeps for s in received)
+    assert w._store.sweeps.get("turbulence") is not None  # 最新 store
+    # 表格也加了 row
+    assert w._step2._table.rowCount() == 1
+    # step2 内部 _selected 也更新
+    assert "turbulence" in w._step2.selected
+
+
+def test_wizard_step2_remove_axis_emits(qapp):
+    """删除一个轴 → store_changed 触发。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None,
+        sweeps={"mach": AxisSpec(kind="range", range_min=0, range_max=2, range_step=1)},
+        conditions=(),
+    )
+    w = SweepWizard(store)
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    w._step2.remove_axis("mach")
+    assert any("mach" not in s.sweeps for s in received)
+    assert "mach" not in w._store.sweeps
+    assert w._step2._table.rowCount() == 0
+
+
+def test_wizard_step2_add_duplicate_axis_no_op(qapp):
+    """重复 add 同一个 key → 不应触发 store_changed(去重)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    store = ConfigStore(template="t", output_dir="o", naming="case",
+                        preset_ref=None, sweeps={}, conditions=())
+    w = SweepWizard(store)
+    # 先 set_vars 让 step2 知道有哪些变量可选
+    w._step2.tree.set_vars([
+        VarSpec(key="mach", label="mach [int]", kind="int",
+                block="<top>", keyword="mach", value_idx=0),
+    ])
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    w._step2.add_axis("mach")
+    w._step2.add_axis("mach")  # duplicate
+    assert len(received) == 1
+
+
+def test_wizard_step2_remove_nonexistent_axis_no_op(qapp):
+    """remove_axis 不存在的 key → 不 emit。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    store = _make_store()
+    w = SweepWizard(store)
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    w._step2.remove_axis("not_there")
+    assert received == []
+
+
+def test_wizard_step2_default_spec_for_enum(qapp):
+    """add_axis('turbulence') 用 VarSpec.enum_values 推断 enum_subset(全选)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    store = _make_store()
+    w = SweepWizard(store)
+    w._step2.tree.set_vars([
+        VarSpec(key="turbulence", label="turbulence", kind="enum",
+                enum_values=("sst", "kw", "sa"),
+                block=None, keyword=None, value_idx=None),
+    ])
+    w._step2.add_axis("turbulence")
+    spec = w._store.sweeps["turbulence"]
+    assert spec.kind == "enum_subset"
+    assert set(spec.values) == {"sst", "kw", "sa"}
+
+
+def test_wizard_step2_default_spec_for_int(qapp):
+    """add_axis('mach') 用 VarSpec.kind='int' 推断 range[0,2,step=1]。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    store = _make_store()
+    w = SweepWizard(store)
+    w._step2.tree.set_vars([
+        VarSpec(key="mach", label="mach [int]", kind="int",
+                block="<top>", keyword="mach", value_idx=0),
+    ])
+    w._step2.add_axis("mach")
+    spec = w._store.sweeps["mach"]
+    assert spec.kind == "range"
+    assert spec.range_min == 0
+    assert spec.range_max == 2
+    assert spec.range_step == 1
+
+
+def test_wizard_step2_default_spec_unknown_key(qapp):
+    """add_axis 对 step2 不认识的 key → explicit_list,空 tuple。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+
+    store = _make_store()
+    w = SweepWizard(store)
+    # tree 是空的,key 'foo' 不在 _all_vars
+    w._step2.add_axis("foo")
+    spec = w._store.sweeps["foo"]
+    assert spec.kind == "explicit_list"
+    assert spec.values == ()
+
+
+def test_wizard_step2_default_spec_for_float(qapp):
+    """add_axis 用 VarSpec.kind='float' 推断 range[0.0, 2.0, step=1.0]。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    store = _make_store()
+    w = SweepWizard(store)
+    w._step2.tree.set_vars([
+        VarSpec(key="reynolds", label="reynolds [float]", kind="float",
+                block="<top>", keyword="reynolds", value_idx=0),
+    ])
+    w._step2.add_axis("reynolds")
+    spec = w._store.sweeps["reynolds"]
+    assert spec.kind == "range"
+    assert spec.range_min == 0.0
+    assert spec.range_max == 2.0
+    assert spec.range_step == 1.0
+
+
+def test_wizard_step2_default_spec_for_csv_str_kind(qapp):
+    """add_axis 用 VarSpec.kind='str'(非 enum/int/float)→ explicit_list。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    store = _make_store()
+    w = SweepWizard(store)
+    w._step2.tree.set_vars([
+        VarSpec(key="runtype", label="runtype [str]", kind="str",
+                block="<top>", keyword="runtype", value_idx=0),
+    ])
+    w._step2.add_axis("runtype")
+    spec = w._store.sweeps["runtype"]
+    assert spec.kind == "explicit_list"
+    assert spec.values == ()
+
+
+def test_wizard_step2_add_button_click_adds_selected(qapp):
+    """点 '添加选中' 按钮 → 把当前 tree 选中行加入已选轴。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    store = _make_store()
+    w = SweepWizard(store)
+    w._step2.tree.set_vars([
+        VarSpec(key="mach", label="mach", kind="int",
+                block="<top>", keyword="mach", value_idx=0),
+    ])
+    # 选中第一个 leaf(代表 mach)
+    # 找到代表 mach 的 leaf item
+    item = None
+    for i in range(w._step2.tree.tree.topLevelItemCount()):
+        group = w._step2.tree.tree.topLevelItem(i)
+        for j in range(group.childCount()):
+            child = group.child(j)
+            if "mach" in child.text(0):
+                item = child
+                break
+    assert item is not None
+    w._step2.tree.tree.setCurrentItem(item)
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    w._step2._btn_add.click()
+    assert "mach" in w._store.sweeps
+    assert any("mach" in s.sweeps for s in received)
+
+
+def test_wizard_step2_add_button_no_selection_no_op(qapp):
+    """点 '添加选中' 但 tree 无选中 → no-op,不 emit。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+
+    store = _make_store()
+    w = SweepWizard(store)
+    # 清空 currentItem(默认无选中)
+    w._step2.tree.tree.clearSelection()
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    w._step2._btn_add.click()
+    assert received == []
+
+
+def test_wizard_step2_table_row_delete_button(qapp):
+    """点删除按钮 → row 被移除 + emit store_changed。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    store = _make_store()
+    w = SweepWizard(store)
+    w._step2.tree.set_vars([
+        VarSpec(key="mach", label="mach", kind="int",
+                block="<top>", keyword="mach", value_idx=0),
+    ])
+    w._step2.add_axis("mach")
+    assert w._step2._table.rowCount() == 1
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    # 拿到 cell widget 中的删除按钮并 click
+    btn = w._step2._table.cellWidget(0, 2)
+    btn.click()
+    assert w._step2._table.rowCount() == 0
+    assert any("mach" not in s.sweeps for s in received)
+
+
+def test_wizard_step2_double_click_tree_adds_axis(qapp):
+    """双击左侧 tree leaf → add_axis 自动触发,store 含该 key。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    store = _make_store()
+    w = SweepWizard(store)
+    w._step2.tree.set_vars([
+        VarSpec(key="mach", label="mach [int]", kind="int",
+                block="<top>", keyword="mach", value_idx=0),
+    ])
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    # 找到代表 mach 的 leaf item 并触发 variable_picked 信号(模拟双击)
+    w._step2.tree.variable_picked.emit("mach")
+    assert "mach" in w._store.sweeps
+    assert any("mach" in s.sweeps for s in received)
+
+
+def test_wizard_step2_format_spec_text_range(qapp):
+    """值列文本:range → 'range[min, max, step=step]'。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+    from inp_tool_gui.widgets.sweep_wizard_step2 import _format_spec_text
+    from inp_tool_gui.models.config_store import AxisSpec
+
+    spec = AxisSpec(kind="range", range_min=0, range_max=2, range_step=1)
+    text = _format_spec_text(spec)
+    assert "range" in text
+    assert "0" in text and "2" in text and "1" in text
+
+
+def test_wizard_step2_format_spec_text_values(qapp):
+    """值列文本:enum_subset / explicit_list / csv_str → ', '.join(values)。"""
+    from inp_tool_gui.widgets.sweep_wizard_step2 import _format_spec_text
+    from inp_tool_gui.models.config_store import AxisSpec
+
+    spec = AxisSpec(kind="enum_subset", values=("sst", "kw"))
+    assert _format_spec_text(spec) == "sst, kw"
+
+    spec = AxisSpec(kind="explicit_list", values=("a", "b", "c"))
+    assert _format_spec_text(spec) == "a, b, c"
+
+
+def test_wizard_step2_refresh_from_store_keeps_table_in_sync(qapp):
+    """外部 replace → refresh_from_store → 表格 row 数 == len(store.sweeps)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import AxisSpec
+
+    store = _make_store()
+    w = SweepWizard(store)
+    # 先 add 一个
+    w._step2.add_axis("mach")
+    assert w._step2._table.rowCount() == 1
+    # 外部 replace:多了一个 axis
+    new_store = w._store.replace_sweep(
+        "reynolds",
+        AxisSpec(kind="range", range_min=1e5, range_max=1e6, range_step=1e5),
+    )
+    w._sync_from_store(new_store)
+    assert w._step2._table.rowCount() == 2
+    assert "mach" in w._step2.selected
+    assert "reynolds" in w._step2.selected
+
+
+def test_wizard_step2_template_change_refreshes_tree(qapp):
+    """Step 1 改 template → step2.tree 重新枚举。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+
+    store = _make_store(template="")
+    w = SweepWizard(store)
+    # 初始 template 空 → 只 3 个枚举轴
+    initial_count = len(w._step2.tree._all_vars)
+    assert initial_count == 3  # turbulence/energy/gas
+
+    # 改 template
+    w._edit_tpl.setText("/some/file.inp")
+    w._edit_tpl.editingFinished.emit()
+    # 此时 template 已变化,但树不会自动重新枚举(避免阻塞 UI),
+    # 需要 _sync_from_store 才会触发(模拟外部 replace 的路径)
+    w._sync_from_store(w._store)
+    # 现在 template 已变,set_template_path 会调 enumerate_vars
+    # 对不存在的路径静默退回只枚举轴(3 个)
+    assert w._step2.tree._template_path == "/some/file.inp"
+
+
+def test_wizard_step2_table_columns(qapp):
+    """表格 3 列:轴名 / 值 / 操作(列标题存在)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+
+    store = _make_store()
+    w = SweepWizard(store)
+    w._step2.tree.set_vars([
+        VarSpec(key="mach", label="mach", kind="int",
+                block="<top>", keyword="mach", value_idx=0),
+    ])
+    w._step2.add_axis("mach")
+    header = w._step2._table.horizontalHeader()
+    # 3 列都有 label
+    assert header.model().columnCount() == 3
+    # 每行 3 个 cell(其中 _COL_OP 是 QPushButton widget)
+    assert w._step2._table.item(0, 0) is not None  # key
+    assert w._step2._table.item(0, 1) is not None  # value
+    assert w._step2._table.cellWidget(0, 2) is not None  # delete button
