@@ -29,6 +29,7 @@ from inp_tool.i18n_gui import tg
 from inp_tool_gui.models.config_store import ConfigStore
 from inp_tool_gui.widgets.sweep_wizard_step2 import SweepWizardStep2
 from inp_tool_gui.widgets.sweep_wizard_step3 import SweepWizardStep3
+from inp_tool_gui.widgets.sweep_wizard_step4 import SweepWizardStep4
 
 
 _STEP_TITLES = (
@@ -41,7 +42,7 @@ _TODO_TEXTS = (
     None,  # Step 1 is real, not TODO
     "wizard.todo.step2",
     None,  # Step 3 is real (Task 4.4)
-    "wizard.todo.step4",
+    None,  # Step 4 is real (Task 4.5)
 )
 
 
@@ -105,7 +106,9 @@ class SweepWizard(QWidget):
         self._step3 = SweepWizardStep3(self._store, self)
         self._step3.store_changed.connect(self._on_step3_store_changed)
         self._stack.addWidget(self._step3)  # 2
-        self._stack.addWidget(self._build_placeholder("wizard.todo.step4"))  # 3
+        # Step 4(Task 4.5):预览 + 运行(无 store_changed,只读 view)
+        self._step4 = SweepWizardStep4(self._store, self)
+        self._stack.addWidget(self._step4)  # 3
         root.addWidget(self._stack, 1)
 
         # 底部按钮行
@@ -206,6 +209,9 @@ class SweepWizard(QWidget):
         # 同步 Step 3:重建条件 rows
         if hasattr(self, "_step3"):
             self._step3.refresh_from_store(store)
+        # 同步 Step 4:重建 case 数 + 预览
+        if hasattr(self, "_step4"):
+            self._step4.refresh_from_store(store)
 
     # --- Step 2 数据流 -------------------------------------------------
 
@@ -245,11 +251,14 @@ class SweepWizard(QWidget):
         结果一样。
         """
         self._store = new_store
-        # 同步刷新 Step 2/3(若有 sweep 变化让 step2 重画;若 condition 变化让 step3 重画)
+        # 同步刷新 Step 2/3/4(若有 sweep 变化让 step2 重画;若 condition 变化让 step3 重画;
+        # step4 总跟着 store 变化刷新预览)
         if hasattr(self, "_step2"):
             self._step2.refresh_from_store(new_store)
         if hasattr(self, "_step3"):
             self._step3.refresh_from_store(new_store)
+        if hasattr(self, "_step4"):
+            self._step4.refresh_from_store(new_store)
         self.store_changed.emit(new_store)
 
     # --- form -> store 数据流 ------------------------------------------

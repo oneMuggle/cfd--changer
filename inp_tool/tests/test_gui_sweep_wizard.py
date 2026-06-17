@@ -904,3 +904,212 @@ def test_wizard_step3_parse_set_extra_helper(qapp):
     assert _parse_set_extra("a=1") == (("a", "1"),)
     assert _parse_set_extra("noequals") == ()
     assert _parse_set_extra("") == ()
+
+
+# --- Step 4(预览 + 运行)— Task 4.5 ----------------------------------
+
+
+def test_wizard_step4_widget_present(qapp):
+    """wizard 必须暴露 _step4(SweepWizardStep4 实例)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_wizard_step4 import SweepWizardStep4
+    store = _make_store()
+    w = SweepWizard(store)
+    assert isinstance(w._step4, SweepWizardStep4)
+    # Step 4 不再是占位 — 应是 SweepWizardStep4,不是 QLabel
+    page = w._stack.widget(3)
+    assert page is w._step4
+
+
+def test_wizard_step4_case_count_label(qapp):
+    """store.case_count 变化 → label 更新。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None,
+        sweeps={
+            "a": AxisSpec(kind="range", range_min=0, range_max=2, range_step=1),  # 3 cases
+        },
+        conditions=(),
+    )
+    w = SweepWizard(store)
+    # label 文本里应包含 "3" (current case count)
+    assert "3" in w._step4.case_count_text()
+
+
+def test_wizard_step4_preview_populated(qapp):
+    """refresh_from_store → 预览表行数 = min(case_count, 50)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None,
+        sweeps={
+            "a": AxisSpec(kind="range", range_min=0, range_max=3, range_step=1),  # 4 cases
+        },
+        conditions=(),
+    )
+    w = SweepWizard(store)
+    # 4 cases 全部显示(未超 _PREVIEW_LIMIT=50),无 "(略 N)" 占位行
+    assert w._step4.preview_row_count() == 4
+
+
+def test_wizard_step4_preview_capped_at_50(qapp):
+    """case_count > 50 → 预览表 50 + 1 占位行(共 51)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None,
+        sweeps={
+            "a": AxisSpec(
+                kind="range", range_min=0, range_max=99, range_step=1,
+            ),  # 100 cases
+        },
+        conditions=(),
+    )
+    w = SweepWizard(store)
+    # 50 cases + 1 "(略 50)" row
+    assert w._step4.preview_row_count() == 51
+
+
+def test_wizard_step4_dry_run_emits(qapp):
+    """点 Dry run → emit dry_run_clicked(expanded_cases)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None,
+        sweeps={"a": AxisSpec(kind="range", range_min=0, range_max=2, range_step=1)},
+        conditions=(),
+    )
+    w = SweepWizard(store)
+    received = []
+    w._step4.dry_run_clicked.connect(lambda cases: received.append(cases))
+    # 用方法(也覆盖 _btn_dry.click() 路径)
+    w._step4.on_dry_run_clicked()
+    assert len(received) == 1
+    assert len(received[0]) == 3  # a=0,1,2
+
+
+def test_wizard_step4_run_emits_no_args(qapp):
+    """点 Run → emit run_clicked()(无参数)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    store = _make_store()
+    w = SweepWizard(store)
+    received = []
+    w._step4.run_clicked.connect(lambda: received.append(None))
+    w._step4.on_run_clicked()
+    assert len(received) == 1
+
+
+def test_wizard_step4_force_emits_no_args(qapp):
+    """点 Force → emit force_clicked()(无参数)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    store = _make_store()
+    w = SweepWizard(store)
+    received = []
+    w._step4.force_clicked.connect(lambda: received.append(None))
+    w._step4.on_force_clicked()
+    assert len(received) == 1
+
+
+def test_wizard_step4_dry_run_via_button(qapp):
+    """点 _btn_dry → emit dry_run_clicked(button click 路径)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None,
+        sweeps={"a": AxisSpec(kind="range", range_min=0, range_max=1, range_step=1)},
+        conditions=(),
+    )
+    w = SweepWizard(store)
+    received = []
+    w._step4.dry_run_clicked.connect(lambda cases: received.append(cases))
+    w._step4._btn_dry.click()
+    assert len(received) == 1
+    assert len(received[0]) == 2  # a=0,1
+
+
+def test_wizard_step4_extras_in_table(qapp):
+    """命中 condition 的 case 行的 applied 列包含 set_extra 内容。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+    from inp_tool.sweep import (
+        ConditionalRule, ConditionThen, parse_condition,
+    )
+
+    cond = ConditionalRule(
+        when=parse_condition({"a": "<2"}),
+        then=ConditionThen(set_extra=(("flag", "yes"),)),
+    )
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None,
+        sweeps={"a": AxisSpec(kind="range", range_min=0, range_max=2, range_step=1)},
+        conditions=(cond,),
+    )
+    w = SweepWizard(store)
+    # 第一行(a=0)命中条件(a<2)→ applied = "flag=yes"
+    applied = w._step4._table.item(0, 2).text()
+    assert "flag=yes" in applied
+    # 第二行(a=1)也命中 → applied = "flag=yes"
+    assert "flag=yes" in w._step4._table.item(1, 2).text()
+    # 第三行(a=2)miss → applied = ""
+    assert w._step4._table.item(2, 2).text() == ""
+
+
+def test_wizard_step4_invalid_range_doesnt_crash(qapp):
+    """range step=0 → 状态 label 显示错误,表清空,不抛异常。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None,
+        sweeps={"a": AxisSpec(kind="range", range_min=0, range_max=2, range_step=0)},
+        conditions=(),
+    )
+    w = SweepWizard(store)
+    # step=0 抛 ValueError → preview 表被清空,last_error 非空
+    assert w._step4.preview_row_count() == 0
+    assert w._step4.last_error() is not None
+
+
+def test_wizard_step4_refresh_on_store_change(qapp):
+    """外部 replace → step4 重建预览(与 step2/3 同款)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None,
+        sweeps={"a": AxisSpec(kind="range", range_min=0, range_max=2, range_step=1)},
+        conditions=(),
+    )
+    w = SweepWizard(store)
+    assert w._step4.preview_row_count() == 3
+    # 改 store:加一个 axis
+    new_store = store.replace_sweep(
+        "b", AxisSpec(kind="range", range_min=0, range_max=1, range_step=1),
+    )
+    w._sync_from_store(new_store)
+    # 3 * 2 = 6 cases
+    assert w._step4.preview_row_count() == 6
+
+
+def test_wizard_step4_empty_sweeps_zero_cases(qapp):
+    """空 sweeps → case_count = 0,表无 row。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    store = _make_store()
+    w = SweepWizard(store)
+    assert w._step4.preview_row_count() == 0
+    # case_count 文本里应有 0
+    assert "0" in w._step4.case_count_text()
