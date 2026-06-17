@@ -1,0 +1,16 @@
+# Default preset: 高超声速 baseline
+# 用于 M >= 1.4 的超声速/高超声速流场(导弹、返回舱、膨胀喷管、超声速进气道等)。
+# 典型现象: 强激波、真实气体效应显著、湍流模型选择对结果敏感。
+version: 2
+name: high-speed-baseline
+tags: [high-speed, supersonic]
+created_at: 2026-06-16T10:00:00
+updated_at: 2026-06-16T10:00:00
+author: onemuggle
+
+sweeps:
+  turbulence: [sst, sa, kw]
+  mach:
+    range: [1.4, 3.0, 0.4]
+
+conditions: []
