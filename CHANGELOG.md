@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - feat(engine): Sweep v2 condition 原语(ConditionPredicate / ConditionWhen / ConditionalRule / ExpandedCase + parse_condition / evaluate_condition / expand_with_conditions)— first-match-wins 语义,miss → keep
+- feat(model): SweepConfigStore 模型层(AxisSpec frozen dataclass + ConfigStore frozen dataclass with replace/replace_sweep/remove_sweep/add_condition + PresetLibrary 用户级+团队级 preset CRUD + SweepControllerV2 load/dump YAML v2 + v1→v2 自动升级)— 纯 Python,无 PySide2 依赖;为 Phase 3-7 GUI 三视图提供单向数据流基座
 
 ## [v0.17.0] - 2026-06-16
 
