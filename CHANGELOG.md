@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - fix(gui): SweepForm 值 cell 不可编辑(enum 渲染为 QLabel + spec=None 时不创建 cell),改为统一 QLineEdit,允许用户对枚举轴做子集 sweep,并加 enum 校验(i18n key `sweep.live.invalid_enum`)
 
+### Added
+- feat(engine): Sweep v2 condition 原语(ConditionPredicate / ConditionWhen / ConditionalRule / ExpandedCase + parse_condition / evaluate_condition / expand_with_conditions)— first-match-wins 语义,miss → keep
+
 ## [v0.17.0] - 2026-06-16
 
 ### Added (GUI Sweep 标签页 UX 重构)
