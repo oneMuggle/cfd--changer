@@ -1,0 +1,1 @@
+"""GUI 模型层(纯 Python,无 PySide2 依赖)。"""

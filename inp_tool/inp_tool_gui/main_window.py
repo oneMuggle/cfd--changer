@@ -34,12 +34,16 @@ from inp_tool_gui.controllers.diff_controller import DiffController
 from inp_tool_gui.controllers.edit_controller import EditController
 from inp_tool_gui.controllers.file_controller import FileController, CaseValidationError
 from inp_tool_gui.controllers.sweep_controller import SweepController
+from inp_tool_gui.models.config_store import ConfigStore
 from inp_tool_gui.widgets.detect_panel import DetectPanel
 from inp_tool_gui.widgets.diff_viewer import DiffViewer
 from inp_tool_gui.widgets.field_search_bar import FieldSearchBar
 from inp_tool_gui.widgets.inp_tree import InpTreeWidget
 from inp_tool_gui.widgets.preset_dialog import PresetDialog
-from inp_tool_gui.widgets.sweep_form import SweepForm
+# DEPRECATED: ``SweepForm`` 仍保留以做 import 兼容;UI 实际用 SweepFormView
+# (Phase 3 / Task 3.3 — 切换到 ConfigStore 单向数据流)。
+from inp_tool_gui.widgets.sweep_form import SweepForm  # noqa: F401
+from inp_tool_gui.widgets.sweep_form_view import SweepFormView
 from inp_tool_gui.widgets.value_editor import ValueEditorDialog
 
 
@@ -178,7 +182,23 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.detect_panel, tg("tab.detect"))
 
         # v0.16.1: Sweep 标签页直接用 SweepForm(Change 3 会把实时编辑集成进去)
-        self.sweep_form = SweepForm(self.sweep_ctrl, self)
+        # Phase 3 / Task 3.3: 改用 SweepFormView(ConfigStore 单向数据流)。
+        # ``SweepForm`` 保留为 import-compat 兼容类(见 sweep_form.py),
+        # 这里不再直接构造。完整 v2 controller 接线留给 Task 3.4。
+        self._sweep_initial_store = ConfigStore(
+            template="",
+            output_dir="",
+            naming="case",
+            preset_ref=None,
+            sweeps={},
+            conditions=(),
+        )
+        self.sweep_form = SweepFormView(self._sweep_initial_store, self)
+
+        def _on_store_changed(new_store):
+            # TODO: full v2 controller integration in Task 3.4
+            self._sweep_initial_store = new_store
+        self.sweep_form.store_changed.connect(_on_store_changed)
         self.tabs.addTab(self.sweep_form, tg("tab.sweep_zh"))
 
         self.diff_viewer = DiffViewer(self.diff_ctrl, self)

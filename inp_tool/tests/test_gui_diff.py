@@ -147,7 +147,7 @@ def sweep_yaml_path(tmp_path, sample_inp):
 def test_sweep_form_load_yaml_populates_config(qapp, sweep_yaml_path):
     """load_yaml 后 case_count=3,_lbl_cases 显示 'case 数: 3'。"""
     sc = SweepController()
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     form = SweepForm(sc)
     try:
@@ -162,7 +162,7 @@ def test_sweep_form_load_yaml_populates_config(qapp, sweep_yaml_path):
 def test_sweep_form_run_dry_fills_table(qapp, sweep_yaml_path):
     """load + run(dry=True) 后 _table 有 3 行。"""
     sc = SweepController()
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     form = SweepForm(sc)
     try:

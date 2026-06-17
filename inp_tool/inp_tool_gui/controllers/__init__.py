@@ -3,3 +3,4 @@
 controller 是"纯 Python"层,易测(不实例化 QApplication);
 widget 是"纯 Qt"层,只负责渲染 + signal 转发。
 """
+from inp_tool_gui.controllers.sweep_controller_v2 import SweepControllerV2  # noqa: F401
