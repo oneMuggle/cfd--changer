@@ -1,6 +1,6 @@
-"""SweepYamlEditor:YAML 文本编辑器(QPlainTextEdit + 行号 + 语法高亮)。
+"""SweepYamlEditor:YAML 文本编辑器(QPlainTextEdit + 行号 + 语法高亮 + 实时 lint)。
 
-Phase 5 / Task 5.1 基础视图组件。后续 Task 5.2(实时 lint)与
+Phase 5 / Task 5.1 基础视图组件 + Task 5.2 实时 schema lint。
 Task 5.3(侧边栏)将在此 widget 之上扩展。
 
 UI 结构:
@@ -11,6 +11,16 @@ UI 结构:
 公开 API(向后兼容,Task 5.2/5.3 依赖):
 - :meth:`text` / :meth:`set_text` — 读写编辑区文本
 - :meth:`set_error_line` — 标记错误行(1-based;0 = 清除)
+- :attr:`store_changed` — ``Signal(object)`` lint 通过后发出新 ConfigStore
+- :attr:`validation_error` — ``Signal(str)`` lint 失败后发出错误信息
+- :attr:`validation_status` — ``"valid"`` / ``"error"`` / ``"empty"``(property)
+
+实时 lint 行为(Task 5.2):
+- ``textChanged`` → 200ms 单次 ``QTimer`` 防抖 → ``yaml.safe_load`` + ``SweepControllerV2._parse``
+- YAML 解析失败 / schema 校验失败 → 错误行 + ``validation_error`` 信号
+- 校验通过 → ``store_changed`` 信号携带 ConfigStore
+- 空文本 / 纯空白 → ``"empty"`` 状态,无信号
+- 所有异常在 ``_do_lint`` 内捕获,绝不向外抛
 
 字体策略:等宽 monospace,默认 11pt;非 Pydantic 字段允许 ``list[X]`` 风格
 (配合 ``from __future__ import annotations`` 在 3.8 下可解析)。
@@ -22,7 +32,8 @@ from __future__ import annotations
 import re
 from typing import List, Optional
 
-from PySide2.QtCore import QRect, QSize, Qt
+import yaml
+from PySide2.QtCore import QRect, QSize, Qt, QTimer, Signal
 from PySide2.QtGui import (
     QColor,
     QFont,
@@ -82,6 +93,14 @@ _STRING_VALUE_RE = re.compile(r":\s*(['\"]).*?\1")
 _NUMBER_VALUE_RE = re.compile(r":\s*-?\d+(\.\d+)?([eE][+-]?\d+)?")
 #: 内联列表(``[a, b, c]``)
 _INLINE_LIST_RE = re.compile(r"\[[^\]\n]*\]")
+
+#: lint 防抖间隔(ms)— 每次 textChanged 重启 200ms 单次定时器
+_LINT_DEBOUNCE_MS = 200
+
+#: validation_status 取值
+_VALID = "valid"
+_ERROR = "error"
+_EMPTY = "empty"
 
 
 # --- 高亮器 ------------------------------------------------------------------
@@ -227,16 +246,30 @@ class LineNumberArea(QWidget):
 class YamlEditorWidget(QWidget):
     """YAML 文本编辑器 + 行号 + 语法高亮(Phase 5 / Task 5.1)。
 
+    Task 5.2 在此基础上加实时 schema lint(200ms 防抖)。
+
     用法::
 
         editor = YamlEditorWidget()
         editor.set_text("version: 2\\nsweeps:\\n  mach: [1, 2]\\n")
         editor.set_error_line(2)  # 第二行标红
+
+    实时 lint 信号::
+
+        editor.store_changed.connect(lambda store: ...)   # 校验通过
+        editor.validation_error.connect(lambda msg: ...)  # 校验失败
     """
+
+    # --- Task 5.2 信号 ---
+    # 校验通过(且文本非空)时发出新 ConfigStore。
+    store_changed = Signal(object)
+    # 校验失败时发出错误信息(人可读)。
+    validation_error = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._error_line: int = 0  # 1-based;0 = 无错误
+        self._validation_status: str = _EMPTY
 
         # --- QPlainTextEdit ---
         self._editor = QPlainTextEdit(self)
@@ -262,6 +295,16 @@ class YamlEditorWidget(QWidget):
         self._editor.cursorPositionChanged.connect(self._highlight_current_line)
         self._update_line_number_area_width(0)
         self._highlight_current_line()
+
+        # --- Task 5.2 实时 lint 管线 ---
+        # 单次 QTimer:每次 textChanged 重启,200ms 内若无新输入才触发 _do_lint。
+        self._lint_timer = QTimer(self)
+        self._lint_timer.setSingleShot(True)
+        self._lint_timer.setInterval(_LINT_DEBOUNCE_MS)
+        self._lint_timer.timeout.connect(self._do_lint)
+        # 文本变更 → 重启定时器。注意:程序化 set_text() 内部已 blockSignals,
+        # 所以不会因初始化或 reload 触发 lint。
+        self._editor.textChanged.connect(self._schedule_lint)
 
     # --- 公开 API --------------------------------------------------------
 
@@ -291,12 +334,137 @@ class YamlEditorWidget(QWidget):
         self._error_line = max(0, int(line_number))
         self._line_number_area.update()
 
+    # --- Task 5.2 公开 API(实时 lint)---------------------------------
+
+    @property
+    def validation_status(self) -> str:
+        """当前 lint 状态:``"valid"`` / ``"error"`` / ``"empty"``。
+
+        - ``"empty"`` — 文本为空白,不算错误
+        - ``"valid"`` — YAML 解析 + schema 校验均通过
+        - ``"error"`` — YAML 语法错或 schema 不合法
+        """
+        return self._validation_status
+
+    # --- 内部辅助 -------------------------------------------------------
+
     # --- 内部辅助 -------------------------------------------------------
 
     @property
     def error_line(self) -> int:
         """行号区绘制时读取的当前错误行(1-based,0 = 无)。"""
         return self._error_line
+
+    def _schedule_lint(self) -> None:
+        """textChanged → 重启 200ms 单次定时器。
+
+        每次文本变更都重新计时,确保用户连续键入期间不会反复触发 _do_lint;
+        停顿 200ms 后才真正执行一次 lint。
+        """
+        self._lint_timer.start()
+
+    def _do_lint(self) -> None:
+        """执行一次 lint:yaml.safe_load + SweepControllerV2._parse。
+
+        行为:
+        1. 文本为空 / 纯空白 → status="empty",清错误行,无信号
+        2. YAML 解析失败 → error_line 设为问题行,emit validation_error
+        3. schema 校验失败 → error_line 尽力推断,emit validation_error
+        4. 全部通过 → 清 error_line,emit store_changed(ConfigStore)
+
+        所有异常在内部 try/except 兜底,绝不向外抛(不能让 lint 逻辑把 editor 弄崩)。
+        """
+        text = self._editor.toPlainText()
+
+        # 1) 空文本 / 纯空白 → empty 状态
+        if not text or not text.strip():
+            self._validation_status = _EMPTY
+            self.set_error_line(0)
+            return
+
+        # 2) yaml.safe_load
+        try:
+            parsed = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            self._handle_yaml_error(exc)
+            return
+        except Exception as exc:  # 任何 YAML 库以外的异常也兜底
+            self._report_error(
+                line=0,
+                message=f"YAML 解析异常({type(exc).__name__}): {exc}",
+            )
+            return
+
+        # yaml.safe_load 在纯注释 / 空文件时返回 None,等价于"无内容"
+        if parsed is None or (isinstance(parsed, str) and not parsed.strip()):
+            self._validation_status = _EMPTY
+            self.set_error_line(0)
+            return
+
+        # YAML 顶层必须是 mapping(dict)
+        if not isinstance(parsed, dict):
+            self._report_error(
+                line=0,
+                message=(
+                    f"YAML 顶层必须是 mapping(键值对),得到 {type(parsed).__name__}。"
+                    "请检查是否误把单个数值/列表/字符串放到了文件顶部。"
+                ),
+            )
+            return
+
+        # 3) schema 校验(SweepControllerV2._parse)
+        try:
+            from inp_tool_gui.controllers.sweep_controller_v2 import SweepControllerV2
+
+            store = SweepControllerV2()._parse(parsed)
+        except KeyError as exc:
+            # _parse 中 data["template"] / data["output_dir"] 缺失会抛 KeyError
+            self._report_error(
+                line=0,
+                message=f"sweep YAML 缺少必填字段: {exc}",
+            )
+            return
+        except ValueError as exc:
+            self._report_error(line=0, message=str(exc))
+            return
+        except Exception as exc:  # 防御性兜底
+            self._report_error(
+                line=0,
+                message=f"schema 校验异常({type(exc).__name__}): {exc}",
+            )
+            return
+
+        # 4) 全部通过
+        self._validation_status = _VALID
+        self.set_error_line(0)
+        self.store_changed.emit(store)
+
+    # --- lint 辅助 -----------------------------------------------------
+
+    def _handle_yaml_error(self, exc: yaml.YAMLError) -> None:
+        """从 yaml.YAMLError 抽取行号 + 友好消息。
+
+        PyYAML 的错误结构: ``exc.problem_mark.line``(0-based)+ ``exc.problem``;
+        也可能是 ``exc.context_mark``(上下文标记,嵌套结构时更深)。
+        """
+        line = 0
+        mark = getattr(exc, "problem_mark", None) or getattr(exc, "context_mark", None)
+        if mark is not None:
+            line = int(getattr(mark, "line", 0)) + 1  # 0-based → 1-based
+
+        problem = getattr(exc, "problem", None) or str(exc) or "YAML 解析失败"
+        context = getattr(exc, "context", None)
+        if context:
+            message = f"{context} ({problem})"
+        else:
+            message = str(problem)
+        self._report_error(line=line, message=f"line {line}: {message}" if line else message)
+
+    def _report_error(self, line: int, message: str) -> None:
+        """统一错误处理:set_error_line + emit validation_error。"""
+        self._validation_status = _ERROR
+        self.set_error_line(line)
+        self.validation_error.emit(message)
 
     def _pick_mono_family(self) -> str:
         """从 ``_MONO_FONT_FAMILIES`` 选第一个 Qt 能识别的 family。"""
