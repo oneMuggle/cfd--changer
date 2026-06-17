@@ -237,7 +237,7 @@ def test_main_window_has_sweep_tab(qapp):
     from inp_tool_gui.main_window import MainWindow
     from inp_tool_gui.widgets.sweep_form_view import SweepFormView
     from inp_tool_gui.widgets.sweep_wizard import SweepWizard
-    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.widgets.sweep_yaml_editor_view import SweepYamlEditorView
     from PySide2.QtWidgets import QTabWidget
     from inp_tool.i18n_gui import tg
 
@@ -324,7 +324,7 @@ def test_sweep_subviews_share_config_store(qapp):
         # Form 子视图应同步(setText 被 _sync_from_store 调过)
         assert win._sweep_form._edit_tpl.text() == "/tmp/foo.inp"
         # YAML 子视图应同步(序列化回文本)
-        yaml_text = win._sweep_yaml._editor.toPlainText()
+        yaml_text = win._sweep_yaml._editor.text()
         assert "/tmp/foo.inp" in yaml_text
     finally:
         win.close()

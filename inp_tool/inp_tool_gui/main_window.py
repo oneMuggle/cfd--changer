@@ -46,7 +46,7 @@ from inp_tool_gui.widgets.preset_dialog import PresetDialog
 from inp_tool_gui.widgets.sweep_form import SweepForm  # noqa: F401
 from inp_tool_gui.widgets.sweep_form_view import SweepFormView
 from inp_tool_gui.widgets.sweep_wizard import SweepWizard
-from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+from inp_tool_gui.widgets.sweep_yaml_editor_view import SweepYamlEditorView
 from inp_tool_gui.widgets.value_editor import ValueEditorDialog
 
 
@@ -216,15 +216,20 @@ class MainWindow(QMainWindow):
                 return  # 无变化
             self._sweep_store = new_store
             self._sweep_initial_store = new_store
-            # 同步到另外两个 view(避免回环:相同对象 → _sync_from_store 内部判等)
+            # 同步到另外两个 view(避免回环:相同对象 → set_store / _sync_from_store 内部判等)
             for v in (self._sweep_wizard, self._sweep_form, self._sweep_yaml):
                 if v is self.sender():
                     continue
-                v._sync_from_store(new_store)
+                # Wizard / FormView 公开 _sync_from_store(store);
+                # YamlEditorView 公开 set_store(store) — 兼容
+                sync = getattr(v, "_sync_from_store", None) or getattr(v, "set_store", None)
+                if sync:
+                    sync(new_store)
 
         self._sweep_wizard.store_changed.connect(_on_view_store_changed)
         self._sweep_form.store_changed.connect(_on_view_store_changed)
-        self._sweep_yaml.store_changed.connect(_on_view_store_changed)
+        # SweepYamlEditorView 不暴露 store_changed(它内部吸收 lint 链路,
+        # 只在外部 set_store 时被同步)— 因此不在双向同步回路中。
 
         # 内嵌 QTabWidget 包 3 个子视图
         self._sweep_tab = QTabWidget(self)
