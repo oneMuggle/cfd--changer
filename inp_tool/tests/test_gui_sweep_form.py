@@ -73,7 +73,7 @@ def qapp():
 
 def test_sweep_form_has_template_editor(qapp):
     """SweepForm 构造后,_edit_tpl 已从 controller 拉取到模板路径。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     sc = SweepController()
     sc.load_from_dict({
         "template": "x.inp",
@@ -86,7 +86,7 @@ def test_sweep_form_has_template_editor(qapp):
 
 def test_sweep_form_has_three_top_labels(qapp):
     """顶部 3 行各有 QLabel 显示中文模板路径/输出目录/命名模式。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool.i18n_gui import tg
 
     sc = SweepController()
@@ -109,7 +109,7 @@ def test_sweep_form_has_three_top_labels(qapp):
 
 def test_sweep_form_yaml_load_fills_fields(qapp, tmp_path):
     """load_yaml 后,表单字段应自动从 controller 回填。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     sc = SweepController()
     form = SweepForm(sc)
     yaml_file = tmp_path / "test.yaml"
@@ -133,7 +133,7 @@ def test_sweep_form_axes_table_uses_combobox_cells(qapp):
     """轴表第 0 列 cell 是 QComboBox(非 QTableWidgetItem)。"""
     from PySide2.QtWidgets import QComboBox, QLabel, QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -148,7 +148,7 @@ def test_sweep_form_axes_combobox_populated_with_vars(qapp):
     """combobox items 来自 controller.available_vars(当前模板)。"""
     from PySide2.QtWidgets import QComboBox
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -169,7 +169,7 @@ def test_sweep_form_validates_int_axis_on_edit_finished(qapp, monkeypatch):
     """整型轴:输入 'abc' 失焦,状态栏报错。"""
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -197,7 +197,7 @@ def test_sweep_form_accepts_float_d_notation(qapp, monkeypatch):
     """浮点轴接受 '1.0d-3' (FORTRAN 双精度写法)。"""
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -229,7 +229,7 @@ def test_sweep_form_orphan_axis_disables_run_button(monkeypatch):
     import sys
     app = QApplication.instance() or QApplication(sys.argv)
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.controllers.sweep_controller import SweepController
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
@@ -259,7 +259,7 @@ def test_sweep_form_no_orphan_no_disabled_message(monkeypatch):
     import sys
     app = QApplication.instance() or QApplication(sys.argv)
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.controllers.sweep_controller import SweepController
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
@@ -282,7 +282,7 @@ def test_sweep_form_no_orphan_no_disabled_message(monkeypatch):
 
 def test_sweep_form_parse_scalar_returns_string():
     """_parse_scalar: 整型/浮点都失败时返回原字符串。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     assert SweepForm._parse_scalar("hello") == "hello"
     assert SweepForm._parse_scalar("v1.2.3") == "v1.2.3"
     assert SweepForm._parse_scalar("  abc  ") == "abc"
@@ -290,7 +290,7 @@ def test_sweep_form_parse_scalar_returns_string():
 
 def test_sweep_form_parse_scalar_int_and_float():
     """_parse_scalar: 整型优先,失败再试浮点。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     assert SweepForm._parse_scalar("42") == 42
     assert isinstance(SweepForm._parse_scalar("42"), int)
     assert SweepForm._parse_scalar("3.14") == 3.14
@@ -300,7 +300,7 @@ def test_sweep_form_parse_scalar_int_and_float():
 
 def test_sweep_form_collect_to_dict_missing_output_raises(qapp, monkeypatch):
     """_collect_to_dict: output 为空时抛 ValueError。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -314,7 +314,7 @@ def test_sweep_form_collect_to_dict_missing_output_raises(qapp, monkeypatch):
 
 def test_sweep_form_collect_to_dict_missing_template_raises(qapp):
     """_collect_to_dict: template 为空时抛 ValueError。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     import pytest
 
     ctrl = SweepController()
@@ -333,7 +333,7 @@ def test_sweep_form_collect_to_dict_invalid_scalar_raises(qapp, monkeypatch):
     """
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
     import pytest
 
@@ -363,7 +363,7 @@ def test_sweep_form_collect_to_dict_invalid_scalar_raises(qapp, monkeypatch):
 
 def test_sweep_form_collect_to_dict_enum_cell(qapp, monkeypatch):
     """_collect_to_dict: enum cell 是 QLabel,值取自 spec.enum_values。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -386,7 +386,7 @@ def test_sweep_form_collect_to_dict_enum_cell(qapp, monkeypatch):
 
 def test_sweep_form_collect_to_dict_spec_none_skip(qapp, monkeypatch):
     """_collect_to_dict: 行的 spec 为 None(空 combobox) 时跳过该行。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -401,7 +401,7 @@ def test_sweep_form_spec_for_row_combo_no_key(qapp, monkeypatch):
     """_spec_for_row: combobox 没设 currentData 时返回 None。"""
     from PySide2.QtWidgets import QComboBox
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -416,7 +416,7 @@ def test_sweep_form_spec_for_row_returns_none_for_non_combo(qapp):
     """_spec_for_row: 第 0 列不是 QComboBox 时返回 None。"""
     from PySide2.QtWidgets import QLabel
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -429,7 +429,7 @@ def test_sweep_form_validate_value_cell_empty_returns_none(qapp, monkeypatch):
     """_validate_value_cell: 值为空时直接返回 None(不校验)。"""
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -453,7 +453,7 @@ def test_sweep_form_validate_value_cell_float_failure(qapp, monkeypatch):
     """_validate_value_cell: float kind, 非数字 + 非 FORTRAN d 写法时失败。"""
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -477,7 +477,7 @@ def test_sweep_form_validate_value_cell_float_failure(qapp, monkeypatch):
 
 def test_sweep_form_validate_value_cell_label_returns_none(qapp, monkeypatch):
     """_validate_value_cell: cell 不是 QLineEdit(enum QLabel) 时直接返回 None。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -500,7 +500,7 @@ def test_sweep_form_scan_orphan_skips_spec_none_row(qapp, monkeypatch):
     """_scan_orphan_axes: 第 0 列不是 combo 的行(spec None)直接跳过。"""
     from PySide2.QtWidgets import QLabel
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -515,7 +515,7 @@ def test_sweep_form_on_axis_changed_recreates_cell(qapp, monkeypatch):
     """_on_axis_changed: 切换 combobox 选中的变量后,值 cell 会被重建。"""
     from PySide2.QtWidgets import QComboBox
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -550,7 +550,7 @@ def test_sweep_form_make_combo_keeps_orphan_key(qapp, monkeypatch):
     """_make_combo_for_row: spec 的 key 不在当前模板的 specs 中时,作为 orphan 保留在 combobox 头部。"""
     from PySide2.QtWidgets import QComboBox
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -579,7 +579,7 @@ def test_sweep_form_mark_row_normal_clears_style(qapp):
     """_mark_row_normal: 清除红底 style。"""
     from PySide2.QtWidgets import QLabel
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -598,7 +598,7 @@ def test_sweep_form_mark_row_normal_clears_style(qapp):
 def test_sweep_form_load_json_fills_fields(qapp, tmp_path):
     """load_json 后,表单字段应自动从 controller 回填。"""
     import json
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     sc = SweepController()
     form = SweepForm(sc)
     json_file = tmp_path / "test.json"
@@ -618,7 +618,7 @@ def test_sweep_form_load_json_fills_fields(qapp, tmp_path):
 
 def test_sweep_form_refresh_table_with_no_report(qapp):
     """_refresh_table: last_report 为 None 时清空表。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     sc = SweepController()
     form = SweepForm(sc)
     form._refresh_table()
@@ -627,7 +627,7 @@ def test_sweep_form_refresh_table_with_no_report(qapp):
 
 def test_sweep_form_update_status_when_not_loaded(qapp):
     """_update_status: 未 load 时运行按钮应禁用、状态栏空、case 数 0。"""
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     sc = SweepController()
     form = SweepForm(sc)
     form._update_status()
@@ -647,7 +647,7 @@ def test_sweep_form_enum_value_cell_is_qlineedit(qapp, monkeypatch):
     """
     from PySide2.QtWidgets import QLabel, QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -673,7 +673,7 @@ def test_sweep_form_enum_value_cell_prefilled(qapp, monkeypatch):
     """enum 值 cell 初始文本预填全部 enum_values(逗号分隔),用户可编辑删减。"""
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -697,7 +697,7 @@ def test_sweep_form_enum_value_user_can_subset(qapp, monkeypatch):
     """用户编辑 enum cell 删去某个值,_collect_to_dict 应反映子集。"""
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -729,7 +729,7 @@ def test_sweep_form_value_cell_exists_when_spec_none(qapp, monkeypatch):
     """
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -753,7 +753,7 @@ def test_sweep_form_axes_table_value_col_is_qlineedit(qapp):
     """
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
 
     ctrl = SweepController()
     form = SweepForm(ctrl)
@@ -766,7 +766,7 @@ def test_sweep_form_validate_enum_cell_bad_value(qapp, monkeypatch):
     """_validate_value_cell: enum cell 含非法值时报错,信息含非法值与合法值集合。"""
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -796,7 +796,7 @@ def test_sweep_form_validate_enum_cell_subset_ok(qapp, monkeypatch):
     """_validate_value_cell: enum 子集(sst, kw)应通过校验,不被误报。"""
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
 
     ctrl = SweepController()
@@ -822,7 +822,7 @@ def test_sweep_form_enum_tooltip_uses_dedicated_key(qapp, monkeypatch):
     """M1 review 修复:enum cell tooltip 走独立 i18n key,不从错误模板切 ;。"""
     from PySide2.QtWidgets import QLineEdit
 
-    from inp_tool_gui.widgets.sweep_form import SweepForm
+    from inp_tool_gui.widgets.sweep_form import _LegacySweepForm as SweepForm
     from inp_tool_gui.widgets.sweep_var_combo import VarSpec
     from inp_tool.i18n_gui import tg
 

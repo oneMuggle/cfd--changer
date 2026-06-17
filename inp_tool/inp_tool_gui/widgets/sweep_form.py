@@ -1,5 +1,15 @@
 """SweepForm:Sweep 配置 + 实时编辑 + 加载/保存 + 运行 + 结果展示(v0.16.1 整合版)。
 
+DEPRECATED: ``SweepForm`` 已 deprecated。
+请使用 :class:`inp_tool_gui.widgets.sweep_form_view.SweepFormView`
+(基于 :class:`inp_tool_gui.models.config_store.ConfigStore` 的单向数据流)。
+
+为保持 import 兼容,本模块末尾仍提供 ``SweepForm`` 兼容类
+(子类化 :class:`SweepFormView`,并兼容旧的 :class:`SweepController` 入参)。
+
+历史实现 ``_LegacySweepForm`` 仍保留在文件中(只是不再用 ``SweepForm``
+这个公开符号导出);它对应的 38 个回归测试已迁移到导入 ``_LegacySweepForm``。
+
 UI 结构:
 - 顶部:模板路径 / 输出目录 / 命名模式(``QLineEdit`` + 浏览按钮,失焦即同步)
 - Sweep 轴表:``QTableWidget`` 2 列(轴名 + 值列表,逗号分隔)
@@ -40,8 +50,12 @@ from inp_tool_gui.controllers.sweep_controller import SweepController
 from inp_tool_gui.widgets.sweep_var_combo import VarSpec  # 新增(Task 7)
 
 
-class SweepForm(QWidget):
-    """Sweep 配置 + 实时编辑 + 加载/保存 + 运行 + 结果展示(v0.16.1 整合版)。"""
+class _LegacySweepForm(QWidget):
+    """DEPRECATED: 历史实现,保留供 ``test_gui_sweep_form.py`` 38 个测试使用。
+
+    Phase 3 / Task 3.3: 公开 ``SweepForm`` 名称已让位给 ``SweepFormView``
+    兼容 shim;此实现仍可从本模块以 ``_LegacySweepForm`` 导入。
+    """
 
     def __init__(
         self,
@@ -574,3 +588,70 @@ class SweepForm(QWidget):
             self._table.setItem(row, 1, QTableWidgetItem(c.path))
             self._table.setItem(row, 2, QTableWidgetItem(str(c.params)))
             self._table.setItem(row, 3, QTableWidgetItem(str(c.applied)))
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 / Task 3.3: import-compat shim
+# ---------------------------------------------------------------------------
+#
+# ``SweepForm`` 公开符号现在指向一个 ``SweepFormView`` 子类,这样:
+#   1. 旧 import `from inp_tool_gui.widgets.sweep_form import SweepForm` 仍工作
+#   2. 旧用法 `SweepForm(sweep_ctrl)` 自动降级为最小 ConfigStore
+#   3. 新用法 `SweepForm(config_store)` 直接转发到 SweepFormView
+#
+# 完整 v2 controller 接线在 Task 3.4 完成;本 shim 只保证 import + 构造不报错。
+# 历史实现已重命名为 ``_LegacySweepForm``(其 38 个回归测试已迁移到该名称)。
+
+from typing import Optional as _Optional  # noqa: E402
+
+from PySide2.QtWidgets import QWidget as _QWidget  # noqa: E402
+
+from inp_tool_gui.models.config_store import ConfigStore as _ConfigStore  # noqa: E402
+from inp_tool_gui.widgets.sweep_form_view import SweepFormView as _SweepFormView  # noqa: E402
+
+
+class SweepForm(_SweepFormView):
+    """DEPRECATED compat shim — 子类化 :class:`SweepFormView` 保持 import 兼容。
+
+    旧调用 ``SweepForm(sweep_ctrl)``(SweepController 实例)会降级为
+    一个空的 :class:`ConfigStore`(尽力从 ``legacy._sweep`` 提取
+    ``template`` / ``output_dir`` / ``naming``)。
+    新调用 ``SweepForm(config_store)`` 直接转发到 :class:`SweepFormView`。
+
+    后续 Task 3.4 将把 ``store_changed`` 接线到 v2 controller,
+    使此 shim 真正驱动 sweep 生命周期。
+    """
+
+    def __init__(
+        self,
+        sweep_ctrl_or_store: object,
+        parent: _Optional[_QWidget] = None,
+    ) -> None:
+        if isinstance(sweep_ctrl_or_store, _ConfigStore):
+            store = sweep_ctrl_or_store
+        else:
+            store = _extract_legacy_store(sweep_ctrl_or_store)
+        super().__init__(store, parent=parent)
+
+
+def _extract_legacy_store(legacy: object) -> _ConfigStore:
+    """从 legacy ``SweepController`` 提取最小 ConfigStore;失败则空 store。"""
+    try:
+        sweep = getattr(legacy, "_sweep", None)
+        if sweep is None:
+            return _ConfigStore(
+                template="", output_dir="", naming="case",
+                preset_ref=None, sweeps={}, conditions=(),
+            )
+        tmpl = str(getattr(sweep, "template", "") or "")
+        out_dir = str(getattr(sweep, "output_dir", "") or "")
+        naming = str(getattr(sweep, "naming", "case") or "case")
+    except Exception:
+        return _ConfigStore(
+            template="", output_dir="", naming="case",
+            preset_ref=None, sweeps={}, conditions=(),
+        )
+    return _ConfigStore(
+        template=tmpl, output_dir=out_dir, naming=naming,
+        preset_ref=None, sweeps={}, conditions=(),
+    )
