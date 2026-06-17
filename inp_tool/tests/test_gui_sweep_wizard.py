@@ -715,3 +715,192 @@ def test_wizard_step2_table_columns(qapp):
     assert w._step2._table.item(0, 0) is not None  # key
     assert w._step2._table.item(0, 1) is not None  # value
     assert w._step2._table.cellWidget(0, 2) is not None  # delete button
+
+
+# --- Step 3(条件依赖 when/then)— Task 4.4 -------------------------------
+
+
+def test_wizard_step3_widget_present(qapp):
+    """wizard 必须暴露 _step3(SweepWizardStep3 实例)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.widgets.sweep_wizard_step3 import SweepWizardStep3
+    store = _make_store()
+    w = SweepWizard(store)
+    assert isinstance(w._step3, SweepWizardStep3)
+
+
+def test_wizard_step3_initial_empty(qapp):
+    """初始 store.conditions 为空 → row_count=0,空提示可见。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    store = _make_store()
+    w = SweepWizard(store)
+    assert w._step3.row_count() == 0
+    # 没 row 时 _empty_lbl 应是 "shown"(用 isHidden 校验更稳:
+    # setVisible 触发的 isVisible 需要 widget tree 已显示,headless 测试中不一定)。
+    assert w._step3._empty_lbl.isHidden() is False
+
+
+def test_wizard_step3_add_condition(qapp):
+    """step3.add_condition('mach<1', disable_axes='turbulence') → store.conditions 长度+1。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore
+
+    store = ConfigStore(template="t", output_dir="o", naming="case",
+                        preset_ref=None, sweeps={}, conditions=())
+    w = SweepWizard(store)
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    w._step3.add_condition(when_text="mach<1", disable_axes_text="turbulence")
+    assert any(len(s.conditions) == 1 for s in received)
+    assert len(w._store.conditions) == 1
+    # verify content
+    rule = w._store.conditions[0]
+    assert rule.when.predicates[0].key == "mach"
+    assert rule.then.disable_axes == ("turbulence",)
+
+
+def test_wizard_step3_remove_condition(qapp):
+    """删除一个条件 → conditions 长度-1。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore
+    from inp_tool.sweep import (
+        ConditionalRule, ConditionThen, parse_condition,
+    )
+
+    cond = ConditionalRule(
+        when=parse_condition({"mach": "<1"}),
+        then=ConditionThen(disable_axes=("turbulence",)),
+    )
+    store = ConfigStore(template="t", output_dir="o", naming="case",
+                        preset_ref=None, sweeps={}, conditions=(cond,))
+    w = SweepWizard(store)
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    w._step3.remove_condition(0)
+    assert any(len(s.conditions) == 0 for s in received)
+    assert len(w._store.conditions) == 0
+    assert w._step3.row_count() == 0
+
+
+def test_wizard_step3_refresh_from_store(qapp):
+    """refresh_from_store: store 有 2 个条件 → 2 行;清空 store → 0 行。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+    from inp_tool_gui.models.config_store import ConfigStore
+    from inp_tool.sweep import (
+        ConditionalRule, ConditionThen, parse_condition,
+    )
+
+    cond1 = ConditionalRule(
+        when=parse_condition({"mach": "<1"}), then=ConditionThen(),
+    )
+    cond2 = ConditionalRule(
+        when=parse_condition({"reynolds": ">=1e6"}), then=ConditionThen(),
+    )
+    store = ConfigStore(
+        template="t", output_dir="o", naming="case",
+        preset_ref=None, sweeps={}, conditions=(cond1, cond2),
+    )
+    w = SweepWizard(store)
+    assert w._step3.row_count() == 2
+
+    # Replace store with empty
+    w._set_store(store.replace(conditions=()))
+    assert w._step3.row_count() == 0
+
+
+def test_wizard_step3_add_button_creates_row(qapp):
+    """点 "添加条件" 按钮 → 新 row 出现(空,不 emit)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+
+    store = _make_store()
+    w = SweepWizard(store)
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    w._step3._btn_add.click()
+    assert w._step3.row_count() == 1
+    # 空 row → 没 when → 不 emit
+    assert received == []
+
+
+def test_wizard_step3_invalid_when_no_emit(qapp):
+    """无效 when 字符串 → add_condition 不 emit(解析失败时静默)。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+
+    store = _make_store()
+    w = SweepWizard(store)
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    # 无 op
+    w._step3.add_condition(when_text="mach")
+    assert received == []
+
+
+def test_wizard_step3_edit_row_emits(qapp):
+    """row 已存在 → editing 改 when 触发 emit。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+
+    store = _make_store()
+    w = SweepWizard(store)
+    # 先 add 一条
+    w._step3.add_condition(when_text="mach<1", disable_axes_text="turbulence")
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    # 改 disable_axes
+    row = w._step3._rows[0]
+    row._edit_dis.setText("turbulence,energy")
+    row._edit_dis.editingFinished.emit()
+    assert any(
+        len(s.conditions) == 1
+        and s.conditions[0].then.disable_axes == ("turbulence", "energy")
+        for s in received
+    )
+
+
+def test_wizard_step3_row_delete_button_emits(qapp):
+    """row 自带删除按钮 → click → store_changed emit + row 消失。"""
+    from inp_tool_gui.widgets.sweep_wizard import SweepWizard
+
+    store = _make_store()
+    w = SweepWizard(store)
+    w._step3.add_condition(when_text="mach<1", disable_axes_text="turbulence")
+    assert w._step3.row_count() == 1
+    received = []
+    w.store_changed.connect(lambda s: received.append(s))
+    row = w._step3._rows[0]
+    row._btn_del.click()
+    assert w._step3.row_count() == 0
+    assert any(len(s.conditions) == 0 for s in received)
+
+
+def test_wizard_step3_parse_predicates_helper(qapp):
+    """_split_predicates:多 predicate / 单 predicate / 无 op / 空。"""
+    from inp_tool_gui.widgets.sweep_wizard_step3 import _split_predicates
+
+    assert _split_predicates("mach<1,reynolds>=1e6") == {
+        "mach": "<1", "reynolds": ">=1e6",
+    }
+    assert _split_predicates("mach==42") == {"mach": "==42"}
+    assert _split_predicates("") == {}
+    assert _split_predicates("noopredicate") == {}
+    assert _split_predicates("<1") == {}  # 无 key
+
+
+def test_wizard_step3_parse_disable_axes_helper(qapp):
+    """_parse_disable_axes:逗号分隔,空段跳过。"""
+    from inp_tool_gui.widgets.sweep_wizard_step3 import _parse_disable_axes
+
+    assert _parse_disable_axes("turbulence, energy") == ("turbulence", "energy")
+    assert _parse_disable_axes("a,,b") == ("a", "b")
+    assert _parse_disable_axes("") == ()
+
+
+def test_wizard_step3_parse_set_extra_helper(qapp):
+    """_parse_set_extra:key=value 列表,空/无 = 跳过。"""
+    from inp_tool_gui.widgets.sweep_wizard_step3 import _parse_set_extra
+
+    assert _parse_set_extra("turb_init=yes,scheme=roe") == (
+        ("turb_init", "yes"), ("scheme", "roe"),
+    )
+    assert _parse_set_extra("a=1") == (("a", "1"),)
+    assert _parse_set_extra("noequals") == ()
+    assert _parse_set_extra("") == ()

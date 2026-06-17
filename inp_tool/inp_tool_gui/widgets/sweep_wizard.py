@@ -28,6 +28,7 @@ from PySide2.QtWidgets import (
 from inp_tool.i18n_gui import tg
 from inp_tool_gui.models.config_store import ConfigStore
 from inp_tool_gui.widgets.sweep_wizard_step2 import SweepWizardStep2
+from inp_tool_gui.widgets.sweep_wizard_step3 import SweepWizardStep3
 
 
 _STEP_TITLES = (
@@ -39,7 +40,7 @@ _STEP_TITLES = (
 _TODO_TEXTS = (
     None,  # Step 1 is real, not TODO
     "wizard.todo.step2",
-    "wizard.todo.step3",
+    None,  # Step 3 is real (Task 4.4)
     "wizard.todo.step4",
 )
 
@@ -100,7 +101,10 @@ class SweepWizard(QWidget):
         self._step2 = SweepWizardStep2(self._store, self)
         self._step2.store_changed.connect(self._on_step2_store_changed)
         self._stack.addWidget(self._step2)  # 1
-        self._stack.addWidget(self._build_placeholder("wizard.todo.step3"))  # 2
+        # Step 3(Task 4.4):实例化并连接 store_changed → _set_store
+        self._step3 = SweepWizardStep3(self._store, self)
+        self._step3.store_changed.connect(self._on_step3_store_changed)
+        self._stack.addWidget(self._step3)  # 2
         self._stack.addWidget(self._build_placeholder("wizard.todo.step4"))  # 3
         root.addWidget(self._stack, 1)
 
@@ -199,6 +203,9 @@ class SweepWizard(QWidget):
         if hasattr(self, "_step2"):
             self._step2.tree.set_template_path(store.template)
             self._step2.refresh_from_store(store)
+        # 同步 Step 3:重建条件 rows
+        if hasattr(self, "_step3"):
+            self._step3.refresh_from_store(store)
 
     # --- Step 2 数据流 -------------------------------------------------
 
@@ -213,13 +220,36 @@ class SweepWizard(QWidget):
             return  # 无变化
         self._set_store(new_store)
 
+    # --- Step 3 数据流 -------------------------------------------------
+
+    def _on_step3_store_changed(self, new_store: object) -> None:
+        """Step 3 add/remove/edit 条件 → 用 wizard 自己的 _set_store 推进 store。
+
+        与 Step 2 同款:外部消费者只监听 wizard.store_changed 一个信号。
+        """
+        if not isinstance(new_store, ConfigStore):
+            return
+        if new_store == self._store:
+            return  # 无变化
+        self._set_store(new_store)
+
     def _set_store(self, new_store: ConfigStore) -> None:
-        """内部:set self._store + emit store_changed(供 Step 2 调用)。
+        """内部:set self._store + emit store_changed(供 Step 2/3 调用)。
 
         与 ``_emit_store`` 不同:这里**不**调 ``self._store.replace``,
-        因为 new_store 已经由 Step 2 自己构造好;避免重复 replace。
+        因为 new_store 已经由 Step 2/3 自己构造好;避免重复 replace。
+
+        还会同步刷新 Step 2/3 的 UI(只刷"非源"的 step);但同源 step
+        不会因 setText 触发回环:Step 内部 emit 后调 _set_store,store
+        已经是最新的,Step 自己的 _rules 跟 store 一致,所以"刷不刷新"
+        结果一样。
         """
         self._store = new_store
+        # 同步刷新 Step 2/3(若有 sweep 变化让 step2 重画;若 condition 变化让 step3 重画)
+        if hasattr(self, "_step2"):
+            self._step2.refresh_from_store(new_store)
+        if hasattr(self, "_step3"):
+            self._step3.refresh_from_store(new_store)
         self.store_changed.emit(new_store)
 
     # --- form -> store 数据流 ------------------------------------------
