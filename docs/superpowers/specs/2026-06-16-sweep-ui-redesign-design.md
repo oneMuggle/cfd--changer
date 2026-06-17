@@ -380,7 +380,7 @@ def expand_with_conditions(
 class ExpandedCase:
     """含 set_extra 应用结果;disable_axes 已过滤(不出现)。"""
     values: Dict[str, Any]              # case 主体
-    extras: Dict[str, str] = ()         # 该 case 注入到 .inp 的 (k,v) 对
+    extras: Tuple[Tuple[str, str], ...] = ()  # 该 case 注入到 .inp 的 (k,v) 对
 
 # 旧 API 保留:
 def expand_cartesian(spec: SweepSpec) -> List[Dict[str, Any]]: ...  # v1 路径
