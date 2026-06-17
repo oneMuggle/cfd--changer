@@ -1,12 +1,13 @@
 """SweepYamlEditor:YAML 文本编辑器(QPlainTextEdit + 行号 + 语法高亮 + 实时 lint)。
 
-Phase 5 / Task 5.1 基础视图组件 + Task 5.2 实时 schema lint。
-Task 5.3(侧边栏)将在此 widget 之上扩展。
+Phase 5 / Task 5.1 基础视图组件 + Task 5.2 实时 schema lint + Task 5.3 容器 widget。
 
 UI 结构:
 - :class:`LineNumberArea`(自定义 QWidget):绘制行号 + 错误行高亮(红底)
 - :class:`YamlHighlighter`(QSyntaxHighlighter):关键词 / 注释 / 列表 / 字符串 / 数字着色
-- :class:`YamlEditorWidget`(本 widget):组合 QPlainTextEdit 与 LineNumberArea
+- :class:`YamlEditorWidget`(Task 5.1/5.2):QPlainTextEdit + LineNumberArea + 实时 lint
+- :class:`SweepYamlEditorView`(Task 5.3):3-pane 容器 — 左(变量树 + preset 列表)
+  / 中(YAML 编辑器)/ 右(实时预览表)+ 底部状态栏
 
 公开 API(向后兼容,Task 5.2/5.3 依赖):
 - :meth:`text` / :meth:`set_text` — 读写编辑区文本
@@ -14,6 +15,12 @@ UI 结构:
 - :attr:`store_changed` — ``Signal(object)`` lint 通过后发出新 ConfigStore
 - :attr:`validation_error` — ``Signal(str)`` lint 失败后发出错误信息
 - :attr:`validation_status` — ``"valid"`` / ``"error"`` / ``"empty"``(property)
+
+:Class:`SweepYamlEditorView` 公开 API(Task 5.3):
+- :attr:`preset_loaded` — ``Signal(str)`` preset 列表双击时发 preset ref
+- :meth:`config_store` — 返回最近 ConfigStore
+- :meth:`set_store` — 外部替换 store(同步 YAML 文本 + sidebars)
+- :meth:`preview_row_count` — 预览表当前行数(测试用)
 
 实时 lint 行为(Task 5.2):
 - ``textChanged`` → 200ms 单次 ``QTimer`` 防抖 → ``yaml.safe_load`` + ``SweepControllerV2._parse``
@@ -30,7 +37,7 @@ UI 结构:
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from PySide2.QtCore import QRect, QSize, Qt, QTimer, Signal
@@ -43,10 +50,20 @@ from PySide2.QtGui import (
     QTextFormat,
 )
 from PySide2.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
     QPlainTextEdit,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
+    QVBoxLayout,
     QWidget,
 )
+
+from inp_tool_gui.models.config_store import ConfigStore
 
 
 # --- 常量 --------------------------------------------------------------------
@@ -519,4 +536,14 @@ __all__: List[str] = [
     "YamlEditorWidget",
     "YamlHighlighter",
     "LineNumberArea",
+    "SweepYamlEditorView",
 ]
+
+
+#: 容器 widget 的实际实现位于 :mod:`sweep_yaml_editor_view` 模块。
+#: 在这里 re-export 是为了保持向后兼容的 import 路径
+#: (``inp_tool_gui.widgets.sweep_yaml_editor.SweepYamlEditorView``),
+#: Task 5.1/5.2/5.3 的测试和外部代码都依赖此路径。
+from inp_tool_gui.widgets.sweep_yaml_editor_view import (  # noqa: E402,F401
+    SweepYamlEditorView,
+)

@@ -253,3 +253,107 @@ def test_editor_text_changes_after_edit(qapp):
     cursor.insertText("template: t.inp\n")
     assert "template: t.inp" in w.text()
     assert w.text().startswith("version: 2")
+
+
+# --- Task 5.3 SweepYamlEditorView 容器 ----------------------------------------
+
+
+def test_yaml_editor_view_creates_from_store(qapp):
+    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.models.config_store import ConfigStore
+    store = ConfigStore(template="t", output_dir="/o", naming="case",
+                         preset_ref=None, sweeps={}, conditions=())
+    v = SweepYamlEditorView(store)
+    assert v.config_store() is store
+
+
+def test_yaml_editor_view_set_store_updates_editor(qapp):
+    """外部 set_store → YAML 编辑器文本更新。"""
+    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    v = SweepYamlEditorView(ConfigStore(template="", output_dir="", naming="case",
+                                          preset_ref=None, sweeps={}, conditions=()))
+
+    new_store = ConfigStore(
+        template="new.inp", output_dir="/new_out", naming="case",
+        preset_ref=None,
+        sweeps={"mach": AxisSpec(kind="range", range_min=0, range_max=2, range_step=1)},
+        conditions=(),
+    )
+    v.set_store(new_store)
+    assert v.config_store() is new_store
+    # YAML 文本应包含 "new.inp" 和 "mach"
+    yaml_text = v._editor.text()
+    assert "new.inp" in yaml_text
+    assert "mach" in yaml_text
+
+
+def test_yaml_editor_view_preview_table_populated(qapp):
+    """store 有 3 个 case → 预览表 3 行。"""
+    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.models.config_store import ConfigStore, AxisSpec
+
+    store = ConfigStore(
+        template="t", output_dir="/o", naming="case",
+        preset_ref=None,
+        sweeps={"a": AxisSpec(kind="range", range_min=0, range_max=2, range_step=1)},
+        conditions=(),
+    )
+    v = SweepYamlEditorView(store)
+    assert v.preview_row_count() == 3
+
+
+def test_yaml_editor_view_variable_tree_inserts_key(qapp, monkeypatch):
+    """variable_picked → YAML 编辑器光标处插入 key。"""
+    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.widgets.sweep_var_combo import VarSpec
+    from inp_tool_gui.models.config_store import ConfigStore
+
+    store = ConfigStore(template="t", output_dir="/o", naming="case",
+                         preset_ref=None, sweeps={}, conditions=())
+    v = SweepYamlEditorView(store)
+    v._editor.set_text("version: 2\ntemplate: t\n")  # 给个起点
+
+    # 模拟手动 emit variable_picked
+    v._var_tree.variable_picked.emit("mach")
+
+    # YAML 文本应包含 "mach"
+    assert "mach" in v._editor.text()
+
+
+def test_yaml_editor_view_preset_doubleclick_loads(qapp, tmp_path):
+    """preset 列表双击 → 加载 preset YAML 到编辑器 + emit preset_loaded。"""
+    from inp_tool_gui.widgets.sweep_yaml_editor import SweepYamlEditorView
+    from inp_tool_gui.preset_library import PresetLibrary
+    from inp_tool_gui.models.config_store import ConfigStore
+
+    # 写一个临时 preset YAML
+    preset_yaml = (
+        "version: 2\n"
+        "template: t\n"
+        "output_dir: /o\n"
+        "naming: case\n"
+        "sweeps:\n"
+        "  mach: [1, 2]\n"
+    )
+    preset_file = tmp_path / "test_preset.yaml"
+    preset_file.write_text(preset_yaml, encoding="utf-8")
+
+    lib = PresetLibrary(user_dir=tmp_path, team_dirs=[])
+    store = ConfigStore(template="t", output_dir="/o", naming="case",
+                         preset_ref=None, sweeps={}, conditions=())
+    v = SweepYamlEditorView(store, preset_library=lib)
+
+    received = []
+    v.preset_loaded.connect(lambda r: received.append(r))
+
+    # 找到列表里的项,双击
+    assert v._preset_list.count() >= 1
+    item = v._preset_list.item(0)
+    v._preset_list.itemDoubleClicked.emit(item)
+
+    assert v.preset_loaded_payload() == "test_preset"
+    assert received == ["test_preset"]
+    # YAML 文本应包含 preset 的 sweeps
+    assert "mach" in v._editor.text()
